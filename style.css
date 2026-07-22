@@ -266,25 +266,25 @@ body {
 
 .tab-nav {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 16px;
 }
 
 .tab-btn {
   flex: 1;
-  padding: 12px;
+  padding: 10px 6px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
   color: var(--text-muted);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   transition: var(--transition);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .tab-btn.active {
@@ -340,6 +340,12 @@ body {
   background: #fff;
 }
 
+.message-recipient {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
 .message-meta {
   display: flex;
   justify-content: space-between;
@@ -352,6 +358,14 @@ body {
 .tag-new {
   background: rgba(59, 130, 246, 0.1);
   color: var(--primary-color);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.tag-sent {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 600;
