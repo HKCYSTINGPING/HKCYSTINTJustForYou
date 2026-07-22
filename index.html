@@ -10,21 +10,6 @@
 
   <div class="app-container">
     
-    <!-- Global Floating Loading Modal -->
-    <div id="loading-modal" class="modal-overlay hidden">
-      <div class="modal-card">
-        <div class="modal-icon">⏳</div>
-        <h3 id="modal-loading-title">載入中...</h3>
-        <p class="modal-subtitle">請稍候，系統正在處理中</p>
-        <div class="modal-progress-wrapper">
-          <div class="progress-bar-bg">
-            <div id="modal-progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
-          </div>
-          <span id="modal-progress-text" class="progress-text">0%</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Toast Notification Banner -->
     <div id="toast" class="toast hidden"></div>
 
@@ -41,6 +26,7 @@
           <label for="login-participant-id">選擇你的參加者編號 (Participant ID)</label>
           <select id="login-participant-id" required>
             <option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>
+            <!-- Hardcoded Fallback + JS population -->
             <option value="1A">參加者 1A</option><option value="2A">參加者 2A</option><option value="3A">參加者 3A</option><option value="4A">參加者 4A</option><option value="5A">參加者 5A</option><option value="6A">參加者 6A</option>
             <option value="1B">參加者 1B</option><option value="2B">參加者 2B</option><option value="3B">參加者 3B</option><option value="4B">參加者 4B</option><option value="5B">參加者 5B</option><option value="6B">參加者 6B</option>
             <option value="1C">參加者 1C</option><option value="2C">參加者 2C</option><option value="3C">參加者 3C</option><option value="4C">參加者 4C</option><option value="5C">參加者 5C</option><option value="6C">參加者 6C</option>
@@ -68,6 +54,10 @@
 
         <button type="submit" id="login-btn" class="btn btn-primary btn-block">
           <span class="btn-text">Login / 進入系統</span>
+          <div id="login-btn-progress" class="spinner-container hidden">
+            <div class="spinner-ring"></div>
+            <span class="spinner-text">0%</span>
+          </div>
         </button>
       </form>
     </section>
@@ -104,6 +94,7 @@
             <label for="target-participant-id">傳送給 (Target Participant)</label>
             <select id="target-participant-id" required>
               <option value="" disabled selected>選擇對象 (1A - 6H)</option>
+              <!-- Populated dynamically (excludes current user) -->
             </select>
           </div>
 
@@ -122,6 +113,10 @@
 
           <button type="submit" id="send-btn" class="btn btn-primary btn-block">
             <span class="btn-text">發送匿名留言</span>
+            <div id="send-btn-progress" class="spinner-container hidden">
+              <div class="spinner-ring"></div>
+              <span class="spinner-text">0%</span>
+            </div>
           </button>
         </form>
       </div>
@@ -133,6 +128,14 @@
           <button class="btn btn-icon" onclick="fetchInboxMessages(true)" title="重新整理">
             🔄 <span class="btn-text-desktop">更新紀錄</span>
           </button>
+        </div>
+
+        <div id="inbox-loading" class="loading-state hidden">
+          <div class="spinner-container large">
+            <div class="spinner-ring"></div>
+            <span id="inbox-progress-text" class="spinner-text">0%</span>
+          </div>
+          <p class="loading-label">正在載入留言...</p>
         </div>
 
         <div id="inbox-feed" class="message-feed">
