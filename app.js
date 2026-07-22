@@ -2,13 +2,12 @@
 // CONFIGURATION & GLOBAL STATE
 // ==========================================================================
 
-// 已為您填入正式部署的 Google Apps Script Web App URL
 const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3gYKAVVlbav-LijuFBYRtlG2VUO_q4LTMCNcrIt79mer-yhQ/exec";
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const MEMBERS_PER_GROUP = 6;
 
-// List of prohibited words (profanity, insult, bad words) in English & Cantonese/Chinese
+// Prohibited / Bad words list (English & Cantonese/Chinese)
 const PROHIBITED_WORDS = [
 // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
@@ -37,7 +36,6 @@ document.addEventListener("DOMContentLoaded", () => {
   checkSession();
 });
 
-// Generate 48 participant IDs (1A through 6H)
 function generateParticipantIDs() {
   const ids = [];
   GROUPS.forEach(group => {
@@ -48,11 +46,12 @@ function generateParticipantIDs() {
   return ids;
 }
 
-// Populate login select dropdown
 function populateParticipantDropdowns() {
   const loginSelect = document.getElementById("login-participant-id");
-  const allIDs = generateParticipantIDs();
+  if (!loginSelect) return;
+  loginSelect.innerHTML = '<option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>';
 
+  const allIDs = generateParticipantIDs();
   allIDs.forEach(id => {
     const opt = document.createElement("option");
     opt.value = id;
@@ -61,9 +60,9 @@ function populateParticipantDropdowns() {
   });
 }
 
-// Update target select dropdown (excluding current logged in user)
 function updateTargetDropdown() {
   const targetSelect = document.getElementById("target-participant-id");
+  if (!targetSelect) return;
   targetSelect.innerHTML = '<option value="" disabled selected>選擇對象 (1A - 6H)</option>';
 
   const allIDs = generateParticipantIDs();
@@ -76,39 +75,73 @@ function updateTargetDropdown() {
 }
 
 // ==========================================================================
-// BAD WORDS FILTERING FUNCTIONS
+// PROGRESS TRACKER CONTROLLER
 // ==========================================================================
 
 /**
- * Checks if the string contains any prohibited/bad words.
- * @param {string} text 
- * @returns {boolean} True if bad words detected, false otherwise.
+ * Simulates real-time percentage progress (0% -> 100%) during network requests.
  */
-function containsBadWords(text) {
-  const normalizedText = text.toLowerCase().replace(/\s+/g, '');
-  return PROHIBITED_WORDS.some(word => {
-    const normalizedWord = word.toLowerCase();
-    return normalizedText.includes(normalizedWord);
-  });
+function createProgressTracker(fillElement, textElement) {
+  let progress = 0;
+  let interval = null;
+
+  return {
+    start: () => {
+      progress = 0;
+      fillElement.style.width = "0%";
+      textElement.textContent = "0%";
+
+      interval = setInterval(() => {
+        if (progress < 90) {
+          const step = Math.max(1, Math.floor((90 - progress) / 6));
+          progress += step;
+          fillElement.style.width = `${progress}%`;
+          textElement.textContent = `${progress}%`;
+        }
+      }, 100);
+    },
+    finish: () => {
+      clearInterval(interval);
+      fillElement.style.width = "100%";
+      textElement.textContent = "100%";
+    },
+    reset: () => {
+      clearInterval(interval);
+      progress = 0;
+      fillElement.style.width = "0%";
+      textElement.textContent = "0%";
+    }
+  };
 }
 
-/**
- * Optional Helper: Replaces bad words with asterisks (***)
- * @param {string} text 
- * @returns {string} Sanitized string
- */
-function censorBadWords(text) {
-  let filteredText = text;
-  PROHIBITED_WORDS.forEach(word => {
-    const regex = new RegExp(word, 'gi');
-    filteredText = filteredText.replace(regex, '*'.repeat(word.length));
-  });
-  return filteredText;
+// ==========================================================================
+// BAD WORDS FILTERING
+// ==========================================================================
+
+function containsBadWords(text) {
+  const normalizedText = text.toLowerCase().replace(/\s+/g, '');
+  return PROHIBITED_WORDS.some(word => normalizedText.includes(word.toLowerCase()));
+}
+
+function updateCharCount() {
+  const textarea = document.getElementById("msg-content");
+  const countSpan = document.getElementById("char-num");
+  if (!textarea || !countSpan) return;
+
+  const val = textarea.value;
+  countSpan.textContent = val.length;
+
+  if (containsBadWords(val)) {
+    textarea.style.borderColor = "var(--danger-color)";
+  } else {
+    textarea.style.borderColor = "var(--border-color)";
+  }
 }
 
 // ==========================================================================
 // AUTHENTICATION LOGIC
 // ==========================================================================
+
 async function handleLogin(e) {
   e.preventDefault();
   
@@ -123,16 +156,28 @@ async function handleLogin(e) {
     return;
   }
 
-  setLoading("login-btn", true);
+  const btn = document.getElementById("login-btn");
+  const btnText = btn.querySelector(".btn-text");
+  const progressWrapper = document.getElementById("login-btn-progress");
+  const fill = progressWrapper.querySelector(".progress-bar-fill");
+  const text = progressWrapper.querySelector(".progress-text");
+
+  const tracker = createProgressTracker(fill, text);
+
+  btn.disabled = true;
+  btnText.classList.add("hidden");
+  progressWrapper.classList.remove("hidden");
+  tracker.start();
 
   try {
-    // Verify user via doGet
     const queryUrl = `${API_URL}?participant_id=${encodeURIComponent(pId)}&phone_number=${encodeURIComponent(phoneInput)}`;
     const response = await fetch(queryUrl);
     const data = await response.json();
 
+    tracker.finish();
+    await new Promise(r => setTimeout(r, 200));
+
     if (data.status === "success") {
-      // Save state
       currentUser.participant_id = pId;
       currentUser.phone_number = phoneInput;
 
@@ -148,7 +193,10 @@ async function handleLogin(e) {
     showAuthError("無法連接至伺服器，請稍後再試。");
     console.error(err);
   } finally {
-    setLoading("login-btn", false);
+    tracker.reset();
+    btn.disabled = false;
+    btnText.classList.remove("hidden");
+    progressWrapper.classList.add("hidden");
   }
 }
 
@@ -180,6 +228,7 @@ function showAuthError(msg) {
 // ==========================================================================
 // DASHBOARD & NAVIGATION
 // ==========================================================================
+
 function renderDashboard() {
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("dashboard-screen").classList.remove("hidden");
@@ -205,15 +254,14 @@ function switchTab(tabName) {
     sendTab.classList.remove("active");
     inboxBtn.classList.add("active");
     sendBtn.classList.remove("active");
-    
-    // Auto refresh when clicking inbox
     fetchInboxMessages(false);
   }
 }
 
 // ==========================================================================
-// SEND MESSAGE LOGIC (doPost)
+// SEND MESSAGE LOGIC
 // ==========================================================================
+
 async function handleSendMessage(e) {
   e.preventDefault();
 
@@ -225,13 +273,23 @@ async function handleSendMessage(e) {
     return;
   }
 
-  // --- BAD WORDS CHECK ---
   if (containsBadWords(content)) {
     showToast("⚠️ 留言包含不當用語，請修正後再試。", "error");
     return;
   }
 
-  setLoading("send-btn", true);
+  const btn = document.getElementById("send-btn");
+  const btnText = btn.querySelector(".btn-text");
+  const progressWrapper = document.getElementById("send-btn-progress");
+  const fill = progressWrapper.querySelector(".progress-bar-fill");
+  const text = progressWrapper.querySelector(".progress-text");
+
+  const tracker = createProgressTracker(fill, text);
+
+  btn.disabled = true;
+  btnText.classList.add("hidden");
+  progressWrapper.classList.remove("hidden");
+  tracker.start();
 
   const payload = {
     sender_id: currentUser.participant_id,
@@ -243,13 +301,14 @@ async function handleSendMessage(e) {
   try {
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8" // Avoid Apps Script CORS preflight
-      },
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
     });
 
     const data = await response.json();
+
+    tracker.finish();
+    await new Promise(r => setTimeout(r, 200));
 
     if (data.status === "success") {
       showToast("留言已成功送出！", "success");
@@ -263,42 +322,38 @@ async function handleSendMessage(e) {
     showToast("發送失敗，請確認網路連線", "error");
     console.error(err);
   } finally {
-    setLoading("send-btn", false);
-  }
-}
-
-// Character counter & Real-time warning for bad words
-function updateCharCount() {
-  const textarea = document.getElementById("msg-content");
-  const countSpan = document.getElementById("char-num");
-  const val = textarea.value;
-
-  countSpan.textContent = val.length;
-
-  // Real-time Visual Hint on bad words
-  if (containsBadWords(val)) {
-    textarea.style.borderColor = "var(--danger-color)";
-  } else {
-    textarea.style.borderColor = "var(--border-color)";
+    tracker.reset();
+    btn.disabled = false;
+    btnText.classList.remove("hidden");
+    progressWrapper.classList.add("hidden");
   }
 }
 
 // ==========================================================================
-// INBOX LOGIC (doGet)
+// INBOX LOGIC
 // ==========================================================================
+
 async function fetchInboxMessages(showToastOnSuccess = false) {
   const loadingState = document.getElementById("inbox-loading");
   const feed = document.getElementById("inbox-feed");
   const emptyState = document.getElementById("inbox-empty");
 
+  const fill = document.getElementById("inbox-progress-fill");
+  const text = document.getElementById("inbox-progress-text");
+  const tracker = createProgressTracker(fill, text);
+
   loadingState.classList.remove("hidden");
   feed.innerHTML = "";
   emptyState.classList.add("hidden");
+  tracker.start();
 
   try {
     const queryUrl = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participant_id)}&phone_number=${encodeURIComponent(currentUser.phone_number)}`;
     const response = await fetch(queryUrl);
     const data = await response.json();
+
+    tracker.finish();
+    await new Promise(r => setTimeout(r, 200));
 
     if (data.status === "success") {
       renderInboxMessages(data.messages);
@@ -310,6 +365,7 @@ async function fetchInboxMessages(showToastOnSuccess = false) {
     showToast("讀取失敗，請確認網路連線", "error");
     console.error(err);
   } finally {
+    tracker.reset();
     loadingState.classList.add("hidden");
   }
 }
@@ -331,12 +387,10 @@ function renderInboxMessages(messages = []) {
   badge.textContent = messages.length;
   badge.classList.remove("hidden");
 
-  // Render messages (Sender ID is strictly excluded for anonymity)
   messages.reverse().forEach(msg => {
     const card = document.createElement("div");
     card.className = `message-card ${!msg.is_read ? 'unread' : ''}`;
 
-    // Display original message (or filter on render using censorBadWords(msg.content))
     card.innerHTML = `
       <p class="message-body">${escapeHTML(msg.content)}</p>
       <div class="message-meta">
@@ -351,20 +405,6 @@ function renderInboxMessages(messages = []) {
 // ==========================================================================
 // UTILITY FUNCTIONS
 // ==========================================================================
-function setLoading(buttonId, isLoading) {
-  const btn = document.getElementById(buttonId);
-  const text = btn.querySelector(".btn-text");
-  const spinner = btn.querySelector(".spinner");
-
-  btn.disabled = isLoading;
-  if (isLoading) {
-    text.classList.add("hidden");
-    spinner.classList.remove("hidden");
-  } else {
-    text.classList.remove("hidden");
-    spinner.classList.add("hidden");
-  }
-}
 
 function showToast(message, type = "success") {
   const toast = document.getElementById("toast");
