@@ -174,8 +174,66 @@ body {
 }
 
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 0.85;
   cursor: not-allowed;
+}
+
+/* ==========================================================================
+   PROGRESS BAR STYLES
+   ========================================================================== */
+.btn-progress-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.inbox-progress-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.progress-bar-bg {
+  flex: 1;
+  height: 8px;
+  background-color: rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.inbox-progress-wrapper .progress-bar-bg {
+  background-color: #e2e8f0;
+  height: 10px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background-color: #ffffff;
+  border-radius: 10px;
+  transition: width 0.12s ease-out;
+}
+
+.inbox-progress-wrapper .progress-bar-fill {
+  background-color: var(--primary-color);
+}
+
+.progress-text {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: right;
+  color: inherit;
+}
+
+.loading-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 /* ==========================================================================
@@ -341,29 +399,7 @@ body {
 .toast.success { background-color: var(--success-color); }
 .toast.error { background-color: var(--danger-color); }
 
-/* Spinners */
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: #fff;
-  animation: spin 0.8s linear infinite;
-  display: inline-block;
-}
-
-.spinner.color-primary {
-  border-color: rgba(59, 130, 246, 0.2);
-  border-top-color: var(--primary-color);
-  width: 24px;
-  height: 24px;
-}
-
 .hidden { display: none !important; }
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
