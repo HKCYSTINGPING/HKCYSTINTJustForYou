@@ -6,11 +6,20 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3g
 // Global state
 let currentUser = null;
 
-// Default list of participants if currentUser isn't set yet
-const ALL_PARTICIPANTS = ["1A", "2A", "3A", "1B", "2B", "3B", "1C", "2C", "3C"];
+// Full Participant List: 1A-6A to 1H-6H (48 participants total)
+const ALL_PARTICIPANTS = [
+  "1A", "2A", "3A", "4A", "5A", "6A",
+  "1B", "2B", "3B", "4B", "5B", "6B",
+  "1C", "2C", "3C", "4C", "5C", "6C",
+  "1D", "2D", "3D", "4D", "5D", "6D",
+  "1E", "2E", "3E", "4E", "5E", "6E",
+  "1F", "2F", "3F", "4F", "5F", "6F",
+  "1G", "2G", "3G", "4G", "5G", "6G",
+  "1H", "2H", "3H", "4H", "5H", "6H"
+];
 
 // ==========================================================================
-// BAD WORDS DATABASE & DETECTION (Front-end Filter)
+// BAD WORDS DATABASE & DETECTION
 // ==========================================================================
 const BAD_WORDS_LIST = [
   // Sentences & Phrases
@@ -22,16 +31,11 @@ const BAD_WORDS_LIST = [
   "吊夠", "吊 夠", "戇尻尻", "戇尻", "戇-尻", "戇 尻", "on 99", "ON 九", "on 9", "on.9", "on9",
   "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch",
   
-  // Single Characters & Special Unicode Matches
+  // Single Characters & Unicode Codes
   "撚", "屌", "尻", "鳩", "柒", "仆", "𨳒", "𨳊", "𨳍", "𨳯", 
   "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
 ];
 
-/**
- * Checks if the text contains any bad words from the database.
- * @param {string} text - User input text.
- * @returns {Array} - Array of detected bad words.
- */
 function detectBadWords(text) {
   const foundWords = [];
   const lowerText = text.toLowerCase();
@@ -52,7 +56,7 @@ function detectBadWords(text) {
 // ==========================================================================
 document.addEventListener("DOMContentLoaded", () => {
   initEventListeners();
-  populateTargetDropdown(); // Ensure options are created immediately on load
+  populateAllDropdowns();
   checkSavedSession();
 });
 
@@ -89,28 +93,35 @@ function initEventListeners() {
 }
 
 // ==========================================================================
-// DROPDOWN POPULATION (FIXED & SAFEGUARDED)
+// POPULATE DROPDOWNS (1A -> 6H)
 // ==========================================================================
-function populateTargetDropdown() {
-  const select = document.getElementById("target-participant-id");
-  if (!select) {
-    console.error("❌ Target select element with ID 'target-participant-id' not found in DOM!");
-    return;
+function populateAllDropdowns() {
+  // 1. Login Dropdown
+  const loginSelect = document.getElementById("login-id");
+  if (loginSelect) {
+    loginSelect.innerHTML = '<option value="">-- 請選擇參加者編號 --</option>';
+    ALL_PARTICIPANTS.forEach(id => {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = `參加者 ${id}`;
+      loginSelect.appendChild(option);
+    });
   }
 
-  select.innerHTML = '<option value="">-- 請選擇接收者 ID --</option>';
+  // 2. Receiver Dropdown
+  const targetSelect = document.getElementById("target-participant-id");
+  if (targetSelect) {
+    targetSelect.innerHTML = '<option value="">-- 請選擇接收者 ID --</option>';
+    ALL_PARTICIPANTS.forEach(id => {
+      // Exclude logged-in user from self-messaging
+      if (currentUser && id === currentUser.participant_id) return;
 
-  ALL_PARTICIPANTS.forEach(id => {
-    // Skip current logged-in user so they can't message themselves
-    if (currentUser && id === currentUser.participant_id) return;
-
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = `參加者 ${id}`;
-    select.appendChild(option);
-  });
-
-  console.log("✅ Participant dropdown populated successfully.");
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = `參加者 ${id}`;
+      targetSelect.appendChild(option);
+    });
+  }
 }
 
 // ==========================================================================
@@ -140,13 +151,12 @@ async function handleLogin(e) {
         phone_number: phoneNumber
       };
 
-      // Save user session to localStorage
       localStorage.setItem("anonymous_app_user", JSON.stringify(currentUser));
 
       showToast("登入成功！", "success");
       showMainScreen();
       renderMessages(data.messages);
-      populateTargetDropdown(); // Re-populate to exclude current user
+      populateAllDropdowns();
     } else {
       showToast(data.message || "驗證失敗，請檢查輸入資料", "error");
     }
@@ -164,7 +174,7 @@ function checkSavedSession() {
     try {
       currentUser = JSON.parse(saved);
       showMainScreen();
-      populateTargetDropdown();
+      populateAllDropdowns();
       fetchMessages();
     } catch (e) {
       localStorage.removeItem("anonymous_app_user");
@@ -177,12 +187,12 @@ function handleLogout() {
   currentUser = null;
   document.getElementById("main-screen").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
-  populateTargetDropdown(); // Reset dropdown
+  populateAllDropdowns();
   showToast("已成功登出", "success");
 }
 
 // ==========================================================================
-// MESSAGES & SENDING WITH FRONT-END WARNING
+// MESSAGES & SENDING WITH WARNING
 // ==========================================================================
 async function fetchMessages() {
   if (!currentUser) return;
@@ -221,13 +231,13 @@ async function handleSendMessage(e) {
     return;
   }
 
-  // ⚠️ FRONT-END BAD WORD FILTER CHECK
+  // Front-End Warning Filter
   const detectedBadWords = detectBadWords(content);
   if (detectedBadWords.length > 0) {
     const warningMsg = `⚠️ 留言包含不適當字詞：[ ${detectedBadWords.join(", ")} ]，請修正後再試。`;
     showToast(warningMsg, "error");
     contentInput.focus();
-    return; // Block submission completely
+    return;
   }
 
   setLoading("send-btn", true);
@@ -268,7 +278,7 @@ async function handleSendMessage(e) {
 }
 
 // ==========================================================================
-// UI & DISPLAY HELPERS
+// UI HELPERS
 // ==========================================================================
 function showMainScreen() {
   document.getElementById("login-screen").classList.add("hidden");
