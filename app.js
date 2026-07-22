@@ -2,8 +2,8 @@
 // CONFIGURATION & GLOBAL STATE
 // ==========================================================================
 
-// ⚠️ REPLACE THIS WITH YOUR DEPLOYED GOOGLE APPS SCRIPT WEB APP URL
-const API_URL = "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE";
+// 已為您填入正式部署的 Google Apps Script Web App URL
+const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3gYKAVVlbav-LijuFBYRtlG2VUO_q4LTMCNcrIt79mer-yhQ/exec";
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const MEMBERS_PER_GROUP = 6;
