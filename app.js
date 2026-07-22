@@ -6,6 +6,9 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3g
 // Global state
 let currentUser = null;
 
+// Default list of participants if currentUser isn't set yet
+const ALL_PARTICIPANTS = ["1A", "2A", "3A", "1B", "2B", "3B", "1C", "2C", "3C"];
+
 // ==========================================================================
 // BAD WORDS DATABASE & DETECTION (Front-end Filter)
 // ==========================================================================
@@ -49,12 +52,16 @@ function detectBadWords(text) {
 // ==========================================================================
 document.addEventListener("DOMContentLoaded", () => {
   initEventListeners();
+  populateTargetDropdown(); // Ensure options are created immediately on load
   checkSavedSession();
 });
 
 function initEventListeners() {
-  document.getElementById("login-form").addEventListener("submit", handleLogin);
-  document.getElementById("send-msg-form").addEventListener("submit", handleSendMessage);
+  const loginForm = document.getElementById("login-form");
+  if (loginForm) loginForm.addEventListener("submit", handleLogin);
+
+  const sendForm = document.getElementById("send-msg-form");
+  if (sendForm) sendForm.addEventListener("submit", handleSendMessage);
   
   const contentInput = document.getElementById("msg-content");
   if (contentInput) {
@@ -79,6 +86,31 @@ function initEventListeners() {
   if (logoutBtn) {
     logoutBtn.addEventListener("click", handleLogout);
   }
+}
+
+// ==========================================================================
+// DROPDOWN POPULATION (FIXED & SAFEGUARDED)
+// ==========================================================================
+function populateTargetDropdown() {
+  const select = document.getElementById("target-participant-id");
+  if (!select) {
+    console.error("❌ Target select element with ID 'target-participant-id' not found in DOM!");
+    return;
+  }
+
+  select.innerHTML = '<option value="">-- 請選擇接收者 ID --</option>';
+
+  ALL_PARTICIPANTS.forEach(id => {
+    // Skip current logged-in user so they can't message themselves
+    if (currentUser && id === currentUser.participant_id) return;
+
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = `參加者 ${id}`;
+    select.appendChild(option);
+  });
+
+  console.log("✅ Participant dropdown populated successfully.");
 }
 
 // ==========================================================================
@@ -114,7 +146,7 @@ async function handleLogin(e) {
       showToast("登入成功！", "success");
       showMainScreen();
       renderMessages(data.messages);
-      populateTargetDropdown();
+      populateTargetDropdown(); // Re-populate to exclude current user
     } else {
       showToast(data.message || "驗證失敗，請檢查輸入資料", "error");
     }
@@ -145,6 +177,7 @@ function handleLogout() {
   currentUser = null;
   document.getElementById("main-screen").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
+  populateTargetDropdown(); // Reset dropdown
   showToast("已成功登出", "success");
 }
 
@@ -191,7 +224,6 @@ async function handleSendMessage(e) {
   // ⚠️ FRONT-END BAD WORD FILTER CHECK
   const detectedBadWords = detectBadWords(content);
   if (detectedBadWords.length > 0) {
-    // Show explicit warning banner and halt execution
     const warningMsg = `⚠️ 留言包含不適當字詞：[ ${detectedBadWords.join(", ")} ]，請修正後再試。`;
     showToast(warningMsg, "error");
     contentInput.focus();
@@ -223,7 +255,7 @@ async function handleSendMessage(e) {
       document.getElementById("send-msg-form").reset();
       updateCharCount();
       switchTab("inbox");
-      fetchMessages(); // Refresh inbox list
+      fetchMessages();
     } else {
       showToast(data.message || "發送失敗，請再試一次", "error");
     }
@@ -261,7 +293,6 @@ function renderMessages(messages) {
     return;
   }
 
-  // Display newest messages first
   [...messages].reverse().forEach(msg => {
     const card = document.createElement("div");
     card.className = "message-card";
@@ -273,23 +304,6 @@ function renderMessages(messages) {
       <div class="message-body">${escapeHtml(msg.content)}</div>
     `;
     container.appendChild(card);
-  });
-}
-
-function populateTargetDropdown() {
-  const select = document.getElementById("target-participant-id");
-  if (!select) return;
-
-  select.innerHTML = '<option value="">-- 請選擇接收者 ID --</option>';
-
-  const allParticipants = ["1A", "2A", "3A", "1B", "2B", "3B", "1C", "2C", "3C"];
-
-  allParticipants.forEach(id => {
-    if (currentUser && id === currentUser.participant_id) return; // Prevent self-messaging
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = `參加者 ${id}`;
-    select.appendChild(option);
   });
 }
 
