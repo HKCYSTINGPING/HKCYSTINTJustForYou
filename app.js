@@ -78,9 +78,6 @@ function updateTargetDropdown() {
 // PROGRESS TRACKER CONTROLLER
 // ==========================================================================
 
-/**
- * Standard percentage progress animation during network requests.
- */
 function createProgressTracker(textElement) {
   let progress = 0;
   let interval = null;
@@ -180,6 +177,7 @@ async function handleLogin(e) {
 
       renderDashboard();
       renderInboxMessages(data.messages);
+      loadSentMessages();
       showToast("登入成功！", "success");
     } else {
       showAuthError(data.message || "身份驗證失敗，請檢查號碼是否正確。");
@@ -201,6 +199,7 @@ function checkSession() {
     currentUser = JSON.parse(savedUser);
     renderDashboard();
     fetchInboxMessages(false);
+    loadSentMessages();
   }
 }
 
@@ -236,20 +235,27 @@ function renderDashboard() {
 function switchTab(tabName) {
   const sendTab = document.getElementById("tab-send");
   const inboxTab = document.getElementById("tab-inbox");
+  const sentTab = document.getElementById("tab-sent");
+
   const sendBtn = document.getElementById("tab-btn-send");
   const inboxBtn = document.getElementById("tab-btn-inbox");
+  const sentBtn = document.getElementById("tab-btn-sent");
+
+  // Deactivate all
+  [sendTab, inboxTab, sentTab].forEach(t => t.classList.remove("active"));
+  [sendBtn, inboxBtn, sentBtn].forEach(b => b.classList.remove("active"));
 
   if (tabName === "send") {
     sendTab.classList.add("active");
-    inboxTab.classList.remove("active");
     sendBtn.classList.add("active");
-    inboxBtn.classList.remove("active");
-  } else {
+  } else if (tabName === "inbox") {
     inboxTab.classList.add("active");
-    sendTab.classList.remove("active");
     inboxBtn.classList.add("active");
-    sendBtn.classList.remove("active");
     fetchInboxMessages(false);
+  } else if (tabName === "sent") {
+    sentTab.classList.add("active");
+    sentBtn.classList.add("active");
+    loadSentMessages();
   }
 }
 
@@ -305,10 +311,16 @@ async function handleSendMessage(e) {
     await new Promise(r => setTimeout(r, 200));
 
     if (data.status === "success") {
+      saveSentMessageLocally({
+        receiver_id: targetId,
+        content: content,
+        created_at: new Date().toLocaleString("zh-HK", { hour12: false })
+      });
+
       showToast("留言已成功送出！", "success");
       document.getElementById("send-msg-form").reset();
       updateCharCount();
-      switchTab("inbox");
+      switchTab("sent");
     } else {
       showToast(data.message || "傳送失敗，請再試一次", "error");
     }
@@ -321,6 +333,61 @@ async function handleSendMessage(e) {
     btnText.classList.remove("hidden");
     progressWrapper.classList.add("hidden");
   }
+}
+
+// ==========================================================================
+// SENT MESSAGES (LOCAL TRACKING)
+// ==========================================================================
+
+function getSentStorageKey() {
+  return `sent_msgs_${currentUser.participant_id}`;
+}
+
+function saveSentMessageLocally(msg) {
+  if (!currentUser.participant_id) return;
+  const key = getSentStorageKey();
+  const existing = JSON.parse(localStorage.getItem(key) || "[]");
+  existing.push(msg);
+  localStorage.setItem(key, JSON.stringify(existing));
+}
+
+function loadSentMessages() {
+  if (!currentUser.participant_id) return;
+
+  const key = getSentStorageKey();
+  const messages = JSON.parse(localStorage.getItem(key) || "[]");
+
+  const feed = document.getElementById("sent-feed");
+  const emptyState = document.getElementById("sent-empty");
+  const badge = document.getElementById("sent-count-badge");
+
+  feed.innerHTML = "";
+
+  if (messages.length === 0) {
+    emptyState.classList.remove("hidden");
+    badge.classList.add("hidden");
+    return;
+  }
+
+  emptyState.classList.add("hidden");
+  badge.textContent = messages.length;
+  badge.classList.remove("hidden");
+
+  // Render reverse order (newest first)
+  messages.slice().reverse().forEach(msg => {
+    const card = document.createElement("div");
+    card.className = "message-card sent-card";
+
+    card.innerHTML = `
+      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(msg.receiver_id)}</strong></div>
+      <p class="message-body">${escapeHTML(msg.content)}</p>
+      <div class="message-meta">
+        <span class="timestamp">🕒 ${msg.created_at || '最近'}</span>
+        <span class="tag-sent">已送出</span>
+      </div>
+    `;
+    feed.appendChild(card);
+  });
 }
 
 // ==========================================================================
