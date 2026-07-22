@@ -80,7 +80,10 @@
           ✏️ 發送留言
         </button>
         <button id="tab-btn-inbox" class="tab-btn" onclick="switchTab('inbox')">
-          📥 我的收件箱 <span id="inbox-count-badge" class="badge hidden">0</span>
+          📥 收到的留言 <span id="inbox-count-badge" class="badge hidden">0</span>
+        </button>
+        <button id="tab-btn-sent" class="tab-btn" onclick="switchTab('sent')">
+          📤 送出的留言 <span id="sent-count-badge" class="badge hidden">0</span>
         </button>
       </nav>
 
@@ -146,6 +149,27 @@
           <div class="empty-icon">📬</div>
           <h3>暫時未有留言 / No messages yet</h3>
           <p>當有人傳送匿名留言給你時，將會在此顯示。</p>
+        </div>
+      </div>
+
+      <!-- TAB 3: SENT MESSAGES (OUTBOX) -->
+      <div id="tab-sent" class="tab-content card">
+        <div class="inbox-header">
+          <h2>送出的留言</h2>
+          <button class="btn btn-icon" onclick="loadSentMessages()" title="重新整理">
+            🔄 <span class="btn-text-desktop">更新紀錄</span>
+          </button>
+        </div>
+
+        <div id="sent-feed" class="message-feed">
+          <!-- Sent messages rendered here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="sent-empty" class="empty-state hidden">
+          <div class="empty-icon">📤</div>
+          <h3>未有送出紀錄 / No sent messages</h3>
+          <p>你發送過的留言會紀錄在這裡。</p>
         </div>
       </div>
 
