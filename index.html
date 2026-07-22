@@ -1,142 +1,369 @@
-<!DOCTYPE html>
-<html lang="zh-HK">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Event Anonymous Messages | 匿名留言活動</title>
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
+// ==========================================================================
+// CONFIGURATION
+// ==========================================================================
+const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3gYKAVVlbav-LijuFBYRtlG2VUO_q4LTMCNcrIt79mer-yhQ/exec";
 
-  <div class="app-container">
-    
-    <!-- Toast Notification Banner -->
-    <div id="toast" class="toast hidden"></div>
+// Global state
+let currentUser = null;
 
-    <!-- 1. AUTHENTICATION SCREEN -->
-    <section id="auth-screen" class="card auth-card">
-      <div class="brand-header">
-        <div class="logo-icon">💌</div>
-        <h1>Event Anonymous Messages</h1>
-        <p class="subtitle">參加者匿名留言平台</p>
+// Full Participant List: 1A-6A, 1B-6B, 1C-6C, 1D-6D, 1E-6E, 1F-6F, 1G-6G, 1H-6H
+const ALL_PARTICIPANTS = [
+  "1A", "2A", "3A", "4A", "5A", "6A",
+  "1B", "2B", "3B", "4B", "5B", "6B",
+  "1C", "2C", "3C", "4C", "5C", "6C",
+  "1D", "2D", "3D", "4D", "5D", "6D",
+  "1E", "2E", "3E", "4E", "5E", "6E",
+  "1F", "2F", "3F", "4F", "5F", "6F",
+  "1G", "2G", "3G", "4G", "5G", "6G",
+  "1H", "2H", "3H", "4H", "5H", "6H"
+];
+
+// ==========================================================================
+// BAD WORDS DATABASE & DETECTION
+// ==========================================================================
+const BAD_WORDS_LIST = [
+  // Sentences & Phrases
+  "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
+  "含能", "臭化西", "臭西", "傻西", "凸你", "屌.你", "屌 你", "屌你", "吊你", "小你",
+  "九兩菜", "收皮啦", "收皮", "把撚", "條撚", "賓周", "賓.周", "仆街", "仆.街", "卜街", "POP街",
+  "diu 9", "sub 9", "sub9", "chi lan sin", "撚樣", "能樣", "柒頭", "笨七", "鳩登", "膠登",
+  "契弟", "ass hole", "asshole", "A S S", "on lun 7 7", "臭爛袋", "挑那星", "陷家剷", "陷家",
+  "吊夠", "吊 夠", "戇尻尻", "戇尻", "戇-尻", "戇 尻", "on 99", "ON 九", "on 9", "on.9", "on9",
+  "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch",
+  
+  // Single Characters & Unicode Codes
+  "撚", "屌", "尻", "鳩", "柒", "仆", "𨳒", "𨳊", "𨳍", "𨳯", 
+  "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
+];
+
+function detectBadWords(text) {
+  const foundWords = [];
+  const lowerText = text.toLowerCase();
+
+  BAD_WORDS_LIST.forEach(word => {
+    if (lowerText.includes(word.toLowerCase())) {
+      if (!foundWords.includes(word)) {
+        foundWords.push(word);
+      }
+    }
+  });
+
+  return foundWords;
+}
+
+// ==========================================================================
+// INITIALIZATION
+// ==========================================================================
+document.addEventListener("DOMContentLoaded", () => {
+  initEventListeners();
+  populateAllDropdowns(); // Fill both dropdowns with 1A -> 6H
+  checkSavedSession();
+});
+
+function initEventListeners() {
+  const loginForm = document.getElementById("login-form");
+  if (loginForm) loginForm.addEventListener("submit", handleLogin);
+
+  const sendForm = document.getElementById("send-msg-form");
+  if (sendForm) sendForm.addEventListener("submit", handleSendMessage);
+  
+  const contentInput = document.getElementById("msg-content");
+  if (contentInput) {
+    contentInput.addEventListener("input", updateCharCount);
+  }
+
+  // Tab switching
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      switchTab(e.target.dataset.tab);
+    });
+  });
+
+  // Refresh inbox
+  const refreshBtn = document.getElementById("refresh-inbox-btn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", fetchMessages);
+  }
+
+  // Logout
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", handleLogout);
+  }
+}
+
+// ==========================================================================
+// POPULATE DROPDOWNS (Dynamically populates both Login and Receiver)
+// ==========================================================================
+function populateAllDropdowns() {
+  // 1. Populate Login Dropdown
+  const loginSelect = document.getElementById("login-id");
+  if (loginSelect) {
+    loginSelect.innerHTML = '<option value="">-- 請選擇參加者編號 --</option>';
+    ALL_PARTICIPANTS.forEach(id => {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = `參加者 ${id}`;
+      loginSelect.appendChild(option);
+    });
+  }
+
+  // 2. Populate Receiver Dropdown
+  const targetSelect = document.getElementById("target-participant-id");
+  if (targetSelect) {
+    targetSelect.innerHTML = '<option value="">-- 請選擇接收者 ID --</option>';
+    ALL_PARTICIPANTS.forEach(id => {
+      // Don't list the current logged-in user in receiver list
+      if (currentUser && id === currentUser.participant_id) return;
+
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = `參加者 ${id}`;
+      targetSelect.appendChild(option);
+    });
+  }
+}
+
+// ==========================================================================
+// AUTHENTICATION
+// ==========================================================================
+async function handleLogin(e) {
+  e.preventDefault();
+
+  const participantId = document.getElementById("login-id").value;
+  const phoneNumber = document.getElementById("login-phone").value.trim();
+
+  if (!participantId || !phoneNumber) {
+    showToast("請選擇參加者 ID 並輸入電話號碼", "error");
+    return;
+  }
+
+  setLoading("login-btn", true);
+
+  try {
+    const url = `${API_URL}?participant_id=${encodeURIComponent(participantId)}&phone_number=${encodeURIComponent(phoneNumber)}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status === "success") {
+      currentUser = {
+        participant_id: participantId,
+        phone_number: phoneNumber
+      };
+
+      localStorage.setItem("anonymous_app_user", JSON.stringify(currentUser));
+
+      showToast("登入成功！", "success");
+      showMainScreen();
+      renderMessages(data.messages);
+      populateAllDropdowns(); // Re-populate to omit current user from receiver list
+    } else {
+      showToast(data.message || "驗證失敗，請檢查輸入資料", "error");
+    }
+  } catch (err) {
+    showToast("連線失敗，請檢查網路或 API 設定", "error");
+    console.error(err);
+  } finally {
+    setLoading("login-btn", false);
+  }
+}
+
+function checkSavedSession() {
+  const saved = localStorage.getItem("anonymous_app_user");
+  if (saved) {
+    try {
+      currentUser = JSON.parse(saved);
+      showMainScreen();
+      populateAllDropdowns();
+      fetchMessages();
+    } catch (e) {
+      localStorage.removeItem("anonymous_app_user");
+    }
+  }
+}
+
+function handleLogout() {
+  localStorage.removeItem("anonymous_app_user");
+  currentUser = null;
+  document.getElementById("main-screen").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+  populateAllDropdowns();
+  showToast("已成功登出", "success");
+}
+
+// ==========================================================================
+// MESSAGES & SENDING WITH WARNING
+// ==========================================================================
+async function fetchMessages() {
+  if (!currentUser) return;
+
+  const refreshBtn = document.getElementById("refresh-inbox-btn");
+  if (refreshBtn) refreshBtn.classList.add("spin");
+
+  try {
+    const url = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participant_id)}&phone_number=${encodeURIComponent(currentUser.phone_number)}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status === "success") {
+      renderMessages(data.messages);
+      showToast("收件箱已更新", "success");
+    } else {
+      showToast(data.message || "更新收件箱失敗", "error");
+    }
+  } catch (err) {
+    showToast("無法連線至伺服器", "error");
+    console.error(err);
+  } finally {
+    if (refreshBtn) refreshBtn.classList.remove("spin");
+  }
+}
+
+async function handleSendMessage(e) {
+  e.preventDefault();
+
+  const targetId = document.getElementById("target-participant-id").value;
+  const contentInput = document.getElementById("msg-content");
+  const content = contentInput.value.trim();
+
+  if (!targetId || !content) {
+    showToast("請選擇接收者並輸入留言內容", "error");
+    return;
+  }
+
+  // ⚠️ Front-End Warning Filter
+  const detectedBadWords = detectBadWords(content);
+  if (detectedBadWords.length > 0) {
+    const warningMsg = `⚠️ 留言包含不適當字詞：[ ${detectedBadWords.join(", ")} ]，請修正後再試。`;
+    showToast(warningMsg, "error");
+    contentInput.focus();
+    return;
+  }
+
+  setLoading("send-btn", true);
+
+  const payload = {
+    sender_id: currentUser.participant_id,
+    phone_number: currentUser.phone_number,
+    receiver_id: targetId,
+    content: content
+  };
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (data.status === "success") {
+      showToast("留言已成功發送！", "success");
+      document.getElementById("send-msg-form").reset();
+      updateCharCount();
+      switchTab("inbox");
+      fetchMessages();
+    } else {
+      showToast(data.message || "發送失敗，請再試一次", "error");
+    }
+  } catch (err) {
+    showToast("發送失敗，請確認網路連線", "error");
+    console.error(err);
+  } finally {
+    setLoading("send-btn", false);
+  }
+}
+
+// ==========================================================================
+// UI HELPERS
+// ==========================================================================
+function showMainScreen() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("main-screen").classList.remove("hidden");
+  
+  const userEl = document.getElementById("user-display-id");
+  if (userEl) userEl.textContent = currentUser.participant_id;
+}
+
+function renderMessages(messages) {
+  const container = document.getElementById("messages-container");
+  if (!container) return;
+  
+  container.innerHTML = "";
+
+  if (!messages || messages.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>📭 目前還沒有收到任何匿名留言</p>
       </div>
+    `;
+    return;
+  }
 
-      <form id="login-form" onsubmit="handleLogin(event)">
-        <div class="form-group">
-          <label for="login-participant-id">選擇你的參加者編號 (Participant ID)</label>
-          <select id="login-participant-id" required>
-            <option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>
-            <!-- JS dynamically populates 1A-6H -->
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="login-phone">電話號碼 (Phone Number)</label>
-          <input 
-            type="tel" 
-            id="login-phone" 
-            placeholder="例如：+85291234567 或 91234567" 
-            required 
-            autocomplete="tel"
-          />
-          <small class="hint">用於驗證身份，不會公開顯示。</small>
-        </div>
-
-        <div id="auth-error" class="alert alert-danger hidden"></div>
-
-        <button type="submit" id="login-btn" class="btn btn-primary btn-block">
-          <span class="btn-text">Login / 進入系統</span>
-          <span class="spinner hidden"></span>
-        </button>
-      </form>
-    </section>
-
-    <!-- 2. MAIN DASHBOARD SCREEN (LOGGED IN) -->
-    <section id="dashboard-screen" class="hidden">
-      
-      <!-- Top Header Nav -->
-      <header class="app-header card">
-        <div class="user-badge">
-          <span class="status-dot"></span>
-          <span id="user-display-id">ID: --</span>
-        </div>
-        <button class="btn btn-outline btn-sm" onclick="handleLogout()">切換身份 / Logout</button>
-      </header>
-
-      <!-- Tab Buttons -->
-      <nav class="tab-nav">
-        <button id="tab-btn-send" class="tab-btn active" onclick="switchTab('send')">
-          ✏️ 發送留言
-        </button>
-        <button id="tab-btn-inbox" class="tab-btn" onclick="switchTab('inbox')">
-          📥 我的收件箱 <span id="inbox-count-badge" class="badge hidden">0</span>
-        </button>
-      </nav>
-
-      <!-- TAB 1: SEND MESSAGE -->
-      <div id="tab-send" class="tab-content active card">
-        <h2>發送匿名留言</h2>
-        <p class="desc">你可以向任何其他參加者傳送心意或鼓勵，對方不會知道你的身份。</p>
-
-        <form id="send-msg-form" onsubmit="handleSendMessage(event)">
-          <div class="form-group">
-            <label for="target-participant-id">傳送給 (Target Participant)</label>
-            <select id="target-participant-id" required>
-              <option value="" disabled selected>選擇對象 (1A - 6H)</option>
-              <!-- Populated dynamically (excludes current user) -->
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label for="msg-content">留言內容 (Message)</label>
-            <textarea 
-              id="msg-content" 
-              rows="4" 
-              maxlength="200" 
-              placeholder="寫下你想對他說的話..." 
-              required
-              oninput="updateCharCount()"
-            ></textarea>
-            <div class="char-count"><span id="char-num">0</span> / 200</div>
-          </div>
-
-          <button type="submit" id="send-btn" class="btn btn-primary btn-block">
-            <span class="btn-text">發送匿名留言</span>
-            <span class="spinner hidden"></span>
-          </button>
-        </form>
+  [...messages].reverse().forEach(msg => {
+    const card = document.createElement("div");
+    card.className = "message-card";
+    card.innerHTML = `
+      <div class="message-header">
+        <span class="sender-tag">🔒 匿名留言</span>
+        <span class="message-time">${msg.created_at || "剛剛"}</span>
       </div>
+      <div class="message-body">${escapeHtml(msg.content)}</div>
+    `;
+    container.appendChild(card);
+  });
+}
 
-      <!-- TAB 2: INBOX -->
-      <div id="tab-inbox" class="tab-content card">
-        <div class="inbox-header">
-          <h2>收到的留言</h2>
-          <button class="btn btn-icon" onclick="fetchInboxMessages(true)" title="重新整理">
-            🔄 <span class="btn-text-desktop">更新紀錄</span>
-          </button>
-        </div>
+function switchTab(tabName) {
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tabName);
+  });
 
-        <div id="inbox-loading" class="loading-state hidden">
-          <div class="spinner color-primary"></div>
-          <p>正在載入留言...</p>
-        </div>
+  document.querySelectorAll(".tab-content").forEach(content => {
+    content.classList.toggle("hidden", content.id !== `${tabName}-tab`);
+  });
+}
 
-        <div id="inbox-feed" class="message-feed">
-          <!-- Messages rendered here -->
-        </div>
+function updateCharCount() {
+  const contentInput = document.getElementById("msg-content");
+  const countEl = document.getElementById("char-count");
+  if (contentInput && countEl) {
+    countEl.textContent = contentInput.value.length;
+  }
+}
 
-        <!-- Empty State -->
-        <div id="inbox-empty" class="empty-state hidden">
-          <div class="empty-icon">📬</div>
-          <h3>暫時未有留言 / No messages yet</h3>
-          <p>當有人傳送匿名留言給你時，將會在此顯示。</p>
-        </div>
-      </div>
+function setLoading(buttonId, isLoading) {
+  const btn = document.getElementById(buttonId);
+  if (!btn) return;
 
-    </section>
+  btn.disabled = isLoading;
+  const textEl = btn.querySelector(".btn-text");
+  const spinnerEl = btn.querySelector(".btn-spinner");
 
-  </div>
+  if (textEl) textEl.style.display = isLoading ? "none" : "inline";
+  if (spinnerEl) spinnerEl.style.display = isLoading ? "inline-block" : "none";
+}
 
-  <script src="app.js"></script>
-</body>
-</html>
+function showToast(message, type = "info") {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+
+  toast.textContent = message;
+  toast.className = `toast show ${type}`;
+
+  setTimeout(() => {
+    toast.className = toast.className.replace("show", "");
+  }, 4000);
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&#039;")
+    .replace(/'/g, "&#039;");
+}
