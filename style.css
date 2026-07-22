@@ -187,13 +187,13 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
 }
 
 .spinner-container.large {
-  width: 50px;
-  height: 50px;
+  width: 54px;
+  height: 54px;
   margin: 0 auto 12px auto;
 }
 
@@ -214,15 +214,16 @@ body {
 }
 
 .spinner-text {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: #ffffff;
   z-index: 1;
   user-select: none;
+  line-height: 1;
 }
 
 .loading-state .spinner-text {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--primary-color);
 }
 
