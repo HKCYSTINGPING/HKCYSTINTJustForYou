@@ -79,7 +79,7 @@ function updateTargetDropdown() {
 // ==========================================================================
 
 /**
- * Simulates real-time percentage progress (0% -> 100%) during network requests.
+ * Standard percentage progress animation during network requests.
  */
 function createProgressTracker(textElement) {
   let progress = 0;
@@ -91,12 +91,12 @@ function createProgressTracker(textElement) {
       textElement.textContent = "0%";
 
       interval = setInterval(() => {
-        if (progress < 90) {
-          const step = Math.max(1, Math.floor((90 - progress) / 6));
-          progress += step;
+        if (progress < 95) {
+          progress += Math.floor(Math.random() * 5) + 3;
+          if (progress > 95) progress = 95;
           textElement.textContent = `${progress}%`;
         }
-      }, 100);
+      }, 150);
     },
     finish: () => {
       clearInterval(interval);
