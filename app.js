@@ -8,6 +8,22 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3g
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const MEMBERS_PER_GROUP = 6;
 
+// List of prohibited words (profanity, insult, bad words) in English & Cantonese/Chinese
+const PROHIBITED_WORDS = [
+// Sentences & Phrases
+  "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
+  "含能", "臭化西", "臭西", "傻西", "凸你", "屌.你", "屌 你", "屌你", "吊你", "小你",
+  "九兩菜", "收皮啦", "收皮", "把撚", "條撚", "賓周", "賓.周", "仆街", "仆.街", "卜街", "POP街",
+  "diu 9", "sub 9", "sub9", "chi lan sin", "撚樣", "能樣", "柒頭", "笨七", "鳩登", "膠登",
+  "契弟", "ass hole", "asshole", "A S S", "on lun 7 7", "臭爛袋", "挑那星", "陷家剷", "陷家",
+  "吊夠", "吊 夠", "戇尻尻", "戇尻", "戇-尻", "戇 尻", "on 99", "ON 九", "on 9", "on.9", "on9",
+  "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch",
+  
+  // Single Characters & Special Unicode Matches
+  "撚", "屌", "尻", "鳩", "柒", "仆", "𨳒", "𨳊", "𨳍", "𨳯", 
+  "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
+];
+
 let currentUser = {
   participant_id: null,
   phone_number: null
@@ -57,6 +73,37 @@ function updateTargetDropdown() {
     opt.textContent = `參加者 ${id}`;
     targetSelect.appendChild(opt);
   });
+}
+
+// ==========================================================================
+// BAD WORDS FILTERING FUNCTIONS
+// ==========================================================================
+
+/**
+ * Checks if the string contains any prohibited/bad words.
+ * @param {string} text 
+ * @returns {boolean} True if bad words detected, false otherwise.
+ */
+function containsBadWords(text) {
+  const normalizedText = text.toLowerCase().replace(/\s+/g, '');
+  return PROHIBITED_WORDS.some(word => {
+    const normalizedWord = word.toLowerCase();
+    return normalizedText.includes(normalizedWord);
+  });
+}
+
+/**
+ * Optional Helper: Replaces bad words with asterisks (***)
+ * @param {string} text 
+ * @returns {string} Sanitized string
+ */
+function censorBadWords(text) {
+  let filteredText = text;
+  PROHIBITED_WORDS.forEach(word => {
+    const regex = new RegExp(word, 'gi');
+    filteredText = filteredText.replace(regex, '*'.repeat(word.length));
+  });
+  return filteredText;
 }
 
 // ==========================================================================
@@ -178,6 +225,12 @@ async function handleSendMessage(e) {
     return;
   }
 
+  // --- BAD WORDS CHECK ---
+  if (containsBadWords(content)) {
+    showToast("⚠️ 留言包含不當用語，請修正後再試。", "error");
+    return;
+  }
+
   setLoading("send-btn", true);
 
   const payload = {
@@ -214,10 +267,20 @@ async function handleSendMessage(e) {
   }
 }
 
-// Character counter
+// Character counter & Real-time warning for bad words
 function updateCharCount() {
   const textarea = document.getElementById("msg-content");
-  document.getElementById("char-num").textContent = textarea.value.length;
+  const countSpan = document.getElementById("char-num");
+  const val = textarea.value;
+
+  countSpan.textContent = val.length;
+
+  // Real-time Visual Hint on bad words
+  if (containsBadWords(val)) {
+    textarea.style.borderColor = "var(--danger-color)";
+  } else {
+    textarea.style.borderColor = "var(--border-color)";
+  }
 }
 
 // ==========================================================================
@@ -273,6 +336,7 @@ function renderInboxMessages(messages = []) {
     const card = document.createElement("div");
     card.className = `message-card ${!msg.is_read ? 'unread' : ''}`;
 
+    // Display original message (or filter on render using censorBadWords(msg.content))
     card.innerHTML = `
       <p class="message-body">${escapeHTML(msg.content)}</p>
       <div class="message-meta">
