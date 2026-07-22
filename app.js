@@ -75,49 +75,37 @@ function updateTargetDropdown() {
 }
 
 // ==========================================================================
-// MODAL PROGRESS TRACKER CONTROLLER
+// PROGRESS TRACKER CONTROLLER
 // ==========================================================================
 
 /**
- * Controls the floating window loading modal with smooth percent progress.
+ * Simulates real-time percentage progress (0% -> 100%) during network requests.
  */
-function createModalProgressTracker(statusMessage = "載入中...") {
-  const modal = document.getElementById("loading-modal");
-  const fillElement = document.getElementById("modal-progress-fill");
-  const textElement = document.getElementById("modal-progress-text");
-  const titleElement = document.getElementById("modal-loading-title");
-
+function createProgressTracker(textElement) {
   let progress = 0;
   let interval = null;
 
   return {
     start: () => {
       progress = 0;
-      if (titleElement) titleElement.textContent = statusMessage;
-      if (fillElement) fillElement.style.width = "0%";
-      if (textElement) textElement.textContent = "0%";
-      if (modal) modal.classList.remove("hidden");
+      textElement.textContent = "0%";
 
       interval = setInterval(() => {
         if (progress < 90) {
           const step = Math.max(1, Math.floor((90 - progress) / 6));
           progress += step;
-          if (fillElement) fillElement.style.width = `${progress}%`;
-          if (textElement) textElement.textContent = `${progress}%`;
+          textElement.textContent = `${progress}%`;
         }
       }, 100);
     },
     finish: () => {
       clearInterval(interval);
-      if (fillElement) fillElement.style.width = "100%";
-      if (textElement) textElement.textContent = "100%";
+      textElement.textContent = "100%";
     },
-    close: () => {
+    reset: () => {
       clearInterval(interval);
-      if (modal) modal.classList.add("hidden");
       progress = 0;
-      if (fillElement) fillElement.style.width = "0%";
-      if (textElement) textElement.textContent = "0%";
+      textElement.textContent = "0%";
     }
   };
 }
@@ -164,7 +152,16 @@ async function handleLogin(e) {
     return;
   }
 
-  const tracker = createModalProgressTracker("正在驗證身份...");
+  const btn = document.getElementById("login-btn");
+  const btnText = btn.querySelector(".btn-text");
+  const progressWrapper = document.getElementById("login-btn-progress");
+  const text = progressWrapper.querySelector(".spinner-text");
+
+  const tracker = createProgressTracker(text);
+
+  btn.disabled = true;
+  btnText.classList.add("hidden");
+  progressWrapper.classList.remove("hidden");
   tracker.start();
 
   try {
@@ -191,7 +188,10 @@ async function handleLogin(e) {
     showAuthError("無法連接至伺服器，請稍後再試。");
     console.error(err);
   } finally {
-    tracker.close();
+    tracker.reset();
+    btn.disabled = false;
+    btnText.classList.remove("hidden");
+    progressWrapper.classList.add("hidden");
   }
 }
 
@@ -273,7 +273,16 @@ async function handleSendMessage(e) {
     return;
   }
 
-  const tracker = createModalProgressTracker("正在傳送匿名留言...");
+  const btn = document.getElementById("send-btn");
+  const btnText = btn.querySelector(".btn-text");
+  const progressWrapper = document.getElementById("send-btn-progress");
+  const text = progressWrapper.querySelector(".spinner-text");
+
+  const tracker = createProgressTracker(text);
+
+  btn.disabled = true;
+  btnText.classList.add("hidden");
+  progressWrapper.classList.remove("hidden");
   tracker.start();
 
   const payload = {
@@ -307,7 +316,10 @@ async function handleSendMessage(e) {
     showToast("發送失敗，請確認網路連線", "error");
     console.error(err);
   } finally {
-    tracker.close();
+    tracker.reset();
+    btn.disabled = false;
+    btnText.classList.remove("hidden");
+    progressWrapper.classList.add("hidden");
   }
 }
 
@@ -316,10 +328,14 @@ async function handleSendMessage(e) {
 // ==========================================================================
 
 async function fetchInboxMessages(showToastOnSuccess = false) {
+  const loadingState = document.getElementById("inbox-loading");
   const feed = document.getElementById("inbox-feed");
   const emptyState = document.getElementById("inbox-empty");
 
-  const tracker = createModalProgressTracker("正在讀取最新留言...");
+  const text = document.getElementById("inbox-progress-text");
+  const tracker = createProgressTracker(text);
+
+  loadingState.classList.remove("hidden");
   feed.innerHTML = "";
   emptyState.classList.add("hidden");
   tracker.start();
@@ -342,7 +358,8 @@ async function fetchInboxMessages(showToastOnSuccess = false) {
     showToast("讀取失敗，請確認網路連線", "error");
     console.error(err);
   } finally {
-    tracker.close();
+    tracker.reset();
+    loadingState.classList.add("hidden");
   }
 }
 
