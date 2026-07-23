@@ -4,126 +4,111 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>匿名留言系統 | Anonymous Messaging System</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="style.css">
   <!-- Google Fonts & Font Awesome Icons -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 
-  <!-- Background Animated Shapes -->
-  <div class="bg-shape shape-1"></div>
-  <div class="bg-shape shape-2"></div>
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
 
-  <!-- 1. LOGIN SECTION -->
-  <section id="login-section" class="card login-card">
-    <div class="login-header">
-      <div class="logo-icon">🔒</div>
-      <h2>匿名留言系統</h2>
-      <p class="subtitle">請完成雙重身分驗證以進入系統</p>
+  <!-- 1. AUTHENTICATION SECTION (LOGIN) -->
+  <section id="login-section" class="auth-wrapper">
+    <div class="auth-card">
+      <div class="auth-header">
+        <span class="auth-icon">🤫</span>
+        <h2>匿名留言系統</h2>
+        <p>請選擇編號並驗證電話號碼登入</p>
+      </div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-participant"><i class="fa-solid fa-user-tag"></i> 參加者編號</label>
+          <select id="login-participant" required>
+            <option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>
+            <!-- Hardcoded 1A - 6H -->
+            <option value="1A">參加者 1A</option>
+            <option value="2A">參加者 2A</option>
+            <option value="3A">參加者 3A</option>
+            <option value="4A">參加者 4A</option>
+            <option value="5A">參加者 5A</option>
+            <option value="6A">參加者 6A</option>
+
+            <option value="1B">參加者 1B</option>
+            <option value="2B">參加者 2B</option>
+            <option value="3B">參加者 3B</option>
+            <option value="4B">參加者 4B</option>
+            <option value="5B">參加者 5B</option>
+            <option value="6B">參加者 6B</option>
+
+            <option value="1C">參加者 1C</option>
+            <option value="2C">參加者 2C</option>
+            <option value="3C">參加者 3C</option>
+            <option value="4C">參加者 4C</option>
+            <option value="5C">參加者 5C</option>
+            <option value="6C">參加者 6C</option>
+
+            <option value="1D">參加者 1D</option>
+            <option value="2D">參加者 2D</option>
+            <option value="3D">參加者 3D</option>
+            <option value="4D">參加者 4D</option>
+            <option value="5D">參加者 5D</option>
+            <option value="6D">參加者 6D</option>
+
+            <option value="1E">參加者 1E</option>
+            <option value="2E">參加者 2E</option>
+            <option value="3E">參加者 3E</option>
+            <option value="4E">參加者 4E</option>
+            <option value="5E">參加者 5E</option>
+            <option value="6E">參加者 6E</option>
+
+            <option value="1F">參加者 1F</option>
+            <option value="2F">參加者 2F</option>
+            <option value="3F">參加者 3F</option>
+            <option value="4F">參加者 4F</option>
+            <option value="5F">參加者 5F</option>
+            <option value="6F">參加者 6F</option>
+
+            <option value="1G">參加者 1G</option>
+            <option value="2G">參加者 2G</option>
+            <option value="3G">參加者 3G</option>
+            <option value="4G">參加者 4G</option>
+            <option value="5G">參加者 5G</option>
+            <option value="6G">參加者 6G</option>
+
+            <option value="1H">參加者 1H</option>
+            <option value="2H">參加者 2H</option>
+            <option value="3H">參加者 3H</option>
+            <option value="4H">參加者 4H</option>
+            <option value="5H">參加者 5H</option>
+            <option value="6H">參加者 6H</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="login-phone"><i class="fa-solid fa-phone"></i> 電話號碼</label>
+          <input type="tel" id="login-phone" placeholder="請輸入驗證電話 (例: 8529123451)" required>
+        </div>
+
+        <button type="submit" id="login-btn" class="btn btn-primary">
+          <span class="btn-text"><i class="fa-solid fa-right-to-bracket"></i> 驗證身份並登入</span>
+          <div class="progress-bar-inner" id="login-progress"></div>
+        </button>
+      </form>
     </div>
-
-    <form id="login-form">
-      <div class="form-group">
-        <label for="login-participant-id"><i class="fa-solid fa-user-tag"></i> 參加者編號</label>
-        <select id="login-participant-id" required>
-          <option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>
-          <!-- Hardcoded 1A - 6H -->
-          <option value="1A">參加者 1A</option>
-          <option value="2A">參加者 2A</option>
-          <option value="3A">參加者 3A</option>
-          <option value="4A">參加者 4A</option>
-          <option value="5A">參加者 5A</option>
-          <option value="6A">參加者 6A</option>
-
-          <option value="1B">參加者 1B</option>
-          <option value="2B">參加者 2B</option>
-          <option value="3B">參加者 3B</option>
-          <option value="4B">參加者 4B</option>
-          <option value="5B">參加者 5B</option>
-          <option value="6B">參加者 6B</option>
-
-          <option value="1C">參加者 1C</option>
-          <option value="2C">參加者 2C</option>
-          <option value="3C">參加者 3C</option>
-          <option value="4C">參加者 4C</option>
-          <option value="5C">參加者 5C</option>
-          <option value="6C">參加者 6C</option>
-
-          <option value="1D">參加者 1D</option>
-          <option value="2D">參加者 2D</option>
-          <option value="3D">參加者 3D</option>
-          <option value="4D">參加者 4D</option>
-          <option value="5D">參加者 5D</option>
-          <option value="6D">參加者 6D</option>
-
-          <option value="1E">參加者 1E</option>
-          <option value="2E">參加者 2E</option>
-          <option value="3E">參加者 3E</option>
-          <option value="4E">參加者 4E</option>
-          <option value="5E">參加者 5E</option>
-          <option value="6E">參加者 6E</option>
-
-          <option value="1F">參加者 1F</option>
-          <option value="2F">參加者 2F</option>
-          <option value="3F">參加er 3F</option>
-          <option value="4F">參加者 4F</option>
-          <option value="5F">參加者 5F</option>
-          <option value="6F">參加者 6F</option>
-
-          <option value="1G">參加者 1G</option>
-          <option value="2G">參加者 2G</option>
-          <option value="3G">參加者 3G</option>
-          <option value="4G">參加者 4G</option>
-          <option value="5G">參加者 5G</option>
-          <option value="6G">參加者 6G</option>
-
-          <option value="1H">參加者 1H</option>
-          <option value="2H">參加者 2H</option>
-          <option value="3H">參加者 3H</option>
-          <option value="4H">參加者 4H</option>
-          <option value="5H">參加者 5H</option>
-          <option value="6H">參加者 6H</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label for="login-phone"><i class="fa-solid fa-phone"></i> 電話號碼</label>
-        <input type="tel" id="login-phone" placeholder="例如：+8529123451 或 9123451" required>
-      </div>
-
-      <!-- Apps Script Web App URL Configuration -->
-      <div class="form-group config-group">
-        <label for="api-url-input"><i class="fa-solid fa-link"></i> API Endpoint (Google Apps Script)</label>
-        <input type="url" id="api-url-input" placeholder="https://script.google.com/macros/s/.../exec" required>
-        <span class="hint">請輸入部署後的 Apps Script Web App 網址</span>
-      </div>
-
-      <button type="submit" id="login-btn" class="btn btn-primary">
-        <span class="btn-text"><i class="fa-solid fa-right-to-bracket"></i> 驗證登入</span>
-        <div class="btn-progress" id="login-progress"></div>
-      </button>
-    </form>
   </section>
 
-  <!-- 2. MAIN APP DASHBOARD (Hidden before login) -->
-  <main id="app-dashboard" class="dashboard-container hidden">
-    <!-- Header Navbar -->
-    <header class="app-header card">
-      <div class="user-badge">
-        <span class="badge-avatar">👤</span>
-        <div>
-          <span class="user-title">登入身分</span>
-          <strong id="user-display-id" class="user-id-text">--</strong>
-        </div>
+  <!-- 2. MAIN DASHBOARD SECTION -->
+  <div id="dashboard-section" class="dashboard-wrapper hidden">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-title">
+        <h1>💌 匿名留言板</h1>
+        <span class="user-badge" id="current-user-badge">參加者: --</span>
       </div>
-      <div class="header-actions">
-        <button id="logout-btn" class="btn btn-secondary btn-sm">
-          <i class="fa-solid fa-arrow-right-from-bracket"></i> 登出
-        </button>
-      </div>
+      <button id="logout-btn" class="btn btn-secondary btn-sm"><i class="fa-solid fa-right-from-bracket"></i> 登出</button>
     </header>
 
     <!-- Navigation Tabs -->
@@ -132,93 +117,83 @@
         ✏️ 發送留言
       </button>
       <button class="tab-btn" data-tab="inbox-tab">
-        📥 收件箱 <span id="inbox-count-badge" class="badge">0</span>
+        📥 收件箱 <span class="badge hidden" id="inbox-unread-count">0</span>
       </button>
       <button class="tab-btn" data-tab="sent-tab">
         📤 送出的留言
       </button>
     </nav>
 
-    <!-- TAB 1: SEND MESSAGE -->
-    <section id="send-tab" class="tab-content card active">
-      <h3>✏️ 發送匿名留言</h3>
-      <p class="tab-desc">傳送溫暖的關心或祝福給其他參加者，發件者身份將被完全保密。</p>
+    <!-- Tab Content Container -->
+    <main class="tab-content-container">
+      
+      <!-- TAB 1: Send Message -->
+      <section id="send-tab" class="tab-pane active">
+        <div class="card">
+          <h3>✏️ 撰寫匿名留言</h3>
+          <p class="subtitle">留言會以完全匿名的形式傳送給對方。</p>
 
-      <form id="send-msg-form">
-        <div class="form-group">
-          <label for="receiver-select"><i class="fa-solid fa-paper-plane"></i> 接收對象</label>
-          <select id="receiver-select" required>
-            <option value="" disabled selected>請選擇接收對象...</option>
-            <!-- Dynamically generated without self -->
-          </select>
+          <form id="send-msg-form">
+            <div class="form-group">
+              <label for="receiver-select"><i class="fa-solid fa-paper-plane"></i> 接收對象：</label>
+              <select id="receiver-select" required>
+                <!-- Dynamic choices populated via JS (excluding self) -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="message-content"><i class="fa-solid fa-pen-nib"></i> 留言內容：</label>
+              <textarea id="message-content" maxlength="300" placeholder="寫下想對他說的話...（請善意交流，嚴禁粗俗言語）" required></textarea>
+              
+              <div class="textarea-footer">
+                <span id="sensitive-warning" class="warning-text hidden"><i class="fa-solid fa-triangle-exclamation"></i> 偵測到敏感/不當字詞，請修正！</span>
+                <span class="char-counter"><span id="char-count">0</span> / 300 字</span>
+              </div>
+            </div>
+
+            <button type="submit" id="send-btn" class="btn btn-accent">
+              <span class="btn-text"><i class="fa-solid fa-paper-plane"></i> 傳送留言 🚀</span>
+              <div class="progress-bar-inner" id="send-progress"></div>
+            </button>
+          </form>
         </div>
+      </section>
 
-        <div class="form-group">
-          <label for="message-input"><i class="fa-solid fa-message"></i> 留言內容</label>
-          
-          <!-- Emoji Quick Bar -->
-          <div class="emoji-bar" id="emoji-bar">
-            <span class="emoji-picker-title">快捷 Emoji：</span>
-            <button type="button" class="emoji-btn">❤️</button>
-            <button type="button" class="emoji-btn">✨</button>
-            <button type="button" class="emoji-btn">👍</button>
-            <button type="button" class="emoji-btn">🎉</button>
-            <button type="button" class="emoji-btn">🔥</button>
-            <button type="button" class="emoji-btn">😊</button>
-            <button type="button" class="emoji-btn">💪</button>
-            <button type="button" class="emoji-btn">🌟</button>
-            <button type="button" class="emoji-btn">☕</button>
-            <button type="button" class="emoji-btn">🎁</button>
+      <!-- TAB 2: Inbox -->
+      <section id="inbox-tab" class="tab-pane">
+        <div class="card">
+          <div class="card-header-flex">
+            <div>
+              <h3>📥 我的收件箱</h3>
+              <p class="subtitle">這裡只會顯示留言內容與接收時間，完美保護發件者隱私 ✨</p>
+            </div>
+            <button id="refresh-inbox-btn" class="btn btn-outline"><i class="fa-solid fa-rotate"></i> 重整</button>
           </div>
 
-          <textarea id="message-input" rows="5" maxlength="300" placeholder="寫下你的留言...（系統會即時過濾不當用語）" required></textarea>
-          
-          <div class="meta-row">
-            <span id="sensitivity-warning" class="warning-text hidden">
-              <i class="fa-solid fa-circle-exclamation"></i> 偵測到敏感或不當用語！
-            </span>
-            <span class="char-counter"><span id="char-remaining">300</span> / 300 字</span>
+          <div id="inbox-list" class="message-list">
+            <!-- Messages rendered dynamically -->
           </div>
         </div>
+      </section>
 
-        <button type="submit" id="send-msg-btn" class="btn btn-primary btn-block">
-          <span class="btn-text"><i class="fa-solid fa-paper-plane"></i> 安全送出留言</span>
-          <div class="btn-progress" id="send-progress"></div>
-        </button>
-      </form>
-    </section>
+      <!-- TAB 3: Sent Messages -->
+      <section id="sent-tab" class="tab-pane">
+        <div class="card">
+          <div class="card-header-flex">
+            <div>
+              <h3>📤 已發送的留言</h3>
+              <p class="subtitle">你發送過的所有關心與訊息紀錄（結合 Local Storage 本地備份）</p>
+            </div>
+          </div>
 
-    <!-- TAB 2: INBOX -->
-    <section id="inbox-tab" class="tab-content card">
-      <div class="section-title-bar">
-        <h3>📥 收件箱 (Inbox)</h3>
-        <button id="refresh-inbox-btn" class="btn btn-secondary btn-sm">
-          <i class="fa-solid fa-rotate-right"></i> 重整
-        </button>
-      </div>
-      <p class="tab-desc">這是傳送給你的匿名留言，發件者身份已進行保護與隱藏。</p>
+          <div id="sent-list" class="message-list">
+            <!-- Sent messages rendered dynamically -->
+          </div>
+        </div>
+      </section>
 
-      <div id="inbox-list" class="message-list">
-        <!-- Messages rendered dynamically -->
-      </div>
-    </section>
-
-    <!-- TAB 3: SENT MESSAGES -->
-    <section id="sent-tab" class="tab-content card">
-      <div class="section-title-bar">
-        <h3>📤 送出的留言 (Sent Messages)</h3>
-        <span class="sync-badge"><i class="fa-solid fa-cloud-check"></i> 本地與後端雙重同步</span>
-      </div>
-      <p class="tab-desc">紀錄你曾經發送過的匿名留言與對象。</p>
-
-      <div id="sent-list" class="message-list">
-        <!-- Sent Messages rendered dynamically from LocalStorage/Sync -->
-      </div>
-    </section>
-  </main>
-
-  <!-- Toast Notification System -->
-  <div id="toast-container" class="toast-container"></div>
+    </main>
+  </div>
 
   <script src="script.js"></script>
 </body>
