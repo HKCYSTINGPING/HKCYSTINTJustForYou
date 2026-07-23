@@ -3,7 +3,7 @@
 // ==========================================
 const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3gYKAVVlbav-LijuFBYRtlG2VUO_q4LTMCNcrIt79mer-yhQ/exec";
 
-// Sensitivty Filter (Local Mirror of Apps Script)
+// Sensitive Bad Words List
 const LOCAL_BAD_WORDS = [
   // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
@@ -64,13 +64,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function setupEventListeners() {
-  // Login submit
   loginForm.addEventListener("submit", handleLogin);
-
-  // Logout
   logoutBtn.addEventListener("click", handleLogout);
 
-  // Dynamic Tabs switching
   tabBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       tabBtns.forEach(b => b.classList.remove("active"));
@@ -80,13 +76,8 @@ function setupEventListeners() {
     });
   });
 
-  // Sensitive filter & char counter
   messageContent.addEventListener("input", handleTextareaInput);
-
-  // Send message submit
   sendMsgForm.addEventListener("submit", handleSendMessage);
-
-  // Refresh inbox button
   refreshInboxBtn.addEventListener("click", () => fetchInboxMessages(true));
 }
 
@@ -114,12 +105,14 @@ async function handleLogin(e) {
     return;
   }
 
-  // Trigger loading animation
+  // 啟動載入動畫
   await animateProgress(loginProgress, loginBtn, "驗證中...");
 
   try {
     const url = `${API_URL}?participant_id=${encodeURIComponent(pId)}&phone_number=${encodeURIComponent(phone)}`;
-    const response = await fetch(url);
+    
+    // 加上 redirect: "follow" 處理 GAS 重定向問題
+    const response = await fetch(url, { method: "GET", redirect: "follow" });
     const data = await response.json();
 
     if (data.status === "success") {
@@ -132,11 +125,11 @@ async function handleLogin(e) {
       showToast("登入成功！歡迎回來 🎉", "success");
       showDashboard();
     } else {
-      showToast(data.message || "身份驗證失敗，請檢查電話號碼", "error");
+      showToast(data.message || "身份驗證失敗：電話號碼或 ID 不正確", "error");
     }
   } catch (err) {
-    console.error(err);
-    showToast("連線錯誤，請重試！", "error");
+    console.error("Login Error:", err);
+    showToast("網絡連線或驗證錯誤，請重新再試！", "error");
   } finally {
     resetButtonProgress(loginProgress, loginBtn, '<i class="fa-solid fa-right-to-bracket"></i> 驗證身份並登入');
   }
@@ -146,9 +139,10 @@ function handleLogout() {
   localStorage.removeItem("app_participant_id");
   localStorage.removeItem("app_phone_number");
   currentUser = { participantId: null, phoneNumber: null };
+  
   dashboardSection.classList.add("hidden");
   loginSection.classList.remove("hidden");
-  showToast("已成功登入系統", "info");
+  showToast("已成功登出系統", "info");
 }
 
 function showDashboard() {
@@ -156,15 +150,11 @@ function showDashboard() {
   dashboardSection.classList.remove("hidden");
   currentUserBadge.textContent = `參加者: ${currentUser.participantId}`;
 
-  // Populate dynamic targets selection (excluding self)
   populateReceiverOptions();
-
-  // Load Inbox and Sent List
   fetchInboxMessages();
   renderSentMessages();
 }
 
-// Populate Receiver select box (1A - 6H except current user)
 function populateReceiverOptions() {
   receiverSelect.innerHTML = `<option value="" disabled selected>請選擇接收留言的對象...</option>`;
   const options = loginParticipantSelect.querySelectorAll("option");
@@ -235,7 +225,8 @@ async function handleSendMessage(e) {
   try {
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" }, // Avoid CORS preflight issue with GAS
+      redirect: "follow",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
     });
 
@@ -244,7 +235,6 @@ async function handleSendMessage(e) {
     if (data.status === "success") {
       showToast("留言已成功送出！🚀", "success");
       
-      // Save to LocalStorage for dual backup
       saveSentMessageLocal({
         message_id: data.message_id || `MSG-${Date.now()}`,
         receiver_id: receiverId,
@@ -252,19 +242,17 @@ async function handleSendMessage(e) {
         created_at: new Date().toLocaleString()
       });
 
-      // Clear input form
       messageContent.value = "";
       charCount.textContent = "0";
       receiverSelect.selectedIndex = 0;
       
-      // Refresh Sent List tab
       renderSentMessages();
     } else {
       showToast(data.message || "發送失敗！", "error");
     }
   } catch (err) {
-    console.error(err);
-    showToast("伺服器連線失敗，請檢查網路或重試！", "error");
+    console.error("Send Message Error:", err);
+    showToast("伺服器連線失敗，請稍後重試！", "error");
   } finally {
     resetButtonProgress(sendProgress, sendBtn, '<i class="fa-solid fa-paper-plane"></i> 傳送留言 🚀');
   }
@@ -278,7 +266,7 @@ async function fetchInboxMessages(manualRefresh = false) {
 
   try {
     const url = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participantId)}&phone_number=${encodeURIComponent(currentUser.phoneNumber)}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { method: "GET", redirect: "follow" });
     const data = await response.json();
 
     if (data.status === "success") {
@@ -286,7 +274,7 @@ async function fetchInboxMessages(manualRefresh = false) {
       if (manualRefresh) showToast("收件箱已是最新狀態！", "success");
     }
   } catch (err) {
-    console.error(err);
+    console.error("Fetch Inbox Error:", err);
     showToast("讀取收件箱失敗", "error");
   }
 }
@@ -325,7 +313,6 @@ function renderInboxMessages(messages) {
   }
 }
 
-// Local Storage Backup Operations for Sent Messages
 function saveSentMessageLocal(msgObj) {
   const key = `sent_msgs_${currentUser.participantId}`;
   const existing = JSON.parse(localStorage.getItem(key) || "[]");
@@ -369,7 +356,7 @@ function animateProgress(progressBarEl, buttonEl, loadingText) {
     if (btnText) btnText.innerText = loadingText;
 
     const interval = setInterval(() => {
-      width += 15;
+      width += 20;
       progressBarEl.style.width = `${width}%`;
       if (width >= 100) {
         clearInterval(interval);
