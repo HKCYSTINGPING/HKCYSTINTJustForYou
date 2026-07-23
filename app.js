@@ -124,11 +124,6 @@ function resetProgressUI(button) {
   setGlobalLoading(false);
 }
 
-/**
- * Runs an async task with progress synced to the actual request.
- * Progress eases to 90% while waiting, hits 100% when done,
- * runs onComplete immediately at 100%, then cleans up.
- */
 async function runWithProgress(button, taskFn, onComplete, loadingText = "⏳ 載入中...") {
   loadingOverlayText.textContent = loadingText;
   if (button) {
@@ -292,6 +287,8 @@ function switchTab(tabName) {
 
   if (tabName === "inbox") {
     markAllInboxAsRead();
+  } else if (tabName === "sent") {
+    renderSentMessages();
   }
 }
 
@@ -447,7 +444,7 @@ async function handleLogin(e) {
 }
 
 /* ==========================================
-   Actions: Refresh Inbox
+   Actions: Refresh Inbox & Sent
    ========================================== */
 async function syncMessagesFromServer(button, loadingText) {
   await runWithProgress(
