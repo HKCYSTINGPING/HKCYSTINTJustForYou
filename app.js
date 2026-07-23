@@ -1,11 +1,7 @@
-// ====================================================
-// CONFIGURATION & GLOBAL STATE
-// ====================================================
-// 請替換為您發布的 Google Apps Script Web App URL
-const API_URL = "https://script.google.com/macros/s/AKfycbzpzS9O-G8-X4fV-83M9_EXAMPLE/exec"; 
-
-// 敏感字詞庫 (與後端對齊，實現即時前端雙重防護)
-const BAD_WORDS_LIST = [
+// ==========================================
+// SENSITIVITY FILTER & BAD WORDS LIST
+// ==========================================
+const SENSITIVE_WORDS = [
   // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
   "含能", "臭化西", "臭西", "傻西", "凸你", "屌.你", "屌 你", "屌你", "吊你", "小你",
@@ -21,203 +17,235 @@ const BAD_WORDS_LIST = [
   "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
 ];
 
+// All 48 Participants Hardcoded Range (1A to 6H)
+const ALL_PARTICIPANTS = [];
+const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+GROUPS.forEach(group => {
+  for (let i = 1; i <= 6; i++) {
+    ALL_PARTICIPANTS.push(`${i}${group}`);
+  }
+});
+
+// App State
 let currentUser = {
   participantId: null,
   phoneNumber: null
 };
+let apiUrl = localStorage.getItem("app_script_url") || "";
 
-// ====================================================
+// ==========================================
+// DOM ELEMENTS
+// ==========================================
+const loginSection = document.getElementById("login-section");
+const appDashboard = document.getElementById("app-dashboard");
+const loginForm = document.getElementById("login-form");
+const loginParticipantSelect = document.getElementById("login-participant-id");
+const loginPhoneInput = document.getElementById("login-phone");
+const apiUrlInput = document.getElementById("api-url-input");
+const loginBtn = document.getElementById("login-btn");
+const loginProgress = document.getElementById("login-progress");
+
+const userDisplayId = document.getElementById("user-display-id");
+const logoutBtn = document.getElementById("logout-btn");
+const tabBtns = document.querySelectorAll(".tab-btn");
+const tabContents = document.querySelectorAll(".tab-content");
+
+const sendMsgForm = document.getElementById("send-msg-form");
+const receiverSelect = document.getElementById("receiver-select");
+const messageInput = document.getElementById("message-input");
+const charRemaining = document.getElementById("char-remaining");
+const sensitivityWarning = document.getElementById("sensitivity-warning");
+const sendMsgBtn = document.getElementById("send-msg-btn");
+const sendProgress = document.getElementById("send-progress");
+
+const inboxList = document.getElementById("inbox-list");
+const inboxCountBadge = document.getElementById("inbox-count-badge");
+const refreshInboxBtn = document.getElementById("refresh-inbox-btn");
+const sentList = document.getElementById("sent-list");
+const toastContainer = document.getElementById("toast-container");
+
+// ==========================================
 // INITIALIZATION
-// ====================================================
+// ==========================================
 document.addEventListener("DOMContentLoaded", () => {
-  // 檢查是否有 Session 登入紀錄
-  const savedUser = localStorage.getItem("anonymous_app_user");
-  if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    showDashboard();
+  if (apiUrl) {
+    apiUrlInput.value = apiUrl;
   }
 
-  // 綁定輸入即時過濾檢測與計數器
-  const textarea = document.getElementById("messageContent");
-  textarea.addEventListener("input", handleContentInput);
+  // Restore Local User Session
+  const savedUser = localStorage.getItem("current_user");
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    initializeDashboard();
+  }
+
+  setupEventListeners();
 });
 
-// ====================================================
-// 1. AUTHENTICATION (身分驗證)
-// ====================================================
+function setupEventListeners() {
+  // Login Submit
+  loginForm.addEventListener("submit", handleLogin);
+
+  // Logout Click
+  logoutBtn.addEventListener("click", handleLogout);
+
+  // Tab Navigation Switch
+  tabBtns.forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  // Message Character Count & Sensitivity Filter
+  messageInput.addEventListener("input", handleMessageInput);
+
+  // Emoji Picker Clicks
+  document.querySelectorAll(".emoji-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      messageInput.value += btn.textContent;
+      handleMessageInput();
+    });
+  });
+
+  // Send Message Submit
+  sendMsgForm.addEventListener("submit", handleSendMessage);
+
+  // Refresh Inbox Click
+  refreshInboxBtn.addEventListener("click", fetchInboxMessages);
+}
+
+// ==========================================
+// AUTHENTICATION (LOGIN / LOGOUT)
+// ==========================================
 async function handleLogin(e) {
   e.preventDefault();
+  const participantId = loginParticipantSelect.value;
+  const phone = loginPhoneInput.value.trim();
+  const url = apiUrlInput.value.trim();
 
-  const participantId = document.getElementById("loginParticipantId").value;
-  const phoneNumber = document.getElementById("loginPhoneNumber").value.trim();
-
-  if (!participantId || !phoneNumber) {
-    showToast("請填寫所有欄位！", "warning");
+  if (!participantId || !phone || !url) {
+    showToast("請填寫所有欄位與 API Endpoint", "error");
     return;
   }
 
-  const btnLogin = document.getElementById("btnLogin");
-  const progressBar = document.getElementById("loginProgress");
+  // Save API URL to Local Storage
+  apiUrl = url;
+  localStorage.setItem("app_script_url", apiUrl);
 
-  // 開始動態進度條動畫
-  await animateProgress(progressBar, btnLogin, "驗證中...", 0, 85, 300);
+  // Animate Button Progress Tracker
+  await animateProgressBar(loginBtn, loginProgress, 100, 1000);
 
   try {
-    // 發送 GET 請求驗證身分
-    const url = `${API_URL}?participant_id=${encodeURIComponent(participantId)}&phone_number=${encodeURIComponent(phoneNumber)}`;
-    const response = await fetch(url);
+    // API GET Call for Login Verification
+    const fetchUrl = `${apiUrl}?participant_id=${encodeURIComponent(participantId)}&phone_number=${encodeURIComponent(phone)}`;
+    const response = await fetch(fetchUrl);
     const data = await response.json();
 
     if (data.status === "success") {
-      await animateProgress(progressBar, btnLogin, "驗證成功！", 85, 100, 100);
-
       currentUser.participantId = participantId;
-      currentUser.phoneNumber = phoneNumber;
+      currentUser.phoneNumber = phone;
+      localStorage.setItem("current_user", JSON.stringify(currentUser));
 
-      // 保存至 LocalStorage
-      localStorage.setItem("anonymous_app_user", JSON.stringify(currentUser));
-
-      showToast(`歡迎回來，參加者 ${participantId}！`, "success");
-      
-      setTimeout(() => {
-        resetButtonProgress(progressBar, btnLogin, "驗證並進入系統 🚀");
-        showDashboard();
-      }, 500);
-
+      showToast("雙重驗證成功！歡迎進入系統 🔒", "success");
+      initializeDashboard();
     } else {
-      resetButtonProgress(progressBar, btnLogin, "驗證並進入系統 🚀");
-      showToast(data.message || "身分驗證失敗，請檢查電話號碼", "error");
+      showToast(data.message || "驗證失敗，請檢查電話號碼或 ID", "error");
     }
   } catch (err) {
-    resetButtonProgress(progressBar, btnLogin, "驗證並進入系統 🚀");
-    // 若因 CORS 或離線導致，模擬離線或提示錯誤
-    showToast("無法連接至伺服器，請稍後再試！", "error");
     console.error("Login Error:", err);
+    showToast("連線至後端失敗，請確認 API URL 是否正確", "error");
+  } finally {
+    resetProgressBar(loginBtn, loginProgress);
   }
 }
 
 function handleLogout() {
-  localStorage.removeItem("anonymous_app_user");
+  localStorage.removeItem("current_user");
   currentUser = { participantId: null, phoneNumber: null };
-  document.getElementById("dashboardView").classList.add("hidden");
-  document.getElementById("loginView").classList.add("active");
-  document.getElementById("loginForm").reset();
-  showToast("您已成功登出 👋", "success");
+  loginSection.classList.remove("hidden");
+  appDashboard.classList.add("hidden");
+  showToast("已成功登出系統", "success");
 }
 
-// ====================================================
-// 2. DASHBOARD & TABS NAV
-// ====================================================
-function showDashboard() {
-  document.getElementById("loginView").classList.remove("active");
-  document.getElementById("dashboardView").classList.remove("hidden");
-  document.getElementById("dashboardView").classList.add("active");
+function initializeDashboard() {
+  loginSection.classList.add("hidden");
+  appDashboard.classList.remove("hidden");
+  userDisplayId.textContent = `參加者 ${currentUser.participantId}`;
 
-  document.getElementById("currentUserDisplay").innerText = `參加者 ${currentUser.participantId}`;
-
-  // 動態渲染發送對象選單 (自動排除自己)
-  populateReceiverDropdown();
-
-  // 預設載入收件箱與送出紀錄
+  populateReceiverOptions();
   fetchInboxMessages();
-  renderSentMessages();
+  loadSentMessages();
 }
 
-function switchTab(tabId) {
-  document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.tab === tabId);
-  });
-  document.querySelectorAll(".tab-content").forEach(content => {
-    content.classList.toggle("active", content.id === tabId);
-  });
-
-  if (tabId === "tabInbox") {
-    fetchInboxMessages();
-  } else if (tabId === "tabSent") {
-    renderSentMessages();
-  }
-}
-
-// 動態排重選單，產生 1A-6H (47個選項，排除自己)
-function populateReceiverDropdown() {
-  const receiverSelect = document.getElementById("receiverId");
+// Populate Receiver Options Exclude Self
+function populateReceiverOptions() {
   receiverSelect.innerHTML = `<option value="" disabled selected>請選擇接收對象...</option>`;
-
-  const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-  
-  groups.forEach(group => {
-    for (let i = 1; i <= 6; i++) {
-      const id = `${i}${group}`;
-      if (id !== currentUser.participantId) {
-        const option = document.createElement("option");
-        option.value = id;
-        option.textContent = `參加者 ${id}`;
-        receiverSelect.appendChild(option);
-      }
+  ALL_PARTICIPANTS.forEach(id => {
+    if (id !== currentUser.participantId) {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = `參加者 ${id}`;
+      receiverSelect.appendChild(option);
     }
   });
 }
 
-// ====================================================
-// 3. SENSITIVITY FILTER & EMOJI
-// ====================================================
-function handleContentInput() {
-  const textarea = document.getElementById("messageContent");
-  const counter = document.getElementById("charCounter");
-  const warning = document.getElementById("filterWarning");
-  const val = textarea.value;
+// ==========================================
+// TAB NAVIGATION
+// ==========================================
+function switchTab(targetTabId) {
+  tabBtns.forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === targetTabId);
+  });
+  tabContents.forEach(content => {
+    content.classList.toggle("active", content.id === targetTabId);
+  });
+}
 
-  // 1. 字數倒數
-  const remaining = 300 - val.length;
-  counter.innerText = `剩餘 ${remaining} 字`;
+// ==========================================
+// REAL-TIME SENSITIVITY FILTER & CHAR COUNT
+// ==========================================
+function handleMessageInput() {
+  const text = messageInput.value;
+  const remaining = 300 - text.length;
+  charRemaining.textContent = remaining;
 
-  // 2. 敏感字偵測
-  const hasBadWord = checkSensitivity(val);
+  const hasBadWord = checkBadWords(text);
+
   if (hasBadWord) {
-    textarea.classList.add("is-invalid");
-    warning.classList.remove("hidden");
+    messageInput.classList.add("input-error");
+    sensitivityWarning.classList.remove("hidden");
   } else {
-    textarea.classList.remove("is-invalid");
-    warning.classList.add("hidden");
+    messageInput.classList.remove("input-error");
+    sensitivityWarning.classList.add("hidden");
   }
 }
 
-function checkSensitivity(text) {
+function checkBadWords(text) {
   if (!text) return false;
-  const lower = text.toLowerCase();
-  return BAD_WORDS_LIST.some(word => lower.includes(word.toLowerCase()));
+  const lowerText = text.toLowerCase();
+  return SENSITIVE_WORDS.some(word => lowerText.includes(word.toLowerCase()));
 }
 
-function insertEmoji(emoji) {
-  const textarea = document.getElementById("messageContent");
-  textarea.value += emoji;
-  textarea.focus();
-  handleContentInput();
-}
-
-// ====================================================
-// 4. SEND MESSAGE (POST)
-// ====================================================
+// ==========================================
+// SEND MESSAGE
+// ==========================================
 async function handleSendMessage(e) {
   e.preventDefault();
 
-  const receiverId = document.getElementById("receiverId").value;
-  const content = document.getElementById("messageContent").value.trim();
+  const receiverId = receiverSelect.value;
+  const content = messageInput.value.trim();
 
-  if (!receiverId) {
-    showToast("請選擇訊息接收對象！", "warning");
+  if (!receiverId || !content) {
+    showToast("請選擇接收對象並輸入留言", "error");
     return;
   }
 
-  if (checkSensitivity(content)) {
-    showToast("訊息包含不當字詞，請修訂後再發送！", "error");
+  if (checkBadWords(content)) {
+    showToast("留言包含不當用語，請修正後再試！", "error");
     return;
   }
 
-  const btnSend = document.getElementById("btnSend");
-  const progressBar = document.getElementById("sendProgress");
-
-  await animateProgress(progressBar, btnSend, "傳送中...", 0, 80, 200);
+  // Animate Progress Bar inside button
+  await animateProgressBar(sendMsgBtn, sendProgress, 100, 1200);
 
   const payload = {
     sender_id: currentUser.participantId,
@@ -227,7 +255,8 @@ async function handleSendMessage(e) {
   };
 
   try {
-    const response = await fetch(API_URL, {
+    // API POST Call using no-cors or JSON String Content
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
@@ -236,191 +265,168 @@ async function handleSendMessage(e) {
     const data = await response.json();
 
     if (data.status === "success") {
-      await animateProgress(progressBar, btnSend, "發送成功！ 🎉", 80, 100, 100);
+      showToast("留言已成功送出！✨", "success");
 
-      // 儲存至本地端備份 (LocalStorage)
-      saveSentMessageToLocal({
+      // Local Backup for Sent Messages
+      saveSentMessageLocally({
         message_id: data.message_id || `MSG-${Date.now()}`,
         receiver_id: receiverId,
         content: content,
         created_at: new Date().toLocaleString()
       });
 
-      showToast("留言已成功送出！", "success");
-
-      // 清空表單
-      document.getElementById("messageContent").value = "";
-      document.getElementById("receiverId").selectedIndex = 0;
-      document.getElementById("charCounter").innerText = "剩餘 300 字";
-
-      setTimeout(() => {
-        resetButtonProgress(progressBar, btnSend, "匿名傳送訊息 💌");
-      }, 500);
-
+      // Reset Form
+      sendMsgForm.reset();
+      handleMessageInput();
+      loadSentMessages();
     } else {
-      resetButtonProgress(progressBar, btnSend, "匿名傳送訊息 💌");
-      showToast(data.message || "發送失敗，請重試", "error");
+      showToast(data.message || "發送失敗", "error");
     }
-
   } catch (err) {
-    resetButtonProgress(progressBar, btnSend, "匿名傳送訊息 💌");
-    // 如果網絡請求失敗，仍進行 Local Storage 備份提示
-    console.error("Send Error:", err);
-    showToast("網路異常，請確認後端部署連結！", "error");
+    console.error("Send Message Error:", err);
+    showToast("網路錯誤或後端回應異常，留言已備份至本地端", "error");
+
+    // Local Fallback Backup
+    saveSentMessageLocally({
+      message_id: `MSG-LOCAL-${Date.now()}`,
+      receiver_id: receiverId,
+      content: content,
+      created_at: new Date().toLocaleString()
+    });
+    sendMsgForm.reset();
+    handleMessageInput();
+    loadSentMessages();
+  } finally {
+    resetProgressBar(sendMsgBtn, sendProgress);
   }
 }
 
-// 本地端備份 sent messages
-function saveSentMessageToLocal(msgObj) {
-  const key = `sent_msgs_${currentUser.participantId}`;
-  const localData = JSON.parse(localStorage.getItem(key) || "[]");
-  localData.unshift(msgObj);
-  localStorage.setItem(key, JSON.stringify(localData));
-}
-
-// ====================================================
-// 5. INBOX & SENT RENDERING
-// ====================================================
-async function fetchInboxMessages(isManual = false) {
-  const inboxList = document.getElementById("inboxList");
-  if (isManual) showToast("正在重整收件箱...", "info");
+// ==========================================
+// INBOX & SENT MESSAGES RENDERING
+// ==========================================
+async function fetchInboxMessages() {
+  inboxList.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> 載入最新留言中...</div>`;
 
   try {
-    const url = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participantId)}&phone_number=${encodeURIComponent(currentUser.phoneNumber)}`;
-    const response = await fetch(url);
+    const fetchUrl = `${apiUrl}?participant_id=${encodeURIComponent(currentUser.participantId)}&phone_number=${encodeURIComponent(currentUser.phoneNumber)}`;
+    const response = await fetch(fetchUrl);
     const data = await response.json();
 
     if (data.status === "success") {
-      renderInboxMessages(data.messages);
-      if (isManual) showToast("收件箱已更新！", "success");
+      renderInbox(data.messages || []);
     } else {
-      inboxList.innerHTML = `<div class="empty-state">${data.message}</div>`;
+      inboxList.innerHTML = `<div class="empty-state">無法載入留言：${data.message}</div>`;
     }
   } catch (err) {
-    inboxList.innerHTML = `<div class="empty-state">無法連線取得最新訊息，請稍後再試。</div>`;
+    console.error("Fetch Inbox Error:", err);
+    inboxList.innerHTML = `<div class="empty-state">網絡連線失敗，請點擊重整再試。</div>`;
   }
 }
 
-function renderInboxMessages(messages) {
-  const inboxList = document.getElementById("inboxList");
-  const badge = document.getElementById("unreadBadge");
+function renderInbox(messages) {
+  inboxCountBadge.textContent = messages.length;
 
-  if (!messages || messages.length === 0) {
-    inboxList.innerHTML = `<div class="empty-state">📪 目前還沒有收到任何匿名留言喔！</div>`;
-    badge.classList.add("hidden");
+  if (messages.length === 0) {
+    inboxList.innerHTML = `<div class="empty-state">📥 目前收件箱內沒有留言。</div>`;
     return;
   }
 
-  let unreadCount = 0;
   inboxList.innerHTML = "";
-
-  messages.forEach(msg => {
+  messages.reverse().forEach(msg => {
     const isNew = !msg.is_read;
-    if (isNew) unreadCount++;
-
-    const card = document.createElement("div");
-    card.className = `msg-card ${isNew ? 'unread' : ''}`;
-    card.innerHTML = `
-      <div class="msg-header">
-        <span class="msg-title">💌 來自匿名的神秘朋友 ${isNew ? '<span class="badge-new">NEW</span>' : ''}</span>
-        <span class="msg-time">${msg.created_at || '剛剛'}</span>
-      </div>
-      <div class="msg-body">${escapeHtml(msg.content)}</div>
-    `;
-    inboxList.appendChild(card);
-  });
-
-  if (unreadCount > 0) {
-    badge.innerText = unreadCount;
-    badge.classList.remove("hidden");
-  } else {
-    badge.classList.add("hidden");
-  }
-}
-
-function renderSentMessages() {
-  const sentList = document.getElementById("sentList");
-  const key = `sent_msgs_${currentUser.participantId}`;
-  const localMessages = JSON.parse(localStorage.getItem(key) || "[]");
-
-  if (localMessages.length === 0) {
-    sentList.innerHTML = `<div class="empty-state">📤 您尚未發送過任何匿名留言。</div>`;
-    return;
-  }
-
-  sentList.innerHTML = "";
-  localMessages.forEach(msg => {
     const card = document.createElement("div");
     card.className = "msg-card";
     card.innerHTML = `
       <div class="msg-header">
-        <span class="msg-title" style="color: var(--secondary);">🎯 發送給：參加者 ${msg.receiver_id}</span>
-        <span class="msg-time">${msg.created_at}</span>
+        <span><i class="fa-solid fa-user-secret"></i> 匿名留言</span>
+        <div>
+          ${isNew ? '<span class="tag-new">NEW</span>' : ''}
+          <span style="margin-left:6px;">${msg.created_at}</span>
+        </div>
       </div>
-      <div class="msg-body">${escapeHtml(msg.content)}</div>
+      <div class="msg-body">${escapeHTML(msg.content)}</div>
+    `;
+    inboxList.appendChild(card);
+  });
+}
+
+function saveSentMessageLocally(sentObj) {
+  const localKey = `sent_msgs_${currentUser.participantId}`;
+  const existing = JSON.parse(localStorage.getItem(localKey) || "[]");
+  existing.unshift(sentObj);
+  localStorage.setItem(localKey, JSON.stringify(existing));
+}
+
+function loadSentMessages() {
+  const localKey = `sent_msgs_${currentUser.participantId}`;
+  const sentMsgs = JSON.parse(localStorage.getItem(localKey) || "[]");
+
+  if (sentMsgs.length === 0) {
+    sentList.innerHTML = `<div class="empty-state">📤 你尚未發送過任何留言。</div>`;
+    return;
+  }
+
+  sentList.innerHTML = "";
+  sentMsgs.forEach(msg => {
+    const card = document.createElement("div");
+    card.className = "msg-card";
+    card.innerHTML = `
+      <div class="msg-header">
+        <span><i class="fa-solid fa-paper-plane"></i> 發送給：<strong>參加者 ${msg.receiver_id}</strong></span>
+        <span>${msg.created_at}</span>
+      </div>
+      <div class="msg-body">${escapeHTML(msg.content)}</div>
     `;
     sentList.appendChild(card);
   });
 }
 
-// ====================================================
-// UTILITIES (Progress Bar & Toast & Helpers)
-// ====================================================
-function animateProgress(progressBar, btnElement, text, startPct, endPct, duration) {
+// ==========================================
+// UX HELPERS (PROGRESS BAR & TOAST)
+// ==========================================
+function animateProgressBar(btn, progressEl, targetPercent, duration) {
   return new Promise(resolve => {
-    let current = startPct;
-    const btnText = btnElement.querySelector(".btn-text");
-    if (btnText) btnText.innerText = `${text} ${current}%`;
+    btn.disabled = true;
+    let start = null;
 
-    const stepTime = duration / (endPct - startPct);
-    const timer = setInterval(() => {
-      current++;
-      progressBar.style.width = `${current}%`;
-      if (btnText) btnText.innerText = `${text} ${current}%`;
+    function step(timestamp) {
+      if (!start) start = timestamp;
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const currentPercent = Math.floor(progress * targetPercent);
+      
+      progressEl.style.width = `${currentPercent}%`;
 
-      if (current >= endPct) {
-        clearInterval(timer);
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      } else {
         resolve();
       }
-    }, stepTime);
+    }
+    requestAnimationFrame(step);
   });
 }
 
-function resetButtonProgress(progressBar, btnElement, originalText) {
-  progressBar.style.width = "0%";
-  const btnText = btnElement.querySelector(".btn-text");
-  if (btnText) btnText.innerText = originalText;
+function resetProgressBar(btn, progressEl) {
+  btn.disabled = false;
+  progressEl.style.width = "0%";
 }
 
 function showToast(message, type = "info") {
-  const container = document.getElementById("toastContainer");
   const toast = document.createElement("div");
-  toast.className = `toast ${type}`;
+  toast.className = `toast toast-${type}`;
+  
+  const icon = type === "error" ? "fa-circle-xmark" : "fa-circle-check";
+  toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${escapeHTML(message)}</span>`;
 
-  let icon = "🔔";
-  if (type === "success") icon = "✅";
-  if (type === "error") icon = "❌";
-  if (type === "warning") icon = "⚠️";
-
-  toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
-  container.appendChild(toast);
+  toastContainer.appendChild(toast);
 
   setTimeout(() => {
-    toast.style.opacity = "0";
-    toast.style.transform = "translateY(10px)";
-    toast.style.transition = "all 0.3s ease";
-    setTimeout(() => toast.remove(), 300);
+    toast.remove();
   }, 3000);
 }
 
-function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, function(m) {
-    return {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;'
-    }[m];
-  });
+function escapeHTML(str) {
+  return str.replace(/[&<>'"]/g, 
+    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+  );
 }
