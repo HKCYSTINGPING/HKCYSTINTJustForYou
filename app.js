@@ -193,10 +193,6 @@ function getReadMessagesKey() {
   return `read_messages_${state.participantId}`;
 }
 
-function getSentMessagesKey() {
-  return `sent_messages_${state.participantId}`;
-}
-
 function getReadMessageIds() {
   try {
     return JSON.parse(localStorage.getItem(getReadMessagesKey())) || [];
@@ -211,18 +207,6 @@ function markMessageAsRead(messageId) {
     ids.push(messageId);
     localStorage.setItem(getReadMessagesKey(), JSON.stringify(ids));
   }
-}
-
-function loadSentFromStorage() {
-  try {
-    return JSON.parse(localStorage.getItem(getSentMessagesKey())) || [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSentToStorage(messages) {
-  localStorage.setItem(getSentMessagesKey(), JSON.stringify(messages));
 }
 
 function saveSession() {
@@ -391,8 +375,6 @@ function renderInbox() {
 }
 
 function renderSentMessages() {
-  state.sentMessages = loadSentFromStorage();
-
   if (state.sentMessages.length === 0) {
     sentList.innerHTML = `
       <div class="empty-state">
@@ -534,17 +516,12 @@ async function handleSendMessage(e) {
             hour12: false
           }).replace(/\//g, "-");
 
-          const sentRecord = {
-            message_id: data.message_id || `LOCAL-${Date.now()}`,
+          state.sentMessages.push({
+            message_id: data.message_id || `MSG-${Date.now()}`,
             receiver_id: receiverId,
             content: content,
             created_at: createdAt
-          };
-
-          const stored = loadSentFromStorage();
-          stored.push(sentRecord);
-          saveSentToStorage(stored);
-          state.sentMessages = stored;
+          });
 
           messageContent.value = "";
           receiverSelect.value = "";
