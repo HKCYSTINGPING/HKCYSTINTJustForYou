@@ -17,18 +17,14 @@ const ALL_PARTICIPANTS = [
 const MAX_CHARS = 300;
 
 const BAD_WORDS_LIST = [
-  // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
   "含能", "臭化西", "臭西", "傻西", "凸你", "屌.你", "屌 你", "屌你", "吊你", "小你",
   "九兩菜", "收皮啦", "收皮", "把撚", "條撚", "賓周", "賓.周", "仆街", "仆.街", "卜街", "POP街",
   "diu 9", "sub 9", "sub9", "chi lan sin", "撚樣", "能樣", "柒頭", "笨七", "鳩登", "膠登",
   "契弟", "ass hole", "asshole", "A S S", "on lun 7 7", "臭爛袋", "挑那星", "陷家剷", "陷家",
   "吊夠", "吊 夠", "戇尻尻", "戇尻", "戇-尻", "戇 尻", "on 99", "ON 九", "on 9", "on.9", "on9",
-  "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch", "fuck", "f u c k", "dllm", "D l l m", "DLLM',
-  "仆街", "onL9", "ass", "shit", "shitting", "C8", 
-  
-  // Single Characters & Special Unicode Matches
-  "撚", "屌", "尻", "鳩", "柒", "仆", "𨳒", "𨳊", "𨳍", "𨳯", 
+  "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch",
+  "撚", "屌", "尻", "鳩", "柒", "仆", "𨳒", "𨳊", "𨳍", "𨳯",
   "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
 ];
 
@@ -60,6 +56,7 @@ const badWordWarning = document.getElementById("bad-word-warning");
 const inboxList = document.getElementById("inbox-list");
 const sentList = document.getElementById("sent-list");
 const refreshInboxBtn = document.getElementById("refresh-inbox-btn");
+const refreshSentBtn = document.getElementById("refresh-sent-btn");
 const inboxBadge = document.getElementById("inbox-badge");
 const toastContainer = document.getElementById("toast-container");
 const loadingOverlay = document.getElementById("loading-overlay");
@@ -207,6 +204,11 @@ function markMessageAsRead(messageId) {
     ids.push(messageId);
     localStorage.setItem(getReadMessagesKey(), JSON.stringify(ids));
   }
+}
+
+function applyMessagesFromApi(data) {
+  state.inboxMessages = data.messages || [];
+  state.sentMessages = data.sent_messages || [];
 }
 
 function saveSession() {
@@ -426,10 +428,11 @@ async function handleLogin(e) {
         if (data.status === "success") {
           state.participantId = participantId;
           state.phoneNumber = phoneNumber;
-          state.inboxMessages = data.messages || [];
+          applyMessagesFromApi(data);
           saveSession();
           showDashboard();
           renderInbox();
+          renderSentMessages();
           showToast(`🎉 歡迎，${formatParticipantLabel(participantId)}！`, "success");
         } else {
           showToast(data.message || "身份驗證失敗", "error");
@@ -446,26 +449,40 @@ async function handleLogin(e) {
 /* ==========================================
    Actions: Refresh Inbox
    ========================================== */
+async function syncMessagesFromServer(button, loadingText) {
+  await runWithProgress(
+    button,
+    () => apiLogin(state.participantId, state.phoneNumber),
+    (data) => {
+      if (data.status === "success") {
+        applyMessagesFromApi(data);
+        renderInbox();
+        renderSentMessages();
+        updateInboxBadge();
+        showToast("✅ 留言已同步！", "success");
+      } else {
+        showToast(data.message || "同步失敗", "error");
+      }
+    },
+    loadingText
+  );
+}
+
 async function handleRefreshInbox() {
   try {
-    await runWithProgress(
-      refreshInboxBtn,
-      () => apiLogin(state.participantId, state.phoneNumber),
-      (data) => {
-        if (data.status === "success") {
-          state.inboxMessages = data.messages || [];
-          renderInbox();
-          updateInboxBadge();
-          showToast("📥 收件箱已更新！", "success");
-        } else {
-          showToast(data.message || "重整失敗", "error");
-        }
-      },
-      "📥 同步收件箱..."
-    );
+    await syncMessagesFromServer(refreshInboxBtn, "📥 同步收件箱...");
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
-    console.error("Refresh error:", err);
+    console.error("Refresh inbox error:", err);
+  }
+}
+
+async function handleRefreshSent() {
+  try {
+    await syncMessagesFromServer(refreshSentBtn, "📤 同步送出的留言...");
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+    console.error("Refresh sent error:", err);
   }
 }
 
@@ -503,29 +520,17 @@ async function handleSendMessage(e) {
         receiverId,
         content
       ),
-      (data) => {
+      async (data) => {
         if (data.status === "success") {
-          const now = new Date();
-          const createdAt = now.toLocaleString("zh-TW", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false
-          }).replace(/\//g, "-");
-
-          state.sentMessages.push({
-            message_id: data.message_id || `MSG-${Date.now()}`,
-            receiver_id: receiverId,
-            content: content,
-            created_at: createdAt
-          });
-
           messageContent.value = "";
           receiverSelect.value = "";
           validateMessageInput();
+
+          const refreshed = await apiLogin(state.participantId, state.phoneNumber);
+          if (refreshed.status === "success") {
+            applyMessagesFromApi(refreshed);
+          }
+
           renderSentMessages();
           switchTab("sent");
           showToast("📨 留言已成功發送！", "success");
@@ -576,9 +581,10 @@ async function tryRestoreSession() {
         if (data.status === "success") {
           state.participantId = participantId;
           state.phoneNumber = phoneNumber;
-          state.inboxMessages = data.messages || [];
+          applyMessagesFromApi(data);
           showDashboard();
           renderInbox();
+          renderSentMessages();
         } else {
           clearSession();
         }
@@ -601,6 +607,7 @@ loginForm.addEventListener("submit", handleLogin);
 logoutBtn.addEventListener("click", handleLogout);
 sendForm.addEventListener("submit", handleSendMessage);
 refreshInboxBtn.addEventListener("click", handleRefreshInbox);
+refreshSentBtn.addEventListener("click", handleRefreshSent);
 
 messageContent.addEventListener("input", validateMessageInput);
 receiverSelect.addEventListener("change", validateMessageInput);
