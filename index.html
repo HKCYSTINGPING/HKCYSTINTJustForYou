@@ -1,28 +1,38 @@
 <!DOCTYPE html>
-<html lang="zh-HK">
+<html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>匿名留言系統</title>
-  <link rel="stylesheet" href="style.css">
+  <title>匿名留言系統 | Anonymous Messaging System</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Google Fonts & Font Awesome for Modern UI -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 
-  <!-- ==========================================================================
-       AUTHENTICATION SCREEN (LOGIN)
-       ========================================================================== -->
-  <div id="auth-screen" class="container">
-    <div class="card">
-      <h1 class="title">參加者登入</h1>
-      <p class="subtitle">請選擇你的參加者編號並輸入電話號碼以驗證身份</p>
+  <!-- Background decorative elements -->
+  <div class="bg-shape shape-1"></div>
+  <div class="bg-shape shape-2"></div>
 
-      <form id="login-form" onsubmit="handleLogin(event)">
-        <!-- 錯誤訊息提示 -->
-        <div id="auth-error" class="error-msg hidden"></div>
+  <div class="app-container">
 
+    <!-- ==================================================== -->
+    <!-- 1. LOGIN SECTION (身分驗證頁面) -->
+    <!-- ==================================================== -->
+    <section id="loginView" class="card view-section active">
+      <div class="card-header text-center">
+        <div class="app-icon">🔒</div>
+        <h2>匿名留言系統</h2>
+        <p class="subtitle">請完成雙重身分驗證以進入系統</p>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="form-group">
-          <label for="login-participant-id">參加者編號：</label>
-          <select id="login-participant-id" required>
+          <label for="loginParticipantId"><i class="fa-solid fa-user-tag"></i> 選擇參加者編號：</label>
+          <select id="loginParticipantId" class="form-control" required>
             <option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>
             <!-- Hardcoded 1A - 6H -->
             <option value="1A">參加者 1A</option>
@@ -84,124 +94,127 @@
         </div>
 
         <div class="form-group">
-          <label for="login-phone">電話號碼 (驗證用)：</label>
-          <input type="tel" id="login-phone" placeholder="請輸入電話號碼" required />
+          <label for="loginPhoneNumber"><i class="fa-solid fa-phone"></i> 電話號碼驗證：</label>
+          <input type="tel" id="loginPhoneNumber" class="form-control" placeholder="例：+8529123451 或 9123451" required>
         </div>
 
-        <button type="submit" id="login-btn" class="btn btn-primary">
-          <span class="btn-text">登入系統</span>
-          <div id="login-btn-progress" class="spinner-wrapper hidden">
-            <span class="spinner"></span>
-            <span class="spinner-text">0%</span>
-          </div>
+        <button type="submit" id="btnLogin" class="btn btn-primary btn-block">
+          <span class="btn-text">驗證並進入系統 🚀</span>
+          <span class="progress-bar-fill" id="loginProgress"></span>
         </button>
       </form>
-    </div>
-  </div>
+    </section>
 
-  <!-- ==========================================================================
-       DASHBOARD SCREEN (MAIN INTERFACE)
-       ========================================================================== -->
-  <div id="dashboard-screen" class="container hidden">
-    <!-- Header Area -->
-    <header class="header">
-      <div class="user-info">
-        <span id="user-display-id" class="badge-id">ID: --</span>
-      </div>
-      <button onclick="handleLogout()" class="btn btn-outline-danger btn-sm">退出登入</button>
-    </header>
+    <!-- ==================================================== -->
+    <!-- 2. MAIN DASHBOARD SECTION (控制台與三大分頁) -->
+    <!-- ==================================================== -->
+    <main id="dashboardView" class="card view-section hidden">
+      <!-- Top Navbar & User Info -->
+      <header class="dashboard-header">
+        <div class="user-badge">
+          <span class="avatar">👤</span>
+          <div>
+            <span class="user-id" id="currentUserDisplay">參加者 --</span>
+            <span class="status-online"><i class="fa-solid fa-circle"></i> 線上已驗證</span>
+          </div>
+        </div>
+        <button class="btn btn-outline-danger btn-sm" onclick="handleLogout()">
+          <i class="fa-solid fa-right-from-bracket"></i> 登出
+        </button>
+      </header>
 
-    <!-- Navigation Tabs -->
-    <nav class="nav-tabs">
-      <button id="tab-btn-send" class="tab-btn active" onclick="switchTab('send')">
-        ✏️ 發送留言
-      </button>
-      <button id="tab-btn-inbox" class="tab-btn" onclick="switchTab('inbox')">
-        📥 收件箱 <span id="inbox-count-badge" class="count-badge hidden">0</span>
-      </button>
-      <button id="tab-btn-sent" class="tab-btn" onclick="switchTab('sent')">
-        📤 送出的留言 <span id="sent-count-badge" class="count-badge hidden">0</span>
-      </button>
-    </nav>
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs">
+        <button class="tab-btn active" data-tab="tabSend" onclick="switchTab('tabSend')">
+          <i class="fa-regular fa-paper-plane"></i> ✏️ 發送留言
+        </button>
+        <button class="tab-btn" data-tab="tabInbox" onclick="switchTab('tabInbox')">
+          <i class="fa-regular fa-envelope"></i> 📥 收件箱
+          <span id="unreadBadge" class="badge-count hidden">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tabSent" onclick="switchTab('tabSent')">
+          <i class="fa-solid fa-box-archive"></i> 📤 送出的留言
+        </button>
+      </nav>
 
-    <!-- TAB 1: SEND MESSAGE -->
-    <section id="tab-send" class="tab-content active">
-      <div class="card">
-        <h2>撰寫留言</h2>
-        <form id="send-msg-form" onsubmit="handleSendMessage(event)">
+      <!-- TAB 1: 發送留言 (Send Message) -->
+      <section id="tabSend" class="tab-content active">
+        <form id="sendMessageForm" onsubmit="handleSendMessage(event)">
           <div class="form-group">
-            <label for="target-participant-id">對象：</label>
-            <select id="target-participant-id" required>
-              <option value="" disabled selected>選擇對象 (1A - 6H)</option>
+            <label for="receiverId"><i class="fa-solid fa-paper-plane"></i> 選擇發送對象（系統已自動過濾自己）：</label>
+            <select id="receiverId" class="form-control" required>
+              <!-- JS 動態填入過濾後的 47 位參加者 -->
             </select>
           </div>
 
           <div class="form-group">
-            <label for="msg-content">留言內容：</label>
-            <textarea 
-              id="msg-content" 
-              rows="4" 
-              placeholder="請輸入想對對方說的話..." 
-              maxlength="300"
-              oninput="updateCharCount()" 
-              required
-            ></textarea>
-            <div class="char-counter"><span id="char-num">0</span> / 300 字</div>
+            <div class="label-row">
+              <label for="messageContent"><i class="fa-solid fa-comment-dots"></i> 留言內容：</label>
+              <span id="charCounter" class="char-counter">剩餘 300 字</span>
+            </div>
+
+            <!-- Emoji Bar -->
+            <div class="emoji-picker-bar">
+              <span class="emoji-label">快捷 Emoji:</span>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('✨')">✨</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('❤️')">❤️</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('👏')">👏</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('🔥')">🔥</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('😊')">😊</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('🫶')">🫶</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('🎉')">🎉</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('💪')">💪</button>
+              <button type="button" class="emoji-btn" onclick="insertEmoji('🌟')">🌟</button>
+            </div>
+
+            <textarea id="messageContent" class="form-control" rows="5" maxlength="300" 
+                      placeholder="寫下您想對他/她說的話吧... (請遵守社群禮儀，系統設有敏感詞過濾)" required></textarea>
+            <div id="filterWarning" class="warning-text hidden">
+              ⚠️ 內容包含敏感或粗俗字詞，請修訂後再發送！
+            </div>
           </div>
 
-          <button type="submit" id="send-btn" class="btn btn-primary">
-            <span class="btn-text">發送留言</span>
-            <div id="send-btn-progress" class="spinner-wrapper hidden">
-              <span class="spinner"></span>
-              <span class="spinner-text">0%</span>
-            </div>
+          <button type="submit" id="btnSend" class="btn btn-success btn-block">
+            <span class="btn-text">匿名傳送訊息 💌</span>
+            <span class="progress-bar-fill" id="sendProgress"></span>
           </button>
         </form>
-      </div>
-    </section>
+      </section>
 
-    <!-- TAB 2: INBOX -->
-    <section id="tab-inbox" class="tab-content">
-      <div class="card">
-        <div class="section-header">
-          <h2>收件箱</h2>
-          <button onclick="fetchInboxMessages(true)" class="btn btn-sm btn-secondary">🔄 重整</button>
+      <!-- TAB 2: 收件箱 (Inbox) -->
+      <section id="tabInbox" class="tab-content">
+        <div class="tab-actions">
+          <h3>📥 收到的匿名留言</h3>
+          <button class="btn btn-secondary btn-sm" onclick="fetchInboxMessages(true)">
+            <i class="fa-solid fa-rotate-right"></i> 即時重整
+          </button>
         </div>
-
-        <div id="inbox-loading" class="loading-wrapper hidden">
-          <span class="spinner"></span>
-          <span>載入中... <span id="inbox-progress-text">0%</span></span>
+        <p class="section-desc">🔒 基於保護原則，發送者身分已被徹底隱藏。</p>
+        
+        <div id="inboxList" class="message-list">
+          <div class="empty-state">資料載入中...</div>
         </div>
+      </section>
 
-        <div id="inbox-empty" class="empty-state hidden">
-          <p>目前沒有收到任何留言 📭</p>
+      <!-- TAB 3: 送出的留言 (Sent Messages) -->
+      <section id="tabSent" class="tab-content">
+        <div class="tab-actions">
+          <h3>📤 我發送過的留言紀錄</h3>
+          <span class="sync-tag"><i class="fa-solid fa-cloud-arrow-up"></i> 已啟用雙重備份 (Cloud + Local)</span>
         </div>
+        <p class="section-desc">此處保留您發送給其他參加者的歷史訊息紀錄。</p>
 
-        <div id="inbox-feed" class="message-feed"></div>
-      </div>
-    </section>
-
-    <!-- TAB 3: SENT MESSAGES -->
-    <section id="tab-sent" class="tab-content">
-      <div class="card">
-        <div class="section-header">
-          <h2>送出的留言</h2>
-          <button onclick="fetchSentMessagesFromAPI(true)" class="btn btn-sm btn-secondary">🔄 重整</button>
+        <div id="sentList" class="message-list">
+          <div class="empty-state">尚未發送過任何留言</div>
         </div>
+      </section>
+    </main>
 
-        <div id="sent-empty" class="empty-state hidden">
-          <p>你尚未發送過任何留言 📤</p>
-        </div>
-
-        <div id="sent-feed" class="message-feed"></div>
-      </div>
-    </section>
   </div>
 
   <!-- Toast Notification Container -->
-  <div id="toast" class="toast hidden"></div>
+  <div id="toastContainer" class="toast-container"></div>
 
-  <!-- JavaScript Resource -->
   <script src="app.js"></script>
 </body>
 </html>
