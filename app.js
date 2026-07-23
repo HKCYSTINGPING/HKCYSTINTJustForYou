@@ -1,7 +1,10 @@
 // ==========================================
-// SENSITIVITY FILTER & BAD WORDS LIST
+// CONFIG & CONSTANTS
 // ==========================================
-const SENSITIVE_WORDS = [
+const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3gYKAVVlbav-LijuFBYRtlG2VUO_q4LTMCNcrIt79mer-yhQ/exec";
+
+// Sensitivty Filter (Local Mirror of Apps Script)
+const LOCAL_BAD_WORDS = [
   // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
   "含能", "臭化西", "臭西", "傻西", "凸你", "屌.你", "屌 你", "屌你", "吊你", "小你",
@@ -17,235 +20,210 @@ const SENSITIVE_WORDS = [
   "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
 ];
 
-// All 48 Participants Hardcoded Range (1A to 6H)
-const ALL_PARTICIPANTS = [];
-const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-GROUPS.forEach(group => {
-  for (let i = 1; i <= 6; i++) {
-    ALL_PARTICIPANTS.push(`${i}${group}`);
-  }
-});
-
 // App State
 let currentUser = {
   participantId: null,
   phoneNumber: null
 };
-let apiUrl = localStorage.getItem("app_script_url") || "";
 
 // ==========================================
 // DOM ELEMENTS
 // ==========================================
 const loginSection = document.getElementById("login-section");
-const appDashboard = document.getElementById("app-dashboard");
+const dashboardSection = document.getElementById("dashboard-section");
 const loginForm = document.getElementById("login-form");
-const loginParticipantSelect = document.getElementById("login-participant-id");
+const loginParticipantSelect = document.getElementById("login-participant");
 const loginPhoneInput = document.getElementById("login-phone");
-const apiUrlInput = document.getElementById("api-url-input");
 const loginBtn = document.getElementById("login-btn");
 const loginProgress = document.getElementById("login-progress");
 
-const userDisplayId = document.getElementById("user-display-id");
+const currentUserBadge = document.getElementById("current-user-badge");
 const logoutBtn = document.getElementById("logout-btn");
 const tabBtns = document.querySelectorAll(".tab-btn");
-const tabContents = document.querySelectorAll(".tab-content");
+const tabPanes = document.querySelectorAll(".tab-pane");
 
-const sendMsgForm = document.getElementById("send-msg-form");
 const receiverSelect = document.getElementById("receiver-select");
-const messageInput = document.getElementById("message-input");
-const charRemaining = document.getElementById("char-remaining");
-const sensitivityWarning = document.getElementById("sensitivity-warning");
-const sendMsgBtn = document.getElementById("send-msg-btn");
+const messageContent = document.getElementById("message-content");
+const sensitiveWarning = document.getElementById("sensitive-warning");
+const charCount = document.getElementById("char-count");
+const sendMsgForm = document.getElementById("send-msg-form");
+const sendBtn = document.getElementById("send-btn");
 const sendProgress = document.getElementById("send-progress");
 
-const inboxList = document.getElementById("inbox-list");
-const inboxCountBadge = document.getElementById("inbox-count-badge");
 const refreshInboxBtn = document.getElementById("refresh-inbox-btn");
+const inboxList = document.getElementById("inbox-list");
 const sentList = document.getElementById("sent-list");
-const toastContainer = document.getElementById("toast-container");
+const inboxUnreadBadge = document.getElementById("inbox-unread-count");
 
 // ==========================================
 // INITIALIZATION
 // ==========================================
 document.addEventListener("DOMContentLoaded", () => {
-  if (apiUrl) {
-    apiUrlInput.value = apiUrl;
-  }
-
-  // Restore Local User Session
-  const savedUser = localStorage.getItem("current_user");
-  if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    initializeDashboard();
-  }
-
+  checkStoredSession();
   setupEventListeners();
 });
 
 function setupEventListeners() {
-  // Login Submit
+  // Login submit
   loginForm.addEventListener("submit", handleLogin);
 
-  // Logout Click
+  // Logout
   logoutBtn.addEventListener("click", handleLogout);
 
-  // Tab Navigation Switch
+  // Dynamic Tabs switching
   tabBtns.forEach(btn => {
-    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-  });
-
-  // Message Character Count & Sensitivity Filter
-  messageInput.addEventListener("input", handleMessageInput);
-
-  // Emoji Picker Clicks
-  document.querySelectorAll(".emoji-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      messageInput.value += btn.textContent;
-      handleMessageInput();
+      tabBtns.forEach(b => b.classList.remove("active"));
+      tabPanes.forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
     });
   });
 
-  // Send Message Submit
+  // Sensitive filter & char counter
+  messageContent.addEventListener("input", handleTextareaInput);
+
+  // Send message submit
   sendMsgForm.addEventListener("submit", handleSendMessage);
 
-  // Refresh Inbox Click
-  refreshInboxBtn.addEventListener("click", fetchInboxMessages);
+  // Refresh inbox button
+  refreshInboxBtn.addEventListener("click", () => fetchInboxMessages(true));
 }
 
 // ==========================================
-// AUTHENTICATION (LOGIN / LOGOUT)
+// AUTHENTICATION LOGIC
 // ==========================================
+function checkStoredSession() {
+  const savedId = localStorage.getItem("app_participant_id");
+  const savedPhone = localStorage.getItem("app_phone_number");
+
+  if (savedId && savedPhone) {
+    currentUser.participantId = savedId;
+    currentUser.phoneNumber = savedPhone;
+    showDashboard();
+  }
+}
+
 async function handleLogin(e) {
   e.preventDefault();
-  const participantId = loginParticipantSelect.value;
+  const pId = loginParticipantSelect.value;
   const phone = loginPhoneInput.value.trim();
-  const url = apiUrlInput.value.trim();
 
-  if (!participantId || !phone || !url) {
-    showToast("請填寫所有欄位與 API Endpoint", "error");
+  if (!pId || !phone) {
+    showToast("請選擇編號並輸入電話號碼！", "error");
     return;
   }
 
-  // Save API URL to Local Storage
-  apiUrl = url;
-  localStorage.setItem("app_script_url", apiUrl);
-
-  // Animate Button Progress Tracker
-  await animateProgressBar(loginBtn, loginProgress, 100, 1000);
+  // Trigger loading animation
+  await animateProgress(loginProgress, loginBtn, "驗證中...");
 
   try {
-    // API GET Call for Login Verification
-    const fetchUrl = `${apiUrl}?participant_id=${encodeURIComponent(participantId)}&phone_number=${encodeURIComponent(phone)}`;
-    const response = await fetch(fetchUrl);
+    const url = `${API_URL}?participant_id=${encodeURIComponent(pId)}&phone_number=${encodeURIComponent(phone)}`;
+    const response = await fetch(url);
     const data = await response.json();
 
     if (data.status === "success") {
-      currentUser.participantId = participantId;
+      currentUser.participantId = pId;
       currentUser.phoneNumber = phone;
-      localStorage.setItem("current_user", JSON.stringify(currentUser));
 
-      showToast("雙重驗證成功！歡迎進入系統 🔒", "success");
-      initializeDashboard();
+      localStorage.setItem("app_participant_id", pId);
+      localStorage.setItem("app_phone_number", phone);
+
+      showToast("登入成功！歡迎回來 🎉", "success");
+      showDashboard();
     } else {
-      showToast(data.message || "驗證失敗，請檢查電話號碼或 ID", "error");
+      showToast(data.message || "身份驗證失敗，請檢查電話號碼", "error");
     }
   } catch (err) {
-    console.error("Login Error:", err);
-    showToast("連線至後端失敗，請確認 API URL 是否正確", "error");
+    console.error(err);
+    showToast("連線錯誤，請重試！", "error");
   } finally {
-    resetProgressBar(loginBtn, loginProgress);
+    resetButtonProgress(loginProgress, loginBtn, '<i class="fa-solid fa-right-to-bracket"></i> 驗證身份並登入');
   }
 }
 
 function handleLogout() {
-  localStorage.removeItem("current_user");
+  localStorage.removeItem("app_participant_id");
+  localStorage.removeItem("app_phone_number");
   currentUser = { participantId: null, phoneNumber: null };
+  dashboardSection.classList.add("hidden");
   loginSection.classList.remove("hidden");
-  appDashboard.classList.add("hidden");
-  showToast("已成功登出系統", "success");
+  showToast("已成功登入系統", "info");
 }
 
-function initializeDashboard() {
+function showDashboard() {
   loginSection.classList.add("hidden");
-  appDashboard.classList.remove("hidden");
-  userDisplayId.textContent = `參加者 ${currentUser.participantId}`;
+  dashboardSection.classList.remove("hidden");
+  currentUserBadge.textContent = `參加者: ${currentUser.participantId}`;
 
+  // Populate dynamic targets selection (excluding self)
   populateReceiverOptions();
+
+  // Load Inbox and Sent List
   fetchInboxMessages();
-  loadSentMessages();
+  renderSentMessages();
 }
 
-// Populate Receiver Options Exclude Self
+// Populate Receiver select box (1A - 6H except current user)
 function populateReceiverOptions() {
-  receiverSelect.innerHTML = `<option value="" disabled selected>請選擇接收對象...</option>`;
-  ALL_PARTICIPANTS.forEach(id => {
-    if (id !== currentUser.participantId) {
-      const option = document.createElement("option");
-      option.value = id;
-      option.textContent = `參加者 ${id}`;
-      receiverSelect.appendChild(option);
+  receiverSelect.innerHTML = `<option value="" disabled selected>請選擇接收留言的對象...</option>`;
+  const options = loginParticipantSelect.querySelectorAll("option");
+
+  options.forEach(opt => {
+    if (opt.value && opt.value !== currentUser.participantId) {
+      const clone = opt.cloneNode(true);
+      receiverSelect.appendChild(clone);
     }
   });
 }
 
 // ==========================================
-// TAB NAVIGATION
+// SENSITIVE WORD FILTER & REALTIME INPUT
 // ==========================================
-function switchTab(targetTabId) {
-  tabBtns.forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.tab === targetTabId);
-  });
-  tabContents.forEach(content => {
-    content.classList.toggle("active", content.id === targetTabId);
-  });
-}
+function handleTextareaInput() {
+  const text = messageContent.value;
+  charCount.textContent = text.length;
 
-// ==========================================
-// REAL-TIME SENSITIVITY FILTER & CHAR COUNT
-// ==========================================
-function handleMessageInput() {
-  const text = messageInput.value;
-  const remaining = 300 - text.length;
-  charRemaining.textContent = remaining;
+  const lowerText = text.toLowerCase();
+  let containsBadWord = false;
 
-  const hasBadWord = checkBadWords(text);
+  for (let word of LOCAL_BAD_WORDS) {
+    if (lowerText.includes(word.toLowerCase())) {
+      containsBadWord = true;
+      break;
+    }
+  }
 
-  if (hasBadWord) {
-    messageInput.classList.add("input-error");
-    sensitivityWarning.classList.remove("hidden");
+  if (containsBadWord) {
+    messageContent.classList.add("input-error");
+    sensitiveWarning.classList.remove("hidden");
+    sendBtn.disabled = true;
   } else {
-    messageInput.classList.remove("input-error");
-    sensitivityWarning.classList.add("hidden");
+    messageContent.classList.remove("input-error");
+    sensitiveWarning.classList.add("hidden");
+    sendBtn.disabled = false;
   }
 }
 
-function checkBadWords(text) {
-  if (!text) return false;
-  const lowerText = text.toLowerCase();
-  return SENSITIVE_WORDS.some(word => lowerText.includes(word.toLowerCase()));
-}
-
 // ==========================================
-// SEND MESSAGE
+// SEND MESSAGE LOGIC
 // ==========================================
 async function handleSendMessage(e) {
   e.preventDefault();
-
   const receiverId = receiverSelect.value;
-  const content = messageInput.value.trim();
+  const content = messageContent.value.trim();
 
-  if (!receiverId || !content) {
-    showToast("請選擇接收對象並輸入留言", "error");
+  if (!receiverId) {
+    showToast("請選擇接收對象！", "error");
     return;
   }
 
-  if (checkBadWords(content)) {
-    showToast("留言包含不當用語，請修正後再試！", "error");
+  if (!content) {
+    showToast("留言內容不能為空！", "error");
     return;
   }
 
-  // Animate Progress Bar inside button
-  await animateProgressBar(sendMsgBtn, sendProgress, 100, 1200);
+  await animateProgress(sendProgress, sendBtn, "傳送中...");
 
   const payload = {
     sender_id: currentUser.participantId,
@@ -255,174 +233,174 @@ async function handleSendMessage(e) {
   };
 
   try {
-    // API POST Call using no-cors or JSON String Content
-    const response = await fetch(apiUrl, {
+    const response = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // Avoid CORS preflight issue with GAS
       body: JSON.stringify(payload)
     });
 
     const data = await response.json();
 
     if (data.status === "success") {
-      showToast("留言已成功送出！✨", "success");
-
-      // Local Backup for Sent Messages
-      saveSentMessageLocally({
+      showToast("留言已成功送出！🚀", "success");
+      
+      // Save to LocalStorage for dual backup
+      saveSentMessageLocal({
         message_id: data.message_id || `MSG-${Date.now()}`,
         receiver_id: receiverId,
         content: content,
         created_at: new Date().toLocaleString()
       });
 
-      // Reset Form
-      sendMsgForm.reset();
-      handleMessageInput();
-      loadSentMessages();
+      // Clear input form
+      messageContent.value = "";
+      charCount.textContent = "0";
+      receiverSelect.selectedIndex = 0;
+      
+      // Refresh Sent List tab
+      renderSentMessages();
     } else {
-      showToast(data.message || "發送失敗", "error");
+      showToast(data.message || "發送失敗！", "error");
     }
   } catch (err) {
-    console.error("Send Message Error:", err);
-    showToast("網路錯誤或後端回應異常，留言已備份至本地端", "error");
-
-    // Local Fallback Backup
-    saveSentMessageLocally({
-      message_id: `MSG-LOCAL-${Date.now()}`,
-      receiver_id: receiverId,
-      content: content,
-      created_at: new Date().toLocaleString()
-    });
-    sendMsgForm.reset();
-    handleMessageInput();
-    loadSentMessages();
+    console.error(err);
+    showToast("伺服器連線失敗，請檢查網路或重試！", "error");
   } finally {
-    resetProgressBar(sendMsgBtn, sendProgress);
+    resetButtonProgress(sendProgress, sendBtn, '<i class="fa-solid fa-paper-plane"></i> 傳送留言 🚀');
   }
 }
 
 // ==========================================
-// INBOX & SENT MESSAGES RENDERING
+// INBOX & SENT MESSAGES RENDER
 // ==========================================
-async function fetchInboxMessages() {
-  inboxList.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> 載入最新留言中...</div>`;
+async function fetchInboxMessages(manualRefresh = false) {
+  if (manualRefresh) showToast("正在更新收件箱...", "info");
 
   try {
-    const fetchUrl = `${apiUrl}?participant_id=${encodeURIComponent(currentUser.participantId)}&phone_number=${encodeURIComponent(currentUser.phoneNumber)}`;
-    const response = await fetch(fetchUrl);
+    const url = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participantId)}&phone_number=${encodeURIComponent(currentUser.phoneNumber)}`;
+    const response = await fetch(url);
     const data = await response.json();
 
     if (data.status === "success") {
-      renderInbox(data.messages || []);
-    } else {
-      inboxList.innerHTML = `<div class="empty-state">無法載入留言：${data.message}</div>`;
+      renderInboxMessages(data.messages || []);
+      if (manualRefresh) showToast("收件箱已是最新狀態！", "success");
     }
   } catch (err) {
-    console.error("Fetch Inbox Error:", err);
-    inboxList.innerHTML = `<div class="empty-state">網絡連線失敗，請點擊重整再試。</div>`;
+    console.error(err);
+    showToast("讀取收件箱失敗", "error");
   }
 }
 
-function renderInbox(messages) {
-  inboxCountBadge.textContent = messages.length;
+function renderInboxMessages(messages) {
+  inboxList.innerHTML = "";
 
   if (messages.length === 0) {
-    inboxList.innerHTML = `<div class="empty-state">📥 目前收件箱內沒有留言。</div>`;
+    inboxList.innerHTML = `<div class="empty-state">📭 尚無收到任何匿名留言</div>`;
+    inboxUnreadBadge.classList.add("hidden");
     return;
   }
 
-  inboxList.innerHTML = "";
-  messages.reverse().forEach(msg => {
-    const isNew = !msg.is_read;
+  let unreadCount = 0;
+
+  messages.forEach(msg => {
+    if (!msg.is_read) unreadCount++;
+
     const card = document.createElement("div");
-    card.className = "msg-card";
+    card.className = "message-card";
     card.innerHTML = `
-      <div class="msg-header">
-        <span><i class="fa-solid fa-user-secret"></i> 匿名留言</span>
-        <div>
-          ${isNew ? '<span class="tag-new">NEW</span>' : ''}
-          <span style="margin-left:6px;">${msg.created_at}</span>
-        </div>
+      <div class="message-header">
+        <span>來自：🕵️ 匿名參加者</span>
+        <span>${msg.created_at || ''} ${!msg.is_read ? '<span class="badge-new">NEW</span>' : ''}</span>
       </div>
-      <div class="msg-body">${escapeHTML(msg.content)}</div>
+      <div class="message-body">${escapeHTML(msg.content)}</div>
     `;
     inboxList.appendChild(card);
   });
+
+  if (unreadCount > 0) {
+    inboxUnreadBadge.textContent = unreadCount;
+    inboxUnreadBadge.classList.remove("hidden");
+  } else {
+    inboxUnreadBadge.classList.add("hidden");
+  }
 }
 
-function saveSentMessageLocally(sentObj) {
-  const localKey = `sent_msgs_${currentUser.participantId}`;
-  const existing = JSON.parse(localStorage.getItem(localKey) || "[]");
-  existing.unshift(sentObj);
-  localStorage.setItem(localKey, JSON.stringify(existing));
+// Local Storage Backup Operations for Sent Messages
+function saveSentMessageLocal(msgObj) {
+  const key = `sent_msgs_${currentUser.participantId}`;
+  const existing = JSON.parse(localStorage.getItem(key) || "[]");
+  existing.unshift(msgObj);
+  localStorage.setItem(key, JSON.stringify(existing));
 }
 
-function loadSentMessages() {
-  const localKey = `sent_msgs_${currentUser.participantId}`;
-  const sentMsgs = JSON.parse(localStorage.getItem(localKey) || "[]");
+function renderSentMessages() {
+  const key = `sent_msgs_${currentUser.participantId}`;
+  const sentMessages = JSON.parse(localStorage.getItem(key) || "[]");
 
-  if (sentMsgs.length === 0) {
-    sentList.innerHTML = `<div class="empty-state">📤 你尚未發送過任何留言。</div>`;
+  sentList.innerHTML = "";
+
+  if (sentMessages.length === 0) {
+    sentList.innerHTML = `<div class="empty-state">📤 你尚未發送過任何留言</div>`;
     return;
   }
 
-  sentList.innerHTML = "";
-  sentMsgs.forEach(msg => {
+  sentMessages.forEach(msg => {
     const card = document.createElement("div");
-    card.className = "msg-card";
+    card.className = "message-card";
     card.innerHTML = `
-      <div class="msg-header">
-        <span><i class="fa-solid fa-paper-plane"></i> 發送給：<strong>參加者 ${msg.receiver_id}</strong></span>
+      <div class="message-header">
+        <span>發送給：<strong>參加者 ${msg.receiver_id}</strong></span>
         <span>${msg.created_at}</span>
       </div>
-      <div class="msg-body">${escapeHTML(msg.content)}</div>
+      <div class="message-body">${escapeHTML(msg.content)}</div>
     `;
     sentList.appendChild(card);
   });
 }
 
 // ==========================================
-// UX HELPERS (PROGRESS BAR & TOAST)
+// UI & UX HELPER FUNCTIONS
 // ==========================================
-function animateProgressBar(btn, progressEl, targetPercent, duration) {
+function animateProgress(progressBarEl, buttonEl, loadingText) {
   return new Promise(resolve => {
-    btn.disabled = true;
-    let start = null;
+    buttonEl.disabled = true;
+    let width = 0;
+    const btnText = buttonEl.querySelector(".btn-text");
+    if (btnText) btnText.innerText = loadingText;
 
-    function step(timestamp) {
-      if (!start) start = timestamp;
-      const progress = Math.min((timestamp - start) / duration, 1);
-      const currentPercent = Math.floor(progress * targetPercent);
-      
-      progressEl.style.width = `${currentPercent}%`;
-
-      if (progress < 1) {
-        requestAnimationFrame(step);
-      } else {
+    const interval = setInterval(() => {
+      width += 15;
+      progressBarEl.style.width = `${width}%`;
+      if (width >= 100) {
+        clearInterval(interval);
         resolve();
       }
-    }
-    requestAnimationFrame(step);
+    }, 40);
   });
 }
 
-function resetProgressBar(btn, progressEl) {
-  btn.disabled = false;
-  progressEl.style.width = "0%";
+function resetButtonProgress(progressBarEl, buttonEl, originalHTML) {
+  buttonEl.disabled = false;
+  progressBarEl.style.width = "0%";
+  const btnText = buttonEl.querySelector(".btn-text");
+  if (btnText) btnText.innerHTML = originalHTML;
 }
 
 function showToast(message, type = "info") {
+  const container = document.getElementById("toast-container");
   const toast = document.createElement("div");
-  toast.className = `toast toast-${type}`;
+  toast.className = `toast ${type}`;
   
-  const icon = type === "error" ? "fa-circle-xmark" : "fa-circle-check";
-  toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${escapeHTML(message)}</span>`;
+  let icon = "ℹ️";
+  if (type === "success") icon = "✅";
+  if (type === "error") icon = "⚠️";
 
-  toastContainer.appendChild(toast);
+  toast.innerHTML = `<span>${icon}</span> <span>${escapeHTML(message)}</span>`;
+  container.appendChild(toast);
 
   setTimeout(() => {
     toast.remove();
-  }, 3000);
+  }, 3500);
 }
 
 function escapeHTML(str) {
