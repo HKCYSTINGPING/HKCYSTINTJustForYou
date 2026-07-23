@@ -201,8 +201,17 @@
       <!-- Sent Messages Tab -->
       <section id="tab-sent" class="tab-panel" role="tabpanel">
         <div class="panel-card">
-          <h2>📤 送出的留言</h2>
-          <p class="panel-desc">您曾發送過的留言紀錄（含本地備份）📋</p>
+          <div class="panel-header-row">
+            <div>
+              <h2>📤 送出的留言</h2>
+              <p class="panel-desc">您曾發送過的留言紀錄 📋</p>
+            </div>
+            <button type="button" id="refresh-sent-btn" class="btn btn-secondary btn-progress">
+              <span class="btn-text">🔄 重整</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+              <span class="btn-progress-label" aria-hidden="true">0%</span>
+            </button>
+          </div>
 
           <div id="sent-list" class="message-list">
             <div class="empty-state">
