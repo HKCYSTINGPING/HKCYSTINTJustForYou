@@ -322,6 +322,7 @@ async function handleSendMessage(e) {
       document.getElementById("send-msg-form").reset();
       updateCharCount();
       
+      // 🔑 Refetch sent items from API and switch tab
       await fetchSentMessagesFromAPI(false);
       switchTab("sent");
     } else {
@@ -339,11 +340,15 @@ async function handleSendMessage(e) {
 }
 
 // ==========================================================================
-// SENT MESSAGES LOGIC (SHOWS REAL RECEIVER ID)
+// SENT MESSAGES LOGIC (API FETCH + LOCAL BACKUP)
 // ==========================================================================
 
 async function fetchSentMessagesFromAPI(showToastOnSuccess = false) {
   if (!currentUser.participant_id) return;
+
+  const feed = document.getElementById("sent-feed");
+  const emptyState = document.getElementById("sent-empty");
+  const badge = document.getElementById("sent-count-badge");
 
   try {
     const queryUrl = `${API_URL}?action=getSentMessages&participant_id=${encodeURIComponent(currentUser.participant_id)}&phone_number=${encodeURIComponent(currentUser.phone_number)}`;
@@ -399,16 +404,13 @@ function renderSentMessages(messages = []) {
   badge.textContent = messages.length;
   badge.classList.remove("hidden");
 
-  // 最新發送的排在最前
+  // Render reverse order (newest first)
   messages.slice().reverse().forEach(msg => {
     const card = document.createElement("div");
     card.className = "message-card sent-card";
 
-    // 💡 取出對象 ID（直接顯示如：參加者 3C）
-    const targetParticipant = msg.receiver_id || msg.target_id || '未知對象';
-
     card.innerHTML = `
-      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(targetParticipant)}</strong></div>
+      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(msg.receiver_id || msg.target_id || '')}</strong></div>
       <p class="message-body">${escapeHTML(msg.content)}</p>
       <div class="message-meta">
         <span class="timestamp">🕒 ${msg.created_at || '最近'}</span>
