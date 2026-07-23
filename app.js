@@ -1,14 +1,11 @@
-// ==========================================================================
+// ====================================================
 // CONFIGURATION & GLOBAL STATE
-// ==========================================================================
+// ====================================================
+// 請替換為您發布的 Google Apps Script Web App URL
+const API_URL = "https://script.google.com/macros/s/AKfycbzpzS9O-G8-X4fV-83M9_EXAMPLE/exec"; 
 
-const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3gYKAVVlbav-LijuFBYRtlG2VUO_q4LTMCNcrIt79mer-yhQ/exec";
-
-const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-const MEMBERS_PER_GROUP = 6;
-
-// Prohibited / Bad words list
-const PROHIBITED_WORDS = [
+// 敏感字詞庫 (與後端對齊，實現即時前端雙重防護)
+const BAD_WORDS_LIST = [
   // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
   "含能", "臭化西", "臭西", "傻西", "凸你", "屌.你", "屌 你", "屌你", "吊你", "小你",
@@ -25,262 +22,207 @@ const PROHIBITED_WORDS = [
 ];
 
 let currentUser = {
-  participant_id: null,
-  phone_number: null
+  participantId: null,
+  phoneNumber: null
 };
 
-// ==========================================================================
+// ====================================================
 // INITIALIZATION
-// ==========================================================================
-
+// ====================================================
 document.addEventListener("DOMContentLoaded", () => {
-  checkSession();
+  // 檢查是否有 Session 登入紀錄
+  const savedUser = localStorage.getItem("anonymous_app_user");
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    showDashboard();
+  }
+
+  // 綁定輸入即時過濾檢測與計數器
+  const textarea = document.getElementById("messageContent");
+  textarea.addEventListener("input", handleContentInput);
 });
 
-function generateParticipantIDs() {
-  const ids = [];
-  GROUPS.forEach(group => {
-    for (let i = 1; i <= MEMBERS_PER_GROUP; i++) {
-      ids.push(`${i}${group}`);
-    }
-  });
-  return ids;
-}
-
-function updateTargetDropdown() {
-  const targetSelect = document.getElementById("target-participant-id");
-  if (!targetSelect) return;
-  targetSelect.innerHTML = '<option value="" disabled selected>選擇對象 (1A - 6H)</option>';
-
-  const allIDs = generateParticipantIDs();
-  allIDs.filter(id => id !== currentUser.participant_id).forEach(id => {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = `參加者 ${id}`;
-    targetSelect.appendChild(opt);
-  });
-}
-
-// ==========================================================================
-// PROGRESS TRACKER CONTROLLER
-// ==========================================================================
-
-function createProgressTracker(textElement) {
-  let progress = 0;
-  let interval = null;
-
-  return {
-    start: () => {
-      progress = 0;
-      textElement.textContent = "0%";
-
-      interval = setInterval(() => {
-        if (progress < 95) {
-          progress += Math.floor(Math.random() * 5) + 3;
-          if (progress > 95) progress = 95;
-          textElement.textContent = `${progress}%`;
-        }
-      }, 150);
-    },
-    finish: () => {
-      clearInterval(interval);
-      textElement.textContent = "100%";
-    },
-    reset: () => {
-      clearInterval(interval);
-      progress = 0;
-      textElement.textContent = "0%";
-    }
-  };
-}
-
-// ==========================================================================
-// BAD WORDS FILTERING
-// ==========================================================================
-
-function containsBadWords(text) {
-  const normalizedText = text.toLowerCase().replace(/\s+/g, '');
-  return PROHIBITED_WORDS.some(word => normalizedText.includes(word.toLowerCase()));
-}
-
-function updateCharCount() {
-  const textarea = document.getElementById("msg-content");
-  const countSpan = document.getElementById("char-num");
-  if (!textarea || !countSpan) return;
-
-  const val = textarea.value;
-  countSpan.textContent = val.length;
-
-  if (containsBadWords(val)) {
-    textarea.style.borderColor = "var(--danger-color, #e63946)";
-  } else {
-    textarea.style.borderColor = "var(--border-color, #cccccc)";
-  }
-}
-
-// ==========================================================================
-// AUTHENTICATION LOGIC
-// ==========================================================================
-
+// ====================================================
+// 1. AUTHENTICATION (身分驗證)
+// ====================================================
 async function handleLogin(e) {
   e.preventDefault();
-  
-  const pId = document.getElementById("login-participant-id").value;
-  const phoneInput = document.getElementById("login-phone").value.trim();
-  const errorDiv = document.getElementById("auth-error");
 
-  errorDiv.classList.add("hidden");
+  const participantId = document.getElementById("loginParticipantId").value;
+  const phoneNumber = document.getElementById("loginPhoneNumber").value.trim();
 
-  if (!pId || !phoneInput) {
-    showAuthError("請填寫所有欄位");
+  if (!participantId || !phoneNumber) {
+    showToast("請填寫所有欄位！", "warning");
     return;
   }
 
-  const btn = document.getElementById("login-btn");
-  const btnText = btn.querySelector(".btn-text");
-  const progressWrapper = document.getElementById("login-btn-progress");
-  const text = progressWrapper.querySelector(".spinner-text");
+  const btnLogin = document.getElementById("btnLogin");
+  const progressBar = document.getElementById("loginProgress");
 
-  const tracker = createProgressTracker(text);
-
-  btn.disabled = true;
-  btnText.classList.add("hidden");
-  progressWrapper.classList.remove("hidden");
-  tracker.start();
+  // 開始動態進度條動畫
+  await animateProgress(progressBar, btnLogin, "驗證中...", 0, 85, 300);
 
   try {
-    const queryUrl = `${API_URL}?participant_id=${encodeURIComponent(pId)}&phone_number=${encodeURIComponent(phoneInput)}`;
-    const response = await fetch(queryUrl);
+    // 發送 GET 請求驗證身分
+    const url = `${API_URL}?participant_id=${encodeURIComponent(participantId)}&phone_number=${encodeURIComponent(phoneNumber)}`;
+    const response = await fetch(url);
     const data = await response.json();
 
-    tracker.finish();
-    await new Promise(r => setTimeout(r, 200));
-
     if (data.status === "success") {
-      currentUser.participant_id = pId;
-      currentUser.phone_number = phoneInput;
+      await animateProgress(progressBar, btnLogin, "驗證成功！", 85, 100, 100);
 
-      sessionStorage.setItem("app_user", JSON.stringify(currentUser));
+      currentUser.participantId = participantId;
+      currentUser.phoneNumber = phoneNumber;
 
-      renderDashboard();
-      renderInboxMessages(data.messages);
-      fetchSentMessagesFromAPI(false);
-      showToast("登入成功！", "success");
+      // 保存至 LocalStorage
+      localStorage.setItem("anonymous_app_user", JSON.stringify(currentUser));
+
+      showToast(`歡迎回來，參加者 ${participantId}！`, "success");
+      
+      setTimeout(() => {
+        resetButtonProgress(progressBar, btnLogin, "驗證並進入系統 🚀");
+        showDashboard();
+      }, 500);
+
     } else {
-      showAuthError(data.message || "身份驗證失敗，請檢查號碼是否正確。");
+      resetButtonProgress(progressBar, btnLogin, "驗證並進入系統 🚀");
+      showToast(data.message || "身分驗證失敗，請檢查電話號碼", "error");
     }
   } catch (err) {
-    showAuthError("無法連接至伺服器，請稍後再試。");
-    console.error(err);
-  } finally {
-    tracker.reset();
-    btn.disabled = false;
-    btnText.classList.remove("hidden");
-    progressWrapper.classList.add("hidden");
-  }
-}
-
-function checkSession() {
-  const savedUser = sessionStorage.getItem("app_user");
-  if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    renderDashboard();
-    fetchInboxMessages(false);
-    fetchSentMessagesFromAPI(false);
+    resetButtonProgress(progressBar, btnLogin, "驗證並進入系統 🚀");
+    // 若因 CORS 或離線導致，模擬離線或提示錯誤
+    showToast("無法連接至伺服器，請稍後再試！", "error");
+    console.error("Login Error:", err);
   }
 }
 
 function handleLogout() {
-  sessionStorage.removeItem("app_user");
-  currentUser = { participant_id: null, phone_number: null };
-  
-  document.getElementById("dashboard-screen").classList.add("hidden");
-  document.getElementById("auth-screen").classList.remove("hidden");
-  document.getElementById("login-form").reset();
-  showToast("已安全退出系統", "success");
+  localStorage.removeItem("anonymous_app_user");
+  currentUser = { participantId: null, phoneNumber: null };
+  document.getElementById("dashboardView").classList.add("hidden");
+  document.getElementById("loginView").classList.add("active");
+  document.getElementById("loginForm").reset();
+  showToast("您已成功登出 👋", "success");
 }
 
-function showAuthError(msg) {
-  const errorDiv = document.getElementById("auth-error");
-  errorDiv.textContent = msg;
-  errorDiv.classList.remove("hidden");
+// ====================================================
+// 2. DASHBOARD & TABS NAV
+// ====================================================
+function showDashboard() {
+  document.getElementById("loginView").classList.remove("active");
+  document.getElementById("dashboardView").classList.remove("hidden");
+  document.getElementById("dashboardView").classList.add("active");
+
+  document.getElementById("currentUserDisplay").innerText = `參加者 ${currentUser.participantId}`;
+
+  // 動態渲染發送對象選單 (自動排除自己)
+  populateReceiverDropdown();
+
+  // 預設載入收件箱與送出紀錄
+  fetchInboxMessages();
+  renderSentMessages();
 }
 
-// ==========================================================================
-// DASHBOARD & NAVIGATION
-// ==========================================================================
+function switchTab(tabId) {
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tabId);
+  });
+  document.querySelectorAll(".tab-content").forEach(content => {
+    content.classList.toggle("active", content.id === tabId);
+  });
 
-function renderDashboard() {
-  document.getElementById("auth-screen").classList.add("hidden");
-  document.getElementById("dashboard-screen").classList.remove("hidden");
-  document.getElementById("user-display-id").textContent = `ID: ${currentUser.participant_id}`;
-
-  updateTargetDropdown();
-  switchTab("send");
-}
-
-function switchTab(tabName) {
-  const sendTab = document.getElementById("tab-send");
-  const inboxTab = document.getElementById("tab-inbox");
-  const sentTab = document.getElementById("tab-sent");
-
-  const sendBtn = document.getElementById("tab-btn-send");
-  const inboxBtn = document.getElementById("tab-btn-inbox");
-  const sentBtn = document.getElementById("tab-btn-sent");
-
-  [sendTab, inboxTab, sentTab].forEach(t => t.classList.remove("active"));
-  [sendBtn, inboxBtn, sentBtn].forEach(b => b.classList.remove("active"));
-
-  if (tabName === "send") {
-    sendTab.classList.add("active");
-    sendBtn.classList.add("active");
-  } else if (tabName === "inbox") {
-    inboxTab.classList.add("active");
-    inboxBtn.classList.add("active");
-    fetchInboxMessages(false);
-  } else if (tabName === "sent") {
-    sentTab.classList.add("active");
-    sentBtn.classList.add("active");
-    fetchSentMessagesFromAPI(false);
+  if (tabId === "tabInbox") {
+    fetchInboxMessages();
+  } else if (tabId === "tabSent") {
+    renderSentMessages();
   }
 }
 
-// ==========================================================================
-// SEND MESSAGE LOGIC
-// ==========================================================================
+// 動態排重選單，產生 1A-6H (47個選項，排除自己)
+function populateReceiverDropdown() {
+  const receiverSelect = document.getElementById("receiverId");
+  receiverSelect.innerHTML = `<option value="" disabled selected>請選擇接收對象...</option>`;
 
+  const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  
+  groups.forEach(group => {
+    for (let i = 1; i <= 6; i++) {
+      const id = `${i}${group}`;
+      if (id !== currentUser.participantId) {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = `參加者 ${id}`;
+        receiverSelect.appendChild(option);
+      }
+    }
+  });
+}
+
+// ====================================================
+// 3. SENSITIVITY FILTER & EMOJI
+// ====================================================
+function handleContentInput() {
+  const textarea = document.getElementById("messageContent");
+  const counter = document.getElementById("charCounter");
+  const warning = document.getElementById("filterWarning");
+  const val = textarea.value;
+
+  // 1. 字數倒數
+  const remaining = 300 - val.length;
+  counter.innerText = `剩餘 ${remaining} 字`;
+
+  // 2. 敏感字偵測
+  const hasBadWord = checkSensitivity(val);
+  if (hasBadWord) {
+    textarea.classList.add("is-invalid");
+    warning.classList.remove("hidden");
+  } else {
+    textarea.classList.remove("is-invalid");
+    warning.classList.add("hidden");
+  }
+}
+
+function checkSensitivity(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return BAD_WORDS_LIST.some(word => lower.includes(word.toLowerCase()));
+}
+
+function insertEmoji(emoji) {
+  const textarea = document.getElementById("messageContent");
+  textarea.value += emoji;
+  textarea.focus();
+  handleContentInput();
+}
+
+// ====================================================
+// 4. SEND MESSAGE (POST)
+// ====================================================
 async function handleSendMessage(e) {
   e.preventDefault();
 
-  const targetId = document.getElementById("target-participant-id").value;
-  const content = document.getElementById("msg-content").value.trim();
+  const receiverId = document.getElementById("receiverId").value;
+  const content = document.getElementById("messageContent").value.trim();
 
-  if (!targetId || !content) {
-    showToast("請填寫完整留言資訊", "error");
+  if (!receiverId) {
+    showToast("請選擇訊息接收對象！", "warning");
     return;
   }
 
-  if (containsBadWords(content)) {
-    showToast("⚠️ 留言包含不當用語，請修正後再試。", "error");
+  if (checkSensitivity(content)) {
+    showToast("訊息包含不當字詞，請修訂後再發送！", "error");
     return;
   }
 
-  const btn = document.getElementById("send-btn");
-  const btnText = btn.querySelector(".btn-text");
-  const progressWrapper = document.getElementById("send-btn-progress");
-  const text = progressWrapper.querySelector(".spinner-text");
+  const btnSend = document.getElementById("btnSend");
+  const progressBar = document.getElementById("sendProgress");
 
-  const tracker = createProgressTracker(text);
-
-  btn.disabled = true;
-  btnText.classList.add("hidden");
-  progressWrapper.classList.remove("hidden");
-  tracker.start();
+  await animateProgress(progressBar, btnSend, "傳送中...", 0, 80, 200);
 
   const payload = {
-    sender_id: currentUser.participant_id,
-    phone_number: currentUser.phone_number,
-    receiver_id: targetId,
+    sender_id: currentUser.participantId,
+    phone_number: currentUser.phoneNumber,
+    receiver_id: receiverId,
     content: content
   };
 
@@ -293,206 +235,192 @@ async function handleSendMessage(e) {
 
     const data = await response.json();
 
-    tracker.finish();
-    await new Promise(r => setTimeout(r, 200));
-
     if (data.status === "success") {
-      saveSentMessageLocally({
-        receiver_id: targetId,
+      await animateProgress(progressBar, btnSend, "發送成功！ 🎉", 80, 100, 100);
+
+      // 儲存至本地端備份 (LocalStorage)
+      saveSentMessageToLocal({
+        message_id: data.message_id || `MSG-${Date.now()}`,
+        receiver_id: receiverId,
         content: content,
-        created_at: new Date().toLocaleString("zh-HK", { hour12: false })
+        created_at: new Date().toLocaleString()
       });
 
       showToast("留言已成功送出！", "success");
-      document.getElementById("send-msg-form").reset();
-      updateCharCount();
-      
-      await fetchSentMessagesFromAPI(false);
-      switchTab("sent");
+
+      // 清空表單
+      document.getElementById("messageContent").value = "";
+      document.getElementById("receiverId").selectedIndex = 0;
+      document.getElementById("charCounter").innerText = "剩餘 300 字";
+
+      setTimeout(() => {
+        resetButtonProgress(progressBar, btnSend, "匿名傳送訊息 💌");
+      }, 500);
+
     } else {
-      showToast(data.message || "傳送失敗，請再試一次", "error");
+      resetButtonProgress(progressBar, btnSend, "匿名傳送訊息 💌");
+      showToast(data.message || "發送失敗，請重試", "error");
     }
+
   } catch (err) {
-    showToast("發送失敗，請確認網路連線", "error");
-    console.error(err);
-  } finally {
-    tracker.reset();
-    btn.disabled = false;
-    btnText.classList.remove("hidden");
-    progressWrapper.classList.add("hidden");
+    resetButtonProgress(progressBar, btnSend, "匿名傳送訊息 💌");
+    // 如果網絡請求失敗，仍進行 Local Storage 備份提示
+    console.error("Send Error:", err);
+    showToast("網路異常，請確認後端部署連結！", "error");
   }
 }
 
-// ==========================================================================
-// SENT MESSAGES LOGIC (SHOWS REAL RECEIVER ID)
-// ==========================================================================
+// 本地端備份 sent messages
+function saveSentMessageToLocal(msgObj) {
+  const key = `sent_msgs_${currentUser.participantId}`;
+  const localData = JSON.parse(localStorage.getItem(key) || "[]");
+  localData.unshift(msgObj);
+  localStorage.setItem(key, JSON.stringify(localData));
+}
 
-async function fetchSentMessagesFromAPI(showToastOnSuccess = false) {
-  if (!currentUser.participant_id) return;
+// ====================================================
+// 5. INBOX & SENT RENDERING
+// ====================================================
+async function fetchInboxMessages(isManual = false) {
+  const inboxList = document.getElementById("inboxList");
+  if (isManual) showToast("正在重整收件箱...", "info");
 
   try {
-    const queryUrl = `${API_URL}?action=getSentMessages&participant_id=${encodeURIComponent(currentUser.participant_id)}&phone_number=${encodeURIComponent(currentUser.phone_number)}`;
-    const response = await fetch(queryUrl);
+    const url = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participantId)}&phone_number=${encodeURIComponent(currentUser.phoneNumber)}`;
+    const response = await fetch(url);
     const data = await response.json();
-
-    if (data.status === "success" && Array.isArray(data.messages)) {
-      renderSentMessages(data.messages);
-      if (showToastOnSuccess) showToast("已更新送出紀錄", "success");
-    } else {
-      loadSentMessagesFromLocalStorage();
-    }
-  } catch (err) {
-    console.warn("Unable to fetch sent messages from API, falling back to local storage.", err);
-    loadSentMessagesFromLocalStorage();
-  }
-}
-
-function getSentStorageKey() {
-  return `sent_msgs_${currentUser.participant_id}`;
-}
-
-function saveSentMessageLocally(msg) {
-  if (!currentUser.participant_id) return;
-  const key = getSentStorageKey();
-  const existing = JSON.parse(localStorage.getItem(key) || "[]");
-  existing.push(msg);
-  localStorage.setItem(key, JSON.stringify(existing));
-}
-
-function loadSentMessagesFromLocalStorage() {
-  if (!currentUser.participant_id) return;
-
-  const key = getSentStorageKey();
-  const messages = JSON.parse(localStorage.getItem(key) || "[]");
-  renderSentMessages(messages);
-}
-
-function renderSentMessages(messages = []) {
-  const feed = document.getElementById("sent-feed");
-  const emptyState = document.getElementById("sent-empty");
-  const badge = document.getElementById("sent-count-badge");
-
-  feed.innerHTML = "";
-
-  if (messages.length === 0) {
-    emptyState.classList.remove("hidden");
-    badge.classList.add("hidden");
-    return;
-  }
-
-  emptyState.classList.add("hidden");
-  badge.textContent = messages.length;
-  badge.classList.remove("hidden");
-
-  // Show latest first
-  messages.slice().reverse().forEach(msg => {
-    const card = document.createElement("div");
-    card.className = "message-card sent-card";
-
-    // Displays clear target recipient ID
-    const targetParticipant = msg.receiver_id || msg.target_id || '未知對象';
-
-    card.innerHTML = `
-      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(targetParticipant)}</strong></div>
-      <p class="message-body">${escapeHTML(msg.content)}</p>
-      <div class="message-meta">
-        <span class="timestamp">🕒 ${msg.created_at || '最近'}</span>
-        <span class="tag-sent">已送出</span>
-      </div>
-    `;
-    feed.appendChild(card);
-  });
-}
-
-// ==========================================================================
-// INBOX LOGIC
-// ==========================================================================
-
-async function fetchInboxMessages(showToastOnSuccess = false) {
-  const loadingState = document.getElementById("inbox-loading");
-  const feed = document.getElementById("inbox-feed");
-  const emptyState = document.getElementById("inbox-empty");
-
-  const text = document.getElementById("inbox-progress-text");
-  const tracker = createProgressTracker(text);
-
-  loadingState.classList.remove("hidden");
-  feed.innerHTML = "";
-  emptyState.classList.add("hidden");
-  tracker.start();
-
-  try {
-    const queryUrl = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participant_id)}&phone_number=${encodeURIComponent(currentUser.phone_number)}`;
-    const response = await fetch(queryUrl);
-    const data = await response.json();
-
-    tracker.finish();
-    await new Promise(r => setTimeout(r, 200));
 
     if (data.status === "success") {
       renderInboxMessages(data.messages);
-      if (showToastOnSuccess) showToast("已更新收件箱", "success");
+      if (isManual) showToast("收件箱已更新！", "success");
     } else {
-      showToast("無法載入留言: " + data.message, "error");
+      inboxList.innerHTML = `<div class="empty-state">${data.message}</div>`;
     }
   } catch (err) {
-    showToast("讀取失敗，請確認網路連線", "error");
-    console.error(err);
-  } finally {
-    tracker.reset();
-    loadingState.classList.add("hidden");
+    inboxList.innerHTML = `<div class="empty-state">無法連線取得最新訊息，請稍後再試。</div>`;
   }
 }
 
-function renderInboxMessages(messages = []) {
-  const feed = document.getElementById("inbox-feed");
-  const emptyState = document.getElementById("inbox-empty");
-  const badge = document.getElementById("inbox-count-badge");
+function renderInboxMessages(messages) {
+  const inboxList = document.getElementById("inboxList");
+  const badge = document.getElementById("unreadBadge");
 
-  feed.innerHTML = "";
-
-  if (messages.length === 0) {
-    emptyState.classList.remove("hidden");
+  if (!messages || messages.length === 0) {
+    inboxList.innerHTML = `<div class="empty-state">📪 目前還沒有收到任何匿名留言喔！</div>`;
     badge.classList.add("hidden");
     return;
   }
 
-  emptyState.classList.add("hidden");
-  badge.textContent = messages.length;
-  badge.classList.remove("hidden");
+  let unreadCount = 0;
+  inboxList.innerHTML = "";
 
-  messages.slice().reverse().forEach(msg => {
+  messages.forEach(msg => {
+    const isNew = !msg.is_read;
+    if (isNew) unreadCount++;
+
     const card = document.createElement("div");
-    card.className = `message-card ${!msg.is_read ? 'unread' : ''}`;
-
+    card.className = `msg-card ${isNew ? 'unread' : ''}`;
     card.innerHTML = `
-      <p class="message-body">${escapeHTML(msg.content)}</p>
-      <div class="message-meta">
-        <span class="timestamp">🕒 ${msg.created_at || '最近'}</span>
-        ${!msg.is_read ? '<span class="tag-new">NEW</span>' : ''}
+      <div class="msg-header">
+        <span class="msg-title">💌 來自匿名的神秘朋友 ${isNew ? '<span class="badge-new">NEW</span>' : ''}</span>
+        <span class="msg-time">${msg.created_at || '剛剛'}</span>
       </div>
+      <div class="msg-body">${escapeHtml(msg.content)}</div>
     `;
-    feed.appendChild(card);
+    inboxList.appendChild(card);
+  });
+
+  if (unreadCount > 0) {
+    badge.innerText = unreadCount;
+    badge.classList.remove("hidden");
+  } else {
+    badge.classList.add("hidden");
+  }
+}
+
+function renderSentMessages() {
+  const sentList = document.getElementById("sentList");
+  const key = `sent_msgs_${currentUser.participantId}`;
+  const localMessages = JSON.parse(localStorage.getItem(key) || "[]");
+
+  if (localMessages.length === 0) {
+    sentList.innerHTML = `<div class="empty-state">📤 您尚未發送過任何匿名留言。</div>`;
+    return;
+  }
+
+  sentList.innerHTML = "";
+  localMessages.forEach(msg => {
+    const card = document.createElement("div");
+    card.className = "msg-card";
+    card.innerHTML = `
+      <div class="msg-header">
+        <span class="msg-title" style="color: var(--secondary);">🎯 發送給：參加者 ${msg.receiver_id}</span>
+        <span class="msg-time">${msg.created_at}</span>
+      </div>
+      <div class="msg-body">${escapeHtml(msg.content)}</div>
+    `;
+    sentList.appendChild(card);
   });
 }
 
-// ==========================================================================
-// UTILITY FUNCTIONS
-// ==========================================================================
+// ====================================================
+// UTILITIES (Progress Bar & Toast & Helpers)
+// ====================================================
+function animateProgress(progressBar, btnElement, text, startPct, endPct, duration) {
+  return new Promise(resolve => {
+    let current = startPct;
+    const btnText = btnElement.querySelector(".btn-text");
+    if (btnText) btnText.innerText = `${text} ${current}%`;
 
-function showToast(message, type = "success") {
-  const toast = document.getElementById("toast");
-  toast.textContent = message;
+    const stepTime = duration / (endPct - startPct);
+    const timer = setInterval(() => {
+      current++;
+      progressBar.style.width = `${current}%`;
+      if (btnText) btnText.innerText = `${text} ${current}%`;
+
+      if (current >= endPct) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, stepTime);
+  });
+}
+
+function resetButtonProgress(progressBar, btnElement, originalText) {
+  progressBar.style.width = "0%";
+  const btnText = btnElement.querySelector(".btn-text");
+  if (btnText) btnText.innerText = originalText;
+}
+
+function showToast(message, type = "info") {
+  const container = document.getElementById("toastContainer");
+  const toast = document.createElement("div");
   toast.className = `toast ${type}`;
 
+  let icon = "🔔";
+  if (type === "success") icon = "✅";
+  if (type === "error") icon = "❌";
+  if (type === "warning") icon = "⚠️";
+
+  toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+  container.appendChild(toast);
+
   setTimeout(() => {
-    toast.className = "toast hidden";
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(10px)";
+    toast.style.transition = "all 0.3s ease";
+    setTimeout(() => toast.remove(), 300);
   }, 3000);
 }
 
-function escapeHTML(str) {
-  if (!str) return '';
-  return String(str).replace(/[&<>'"]/g, 
-    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-  );
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, function(m) {
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    }[m];
+  });
 }
