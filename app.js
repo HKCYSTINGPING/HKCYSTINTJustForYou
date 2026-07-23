@@ -3,7 +3,6 @@
 // ==========================================
 const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3gYKAVVlbav-LijuFBYRtlG2VUO_q4LTMCNcrIt79mer-yhQ/exec";
 
-// Sensitive Bad Words List
 const LOCAL_BAD_WORDS = [
   // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
@@ -20,7 +19,6 @@ const LOCAL_BAD_WORDS = [
   "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
 ];
 
-// App State
 let currentUser = {
   participantId: null,
   phoneNumber: null
@@ -54,6 +52,29 @@ const refreshInboxBtn = document.getElementById("refresh-inbox-btn");
 const inboxList = document.getElementById("inbox-list");
 const sentList = document.getElementById("sent-list");
 const inboxUnreadBadge = document.getElementById("inbox-unread-count");
+
+// ==========================================
+// JSONP HELPER (Bypasses CORS entirely)
+// ==========================================
+function fetchJSONP(url) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
+    window[callbackName] = function(data) {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
+
+    const script = document.createElement('script');
+    script.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + callbackName;
+    script.onerror = function() {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      reject(new Error("JSONP Request Failed"));
+    };
+    document.body.appendChild(script);
+  });
+}
 
 // ==========================================
 // INITIALIZATION
@@ -105,15 +126,13 @@ async function handleLogin(e) {
     return;
   }
 
-  // 啟動載入動畫
   await animateProgress(loginProgress, loginBtn, "驗證中...");
 
   try {
     const url = `${API_URL}?participant_id=${encodeURIComponent(pId)}&phone_number=${encodeURIComponent(phone)}`;
     
-    // 加上 redirect: "follow" 處理 GAS 重定向問題
-    const response = await fetch(url, { method: "GET", redirect: "follow" });
-    const data = await response.json();
+    // 使用 JSONP 請求跳過跨網域問題
+    const data = await fetchJSONP(url);
 
     if (data.status === "success") {
       currentUser.participantId = pId;
@@ -125,11 +144,11 @@ async function handleLogin(e) {
       showToast("登入成功！歡迎回來 🎉", "success");
       showDashboard();
     } else {
-      showToast(data.message || "身份驗證失敗：電話號碼或 ID 不正確", "error");
+      showToast(data.message || "驗證失敗：電話號碼或 ID 不正確", "error");
     }
   } catch (err) {
     console.error("Login Error:", err);
-    showToast("網絡連線或驗證錯誤，請重新再試！", "error");
+    showToast("連線失敗，請再試一次！", "error");
   } finally {
     resetButtonProgress(loginProgress, loginBtn, '<i class="fa-solid fa-right-to-bracket"></i> 驗證身份並登入');
   }
@@ -168,7 +187,7 @@ function populateReceiverOptions() {
 }
 
 // ==========================================
-// SENSITIVE WORD FILTER & REALTIME INPUT
+// SENSITIVE WORD FILTER
 // ==========================================
 function handleTextareaInput() {
   const text = messageContent.value;
@@ -203,15 +222,8 @@ async function handleSendMessage(e) {
   const receiverId = receiverSelect.value;
   const content = messageContent.value.trim();
 
-  if (!receiverId) {
-    showToast("請選擇接收對象！", "error");
-    return;
-  }
-
-  if (!content) {
-    showToast("留言內容不能為空！", "error");
-    return;
-  }
+  if (!receiverId) { showToast("請選擇接收對象！", "error"); return; }
+  if (!content) { showToast("留言內容不能為空！", "error"); return; }
 
   await animateProgress(sendProgress, sendBtn, "傳送中...");
 
@@ -225,7 +237,6 @@ async function handleSendMessage(e) {
   try {
     const response = await fetch(API_URL, {
       method: "POST",
-      redirect: "follow",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
     });
@@ -245,7 +256,6 @@ async function handleSendMessage(e) {
       messageContent.value = "";
       charCount.textContent = "0";
       receiverSelect.selectedIndex = 0;
-      
       renderSentMessages();
     } else {
       showToast(data.message || "發送失敗！", "error");
@@ -266,8 +276,7 @@ async function fetchInboxMessages(manualRefresh = false) {
 
   try {
     const url = `${API_URL}?participant_id=${encodeURIComponent(currentUser.participantId)}&phone_number=${encodeURIComponent(currentUser.phoneNumber)}`;
-    const response = await fetch(url, { method: "GET", redirect: "follow" });
-    const data = await response.json();
+    const data = await fetchJSONP(url);
 
     if (data.status === "success") {
       renderInboxMessages(data.messages || []);
@@ -346,7 +355,7 @@ function renderSentMessages() {
 }
 
 // ==========================================
-// UI & UX HELPER FUNCTIONS
+// UI HELPER FUNCTIONS
 // ==========================================
 function animateProgress(progressBarEl, buttonEl, loadingText) {
   return new Promise(resolve => {
@@ -356,7 +365,7 @@ function animateProgress(progressBarEl, buttonEl, loadingText) {
     if (btnText) btnText.innerText = loadingText;
 
     const interval = setInterval(() => {
-      width += 20;
+      width += 25;
       progressBarEl.style.width = `${width}%`;
       if (width >= 100) {
         clearInterval(interval);
@@ -385,9 +394,7 @@ function showToast(message, type = "info") {
   toast.innerHTML = `<span>${icon}</span> <span>${escapeHTML(message)}</span>`;
   container.appendChild(toast);
 
-  setTimeout(() => {
-    toast.remove();
-  }, 3500);
+  setTimeout(() => { toast.remove(); }, 3500);
 }
 
 function escapeHTML(str) {
