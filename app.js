@@ -7,7 +7,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwBJwhEWVQnsr9Sq8I_8y3g
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const MEMBERS_PER_GROUP = 6;
 
-// Prohibited / Bad words list (English & Cantonese/Chinese)
+// Prohibited / Bad words list
 const PROHIBITED_WORDS = [
   // Sentences & Phrases
   "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
@@ -32,8 +32,8 @@ let currentUser = {
 // ==========================================================================
 // INITIALIZATION
 // ==========================================================================
+
 document.addEventListener("DOMContentLoaded", () => {
-  populateParticipantDropdowns();
   checkSession();
 });
 
@@ -45,20 +45,6 @@ function generateParticipantIDs() {
     }
   });
   return ids;
-}
-
-function populateParticipantDropdowns() {
-  const loginSelect = document.getElementById("login-participant-id");
-  if (!loginSelect) return;
-  loginSelect.innerHTML = '<option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>';
-
-  const allIDs = generateParticipantIDs();
-  allIDs.forEach(id => {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = `參加者 ${id}`;
-    loginSelect.appendChild(opt);
-  });
 }
 
 function updateTargetDropdown() {
@@ -126,9 +112,9 @@ function updateCharCount() {
   countSpan.textContent = val.length;
 
   if (containsBadWords(val)) {
-    textarea.style.borderColor = "var(--danger-color)";
+    textarea.style.borderColor = "var(--danger-color, #e63946)";
   } else {
-    textarea.style.borderColor = "var(--border-color)";
+    textarea.style.borderColor = "var(--border-color, #cccccc)";
   }
 }
 
@@ -242,7 +228,6 @@ function switchTab(tabName) {
   const inboxBtn = document.getElementById("tab-btn-inbox");
   const sentBtn = document.getElementById("tab-btn-sent");
 
-  // Deactivate all
   [sendTab, inboxTab, sentTab].forEach(t => t.classList.remove("active"));
   [sendBtn, inboxBtn, sentBtn].forEach(b => b.classList.remove("active"));
 
@@ -322,7 +307,6 @@ async function handleSendMessage(e) {
       document.getElementById("send-msg-form").reset();
       updateCharCount();
       
-      // 🔑 Refetch sent items from API and switch tab
       await fetchSentMessagesFromAPI(false);
       switchTab("sent");
     } else {
@@ -340,15 +324,11 @@ async function handleSendMessage(e) {
 }
 
 // ==========================================================================
-// SENT MESSAGES LOGIC (API FETCH + LOCAL BACKUP)
+// SENT MESSAGES LOGIC (SHOWS REAL RECEIVER ID)
 // ==========================================================================
 
 async function fetchSentMessagesFromAPI(showToastOnSuccess = false) {
   if (!currentUser.participant_id) return;
-
-  const feed = document.getElementById("sent-feed");
-  const emptyState = document.getElementById("sent-empty");
-  const badge = document.getElementById("sent-count-badge");
 
   try {
     const queryUrl = `${API_URL}?action=getSentMessages&participant_id=${encodeURIComponent(currentUser.participant_id)}&phone_number=${encodeURIComponent(currentUser.phone_number)}`;
@@ -404,13 +384,16 @@ function renderSentMessages(messages = []) {
   badge.textContent = messages.length;
   badge.classList.remove("hidden");
 
-  // Render reverse order (newest first)
+  // Show latest first
   messages.slice().reverse().forEach(msg => {
     const card = document.createElement("div");
     card.className = "message-card sent-card";
 
+    // Displays clear target recipient ID
+    const targetParticipant = msg.receiver_id || msg.target_id || '未知對象';
+
     card.innerHTML = `
-      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(msg.receiver_id || msg.target_id || '')}</strong></div>
+      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(targetParticipant)}</strong></div>
       <p class="message-body">${escapeHTML(msg.content)}</p>
       <div class="message-meta">
         <span class="timestamp">🕒 ${msg.created_at || '最近'}</span>
