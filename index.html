@@ -1,207 +1,174 @@
 <!DOCTYPE html>
 <html lang="zh-HK">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>匿名留言系統</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Event Anonymous Messages | 匿名留言活動</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- ==========================================================================
-       AUTHENTICATION SCREEN (LOGIN)
-       ========================================================================== -->
-  <div id="auth-screen" class="container">
-    <div class="card">
-      <h1 class="title">參加者登入</h1>
-      <p class="subtitle">請選擇你的參加者編號並輸入電話號碼以驗證身份</p>
+  <div class="app-container">
+    
+    <!-- Toast Notification Banner -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- 1. AUTHENTICATION SCREEN -->
+    <section id="auth-screen" class="card auth-card">
+      <div class="brand-header">
+        <div class="logo-icon">💌</div>
+        <h1>Event Anonymous Messages</h1>
+        <p class="subtitle">參加者匿名留言平台</p>
+      </div>
 
       <form id="login-form" onsubmit="handleLogin(event)">
-        <!-- 錯誤訊息提示 -->
-        <div id="auth-error" class="error-msg hidden"></div>
-
         <div class="form-group">
-          <label for="login-participant-id">參加者編號：</label>
+          <label for="login-participant-id">選擇你的參加者編號 (Participant ID)</label>
           <select id="login-participant-id" required>
             <option value="" disabled selected>請選擇編號 (如 1A, 3C...)</option>
-            <!-- Hardcoded Fallback + JS population -->
-            <option value="1A">參加者 1A</option>
-            <option value="2A">參加者 2A</option>
-            <option value="3A">參加者 3A</option>
-            <option value="4A">參加者 4A</option>
-            <option value="5A">參加者 5A</option>
-            <option value="6A">參加者 6A</option>
-
-            <option value="1B">參加者 1B</option>
-            <option value="2B">參加者 2B</option>
-            <option value="3B">參加者 3B</option>
-            <option value="4B">參加者 4B</option>
-            <option value="5B">參加者 5B</option>
-            <option value="6B">參加者 6B</option>
-
-            <option value="1C">參加者 1C</option>
-            <option value="2C">參加者 2C</option>
-            <option value="3C">參加者 3C</option>
-            <option value="4C">參加者 4C</option>
-            <option value="5C">參加者 5C</option>
-            <option value="6C">參加者 6C</option>
-
-            <option value="1D">參加者 1D</option>
-            <option value="2D">參加者 2D</option>
-            <option value="3D">參加者 3D</option>
-            <option value="4D">參加者 4D</option>
-            <option value="5D">參加者 5D</option>
-            <option value="6D">參加者 6D</option>
-
-            <option value="1E">參加者 1E</option>
-            <option value="2E">參加者 2E</option>
-            <option value="3E">參加者 3E</option>
-            <option value="4E">參加者 4E</option>
-            <option value="5E">參加者 5E</option>
-            <option value="6E">參加者 6E</option>
-
-            <option value="1F">參加者 1F</option>
-            <option value="2F">參加者 2F</option>
-            <option value="3F">參加者 3F</option>
-            <option value="4F">參加者 4F</option>
-            <option value="5F">參加者 5F</option>
-            <option value="6F">參加者 6F</option>
-
-            <option value="1G">參加者 1G</option>
-            <option value="2G">參加者 2G</option>
-            <option value="3G">參加者 3G</option>
-            <option value="4G">參加者 4G</option>
-            <option value="5G">參加者 5G</option>
-            <option value="6G">參加者 6G</option>
-
-            <option value="1H">參加者 1H</option>
-            <option value="2H">參加者 2H</option>
-            <option value="3H">參加者 3H</option>
-            <option value="4H">參加者 4H</option>
-            <option value="5H">參加者 5H</option>
-            <option value="6H">參加者 6H</option>
+            <!-- JavaScript populated -->
           </select>
         </div>
 
         <div class="form-group">
-          <label for="login-phone">電話號碼 (驗證用)：</label>
-          <input type="tel" id="login-phone" placeholder="請輸入電話號碼" required />
+          <label for="login-phone">電話號碼 (Phone Number)</label>
+          <input 
+            type="tel" 
+            id="login-phone" 
+            placeholder="例如：+85291234567 或 91234567" 
+            required 
+            autocomplete="tel"
+          />
+          <small class="hint">用於驗證身份，不會公開顯示。</small>
         </div>
 
-        <button type="submit" id="login-btn" class="btn btn-primary">
-          <span class="btn-text">登入系統</span>
-          <div id="login-btn-progress" class="spinner-wrapper hidden">
-            <span class="spinner"></span>
+        <div id="auth-error" class="alert alert-danger hidden"></div>
+
+        <button type="submit" id="login-btn" class="btn btn-primary btn-block">
+          <span class="btn-text">Login / 進入系統</span>
+          <div id="login-btn-progress" class="spinner-container hidden">
+            <div class="spinner-ring"></div>
             <span class="spinner-text">0%</span>
           </div>
         </button>
       </form>
-    </div>
-  </div>
+    </section>
 
-  <!-- ==========================================================================
-       DASHBOARD SCREEN (MAIN INTERFACE)
-       ========================================================================== -->
-  <div id="dashboard-screen" class="container hidden">
-    <!-- Header Area -->
-    <header class="header">
-      <div class="user-info">
-        <span id="user-display-id" class="badge-id">ID: --</span>
-      </div>
-      <button onclick="handleLogout()" class="btn btn-outline-danger btn-sm">退出登入</button>
-    </header>
+    <!-- 2. MAIN DASHBOARD SCREEN (LOGGED IN) -->
+    <section id="dashboard-screen" class="hidden">
+      
+      <!-- Top Header Nav -->
+      <header class="app-header card">
+        <div class="user-badge">
+          <span class="status-dot"></span>
+          <span id="user-display-id">ID: --</span>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="handleLogout()">切換身份 / Logout</button>
+      </header>
 
-    <!-- Navigation Tabs -->
-    <nav class="nav-tabs">
-      <button id="tab-btn-send" class="tab-btn active" onclick="switchTab('send')">
-        ✏️ 發送留言
-      </button>
-      <button id="tab-btn-inbox" class="tab-btn" onclick="switchTab('inbox')">
-        📥 收件箱 <span id="inbox-count-badge" class="count-badge hidden">0</span>
-      </button>
-      <button id="tab-btn-sent" class="tab-btn" onclick="switchTab('sent')">
-        📤 送出的留言 <span id="sent-count-badge" class="count-badge hidden">0</span>
-      </button>
-    </nav>
+      <!-- Tab Buttons -->
+      <nav class="tab-nav">
+        <button id="tab-btn-send" class="tab-btn active" onclick="switchTab('send')">
+          ✏️ 發送留言
+        </button>
+        <button id="tab-btn-inbox" class="tab-btn" onclick="switchTab('inbox')">
+          📥 收到的留言 <span id="inbox-count-badge" class="badge hidden">0</span>
+        </button>
+        <button id="tab-btn-sent" class="tab-btn" onclick="switchTab('sent')">
+          📤 送出的留言 <span id="sent-count-badge" class="badge hidden">0</span>
+        </button>
+      </nav>
 
-    <!-- TAB 1: SEND MESSAGE -->
-    <section id="tab-send" class="tab-content active">
-      <div class="card">
-        <h2>撰寫留言</h2>
+      <!-- TAB 1: SEND MESSAGE -->
+      <div id="tab-send" class="tab-content active card">
+        <h2>發送匿名留言</h2>
+        <p class="desc">你可以向任何其他參加者傳送心意或鼓勵，對方不會知道你的身份。</p>
+
         <form id="send-msg-form" onsubmit="handleSendMessage(event)">
           <div class="form-group">
-            <label for="target-participant-id">對象：</label>
+            <label for="target-participant-id">傳送給 (Target Participant)</label>
             <select id="target-participant-id" required>
               <option value="" disabled selected>選擇對象 (1A - 6H)</option>
             </select>
           </div>
 
           <div class="form-group">
-            <label for="msg-content">留言內容：</label>
+            <label for="msg-content">留言內容 (Message)</label>
             <textarea 
               id="msg-content" 
               rows="4" 
-              placeholder="請輸入想對對方說的話..." 
-              maxlength="300"
-              oninput="updateCharCount()" 
+              maxlength="200" 
+              placeholder="寫下你想對他說的話..." 
               required
+              oninput="updateCharCount()"
             ></textarea>
-            <div class="char-counter"><span id="char-num">0</span> / 300 字</div>
+            <div class="char-count"><span id="char-num">0</span> / 200</div>
           </div>
 
-          <button type="submit" id="send-btn" class="btn btn-primary">
-            <span class="btn-text">發送留言</span>
-            <div id="send-btn-progress" class="spinner-wrapper hidden">
-              <span class="spinner"></span>
+          <button type="submit" id="send-btn" class="btn btn-primary btn-block">
+            <span class="btn-text">發送匿名留言</span>
+            <div id="send-btn-progress" class="spinner-container hidden">
+              <div class="spinner-ring"></div>
               <span class="spinner-text">0%</span>
             </div>
           </button>
         </form>
       </div>
-    </section>
 
-    <!-- TAB 2: INBOX -->
-    <section id="tab-inbox" class="tab-content">
-      <div class="card">
-        <div class="section-header">
-          <h2>收件箱</h2>
-          <button onclick="fetchInboxMessages(true)" class="btn btn-sm btn-secondary">🔄 重整</button>
+      <!-- TAB 2: INBOX -->
+      <div id="tab-inbox" class="tab-content card">
+        <div class="inbox-header">
+          <h2>收到的留言</h2>
+          <button class="btn btn-icon" onclick="fetchInboxMessages(true)" title="重新整理">
+            🔄 <span class="btn-text-desktop">更新紀錄</span>
+          </button>
         </div>
 
-        <div id="inbox-loading" class="loading-wrapper hidden">
-          <span class="spinner"></span>
-          <span>載入中... <span id="inbox-progress-text">0%</span></span>
+        <div id="inbox-loading" class="loading-state hidden">
+          <div class="spinner-container large">
+            <div class="spinner-ring"></div>
+            <span id="inbox-progress-text" class="spinner-text">0%</span>
+          </div>
+          <p class="loading-label">正在載入留言...</p>
         </div>
 
+        <div id="inbox-feed" class="message-feed">
+          <!-- Messages rendered here -->
+        </div>
+
+        <!-- Empty State -->
         <div id="inbox-empty" class="empty-state hidden">
-          <p>目前沒有收到任何留言 📭</p>
+          <div class="empty-icon">📬</div>
+          <h3>暫時未有留言 / No messages yet</h3>
+          <p>當有人傳送匿名留言給你時，將會在此顯示。</p>
         </div>
-
-        <div id="inbox-feed" class="message-feed"></div>
       </div>
-    </section>
 
-    <!-- TAB 3: SENT MESSAGES -->
-    <section id="tab-sent" class="tab-content">
-      <div class="card">
-        <div class="section-header">
+      <!-- TAB 3: SENT MESSAGES (OUTBOX) -->
+      <div id="tab-sent" class="tab-content card">
+        <div class="inbox-header">
           <h2>送出的留言</h2>
-          <button onclick="fetchSentMessagesFromAPI(true)" class="btn btn-sm btn-secondary">🔄 重整</button>
+          <button class="btn btn-icon" onclick="fetchSentMessagesFromAPI(true)" title="重新整理">
+            🔄 <span class="btn-text-desktop">更新紀錄</span>
+          </button>
         </div>
 
+        <div id="sent-feed" class="message-feed">
+          <!-- Sent messages rendered here -->
+        </div>
+
+        <!-- Empty State -->
         <div id="sent-empty" class="empty-state hidden">
-          <p>你尚未發送過任何留言 📤</p>
+          <div class="empty-icon">📤</div>
+          <h3>未有送出紀錄 / No sent messages</h3>
+          <p>你發送過的留言會紀錄在這裡。</p>
         </div>
-
-        <div id="sent-feed" class="message-feed"></div>
       </div>
+
     </section>
+
   </div>
 
-  <!-- Toast Notification Container -->
-  <div id="toast" class="toast hidden"></div>
-
-  <!-- JavaScript Resource -->
   <script src="app.js"></script>
 </body>
 </html>
