@@ -16,7 +16,7 @@ const PROHIBITED_WORDS = [
   "diu 9", "sub 9", "sub9", "chi lan sin", "撚樣", "能樣", "柒頭", "笨七", "鳩登", "膠登",
   "契弟", "ass hole", "asshole", "A S S", "on lun 7 7", "臭爛袋", "挑那星", "陷家剷", "陷家",
   "吊夠", "吊 夠", "戇尻尻", "戇尻", "戇-尻", "戇 尻", "on 99", "ON 九", "on 9", "on.9", "on9",
-  "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch", "fuck", "f u c k",
+  "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch", "fuck", "f u c k", "dllm", "dklm", "DKLM",
   
   // Single Characters & Special Unicode Matches
   "撚", "屌", "尻", "鳩", "柒", "仆", "𨳒", "𨳊", "𨳍", "𨳯", 
@@ -177,7 +177,7 @@ async function handleLogin(e) {
 
       renderDashboard();
       renderInboxMessages(data.messages);
-      loadSentMessages();
+      fetchSentMessagesFromAPI(false);
       showToast("登入成功！", "success");
     } else {
       showAuthError(data.message || "身份驗證失敗，請檢查號碼是否正確。");
@@ -199,7 +199,7 @@ function checkSession() {
     currentUser = JSON.parse(savedUser);
     renderDashboard();
     fetchInboxMessages(false);
-    loadSentMessages();
+    fetchSentMessagesFromAPI(false);
   }
 }
 
@@ -255,7 +255,7 @@ function switchTab(tabName) {
   } else if (tabName === "sent") {
     sentTab.classList.add("active");
     sentBtn.classList.add("active");
-    loadSentMessages();
+    fetchSentMessagesFromAPI(false);
   }
 }
 
@@ -320,6 +320,9 @@ async function handleSendMessage(e) {
       showToast("留言已成功送出！", "success");
       document.getElementById("send-msg-form").reset();
       updateCharCount();
+      
+      // 🔑 Refetch sent items from API and switch tab
+      await fetchSentMessagesFromAPI(false);
       switchTab("sent");
     } else {
       showToast(data.message || "傳送失敗，請再試一次", "error");
@@ -336,8 +339,32 @@ async function handleSendMessage(e) {
 }
 
 // ==========================================================================
-// SENT MESSAGES (LOCAL TRACKING)
+// SENT MESSAGES LOGIC (API FETCH + LOCAL BACKUP)
 // ==========================================================================
+
+async function fetchSentMessagesFromAPI(showToastOnSuccess = false) {
+  if (!currentUser.participant_id) return;
+
+  const feed = document.getElementById("sent-feed");
+  const emptyState = document.getElementById("sent-empty");
+  const badge = document.getElementById("sent-count-badge");
+
+  try {
+    const queryUrl = `${API_URL}?action=getSentMessages&participant_id=${encodeURIComponent(currentUser.participant_id)}&phone_number=${encodeURIComponent(currentUser.phone_number)}`;
+    const response = await fetch(queryUrl);
+    const data = await response.json();
+
+    if (data.status === "success" && Array.isArray(data.messages)) {
+      renderSentMessages(data.messages);
+      if (showToastOnSuccess) showToast("已更新送出紀錄", "success");
+    } else {
+      loadSentMessagesFromLocalStorage();
+    }
+  } catch (err) {
+    console.warn("Unable to fetch sent messages from API, falling back to local storage.", err);
+    loadSentMessagesFromLocalStorage();
+  }
+}
 
 function getSentStorageKey() {
   return `sent_msgs_${currentUser.participant_id}`;
@@ -351,12 +378,15 @@ function saveSentMessageLocally(msg) {
   localStorage.setItem(key, JSON.stringify(existing));
 }
 
-function loadSentMessages() {
+function loadSentMessagesFromLocalStorage() {
   if (!currentUser.participant_id) return;
 
   const key = getSentStorageKey();
   const messages = JSON.parse(localStorage.getItem(key) || "[]");
+  renderSentMessages(messages);
+}
 
+function renderSentMessages(messages = []) {
   const feed = document.getElementById("sent-feed");
   const emptyState = document.getElementById("sent-empty");
   const badge = document.getElementById("sent-count-badge");
@@ -379,7 +409,7 @@ function loadSentMessages() {
     card.className = "message-card sent-card";
 
     card.innerHTML = `
-      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(msg.receiver_id)}</strong></div>
+      <div class="message-recipient">發送給：<strong>參加者 ${escapeHTML(msg.receiver_id || msg.target_id || '')}</strong></div>
       <p class="message-body">${escapeHTML(msg.content)}</p>
       <div class="message-meta">
         <span class="timestamp">🕒 ${msg.created_at || '最近'}</span>
@@ -447,7 +477,7 @@ function renderInboxMessages(messages = []) {
   badge.textContent = messages.length;
   badge.classList.remove("hidden");
 
-  messages.reverse().forEach(msg => {
+  messages.slice().reverse().forEach(msg => {
     const card = document.createElement("div");
     card.className = `message-card ${!msg.is_read ? 'unread' : ''}`;
 
@@ -477,7 +507,8 @@ function showToast(message, type = "success") {
 }
 
 function escapeHTML(str) {
-  return str.replace(/[&<>'"]/g, 
+  if (!str) return '';
+  return String(str).replace(/[&<>'"]/g, 
     tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
   );
 }
