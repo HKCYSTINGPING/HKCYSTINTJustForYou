@@ -6,7 +6,7 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 6;
+const SCRIPT_VERSION = 7;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
@@ -28,6 +28,10 @@ function doGet(e) {
 
     if (action === "list_participants") {
       return jsonResponse_(listParticipants_());
+    }
+
+    if (action === "bootstrap") {
+      return jsonResponse_(handleBootstrap_());
     }
 
     if (action === "get_messaging_status") {
@@ -71,13 +75,15 @@ function doGet(e) {
     if (fetchType === "sent") {
       return jsonResponse_({
         status: "success",
-        sent_messages: getSentMessages_(participantId)
+        sent_messages: getSentMessages_(participantId),
+        messaging_status: getMessagingStatusValue_()
       });
     }
 
     return jsonResponse_({
       status: "success",
-      messages: getInboxMessages_(participantId)
+      messages: getInboxMessages_(participantId),
+      messaging_status: getMessagingStatusValue_()
     });
   } catch (err) {
     return jsonResponse_({
@@ -173,6 +179,21 @@ function listParticipants_() {
     version: SCRIPT_VERSION,
     api_version: SCRIPT_VERSION,
     participants: unique
+  };
+}
+
+function handleBootstrap_() {
+  const participantsResult = listParticipants_();
+  if (participantsResult.status === "error") {
+    return participantsResult;
+  }
+
+  return {
+    status: "success",
+    version: SCRIPT_VERSION,
+    api_version: SCRIPT_VERSION,
+    participants: participantsResult.participants || [],
+    messaging_status: getMessagingStatusValue_()
   };
 }
 

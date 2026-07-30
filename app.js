@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbz4s9J9IEpgv38801aiC2p7b-5Y_ZSWcyoMLM_UNlg0lumMoO-EGB8kxhGTtS3G9xCh_Q/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzu1fly9MZY_OcuZug9oLqjZmkPtWK15QHUHN7bcfKSTz6xXh4QEF-tU3ApolWxDnPOlg/exec";
 
 const MAX_CHARS = 300;
 
@@ -27,7 +27,9 @@ const BAD_WORDS_LIST = [
    ========================================== */
 const PARTICIPANTS_CACHE_KEY = "ams_participants_cache";
 const PARTICIPANTS_CACHE_TTL = 30 * 60 * 1000;
+const INBOX_CACHE_TTL = 30 * 60 * 1000;
 const PARTICIPANTS_FETCH_TIMEOUT = 20000;
+const LOGIN_FETCH_TIMEOUT = 25000;
 const MONITOR_WATCH_TIMEOUT = 15000;
 const MONITOR_WATCH_INTERVAL = 800;
 const MONITOR_WATCH_RETRY_MS = 2000;
@@ -41,6 +43,7 @@ const state = {
   sentMessages: [],
   sentLoaded: false,
   messagingOpen: true,
+  messagingStatusLoaded: false,
   monitorAuthenticated: false,
   adminPassword: null,
   monitorMessages: []
@@ -254,7 +257,7 @@ async function runWithProgress(button, taskFn, onComplete, loadingText = "⏳ �
       await onComplete(result);
     }
 
-    await new Promise((r) => setTimeout(r, 80));
+    await new Promise((r) => setTimeout(r, 0));
     return result;
   } catch (err) {
     finished = true;
@@ -304,11 +307,17 @@ function markMessageAsRead(messageId) {
 
 function applyInboxFromApi(data) {
   state.inboxMessages = data.messages || [];
+  if (data.messaging_status) {
+    applyMessagingStatus(data.messaging_status);
+  }
 }
 
 function applySentFromApi(data) {
   state.sentMessages = data.sent_messages || [];
   state.sentLoaded = true;
+  if (data.messaging_status) {
+    applyMessagingStatus(data.messaging_status);
+  }
 }
 
 function saveSession() {
@@ -339,8 +348,50 @@ async function parseJsonResponse(response) {
   }
 }
 
+let apiWarmPromise = null;
+
+function getInboxCacheKey(participantId) {
+  return `ams_inbox_cache_${normalizeParticipantId(participantId)}`;
+}
+
+function saveInboxCache(participantId, messages) {
+  sessionStorage.setItem(getInboxCacheKey(participantId), JSON.stringify({
+    messages,
+    cachedAt: Date.now()
+  }));
+}
+
+function getCachedInbox(participantId) {
+  try {
+    const raw = sessionStorage.getItem(getInboxCacheKey(participantId));
+    if (!raw) return null;
+
+    const { messages, cachedAt } = JSON.parse(raw);
+    if (!Array.isArray(messages) || Date.now() - cachedAt > INBOX_CACHE_TTL) {
+      return null;
+    }
+
+    return messages;
+  } catch {
+    return null;
+  }
+}
+
+function clearInboxCache(participantId) {
+  if (participantId) {
+    sessionStorage.removeItem(getInboxCacheKey(participantId));
+  }
+}
+
 function normalizeParticipantId(id) {
   return String(id || "").trim().toUpperCase();
+}
+
+function warmUpApi() {
+  if (!apiWarmPromise) {
+    apiWarmPromise = fetchWithTimeout(`${API_URL}?action=get_messaging_status`, {}, 8000).catch(() => {});
+  }
+  return apiWarmPromise;
 }
 
 function getParticipantsCache() {
@@ -384,6 +435,11 @@ async function apiFetchParticipants() {
   return parseJsonResponse(response);
 }
 
+async function apiFetchBootstrap() {
+  const response = await fetchWithTimeout(`${API_URL}?action=bootstrap`);
+  return parseJsonResponse(response);
+}
+
 function applyParticipantsList(participants) {
   state.participants = participants.map(normalizeParticipantId);
   renderComboboxPicker(participantCombobox);
@@ -410,8 +466,8 @@ async function apiFetchMessages(participantId, phoneNumber, fetchType = "inbox")
     fetch_type: fetchType
   });
 
-  const response = await fetch(`${API_URL}?${params.toString()}`);
-  return response.json();
+  const response = await fetchWithTimeout(`${API_URL}?${params.toString()}`, {}, LOGIN_FETCH_TIMEOUT);
+  return parseJsonResponse(response);
 }
 
 async function apiSendMessage(senderId, phoneNumber, receiverId, content) {
@@ -585,6 +641,7 @@ function isMessagingOpen() {
 
 function applyMessagingStatus(messagingStatus) {
   state.messagingOpen = String(messagingStatus || "OPEN").trim().toUpperCase() !== "CLOSE";
+  state.messagingStatusLoaded = true;
   updateMessagingUI();
 }
 
@@ -1041,7 +1098,9 @@ function showDashboard() {
   renderComboboxPicker(receiverCombobox);
   renderSentMessages();
   updateInboxBadge();
-  loadMessagingStatus({ silent: true });
+  if (!state.messagingStatusLoaded) {
+    loadMessagingStatus({ silent: true });
+  }
 }
 
 function getFilteredParticipants(filterText = "", excludeId = null) {
@@ -1143,6 +1202,7 @@ function setupComboboxEvents(combobox) {
   });
 
   combobox.input.addEventListener("focus", () => {
+    warmUpApi();
     if (!combobox.input.disabled && state.participants.length > 0) {
       openCombobox(combobox);
     }
@@ -1162,6 +1222,36 @@ function setParticipantInputReady(placeholder, hintText = "", hintWarning = fals
   participantHint.textContent = hintText;
   participantHint.classList.toggle("hidden", !hintText);
   participantHint.classList.toggle("warning", hintWarning);
+}
+
+async function loadBootstrap() {
+  try {
+    const data = await apiFetchBootstrap();
+    if (data.status !== "success") return false;
+
+    if (Array.isArray(data.participants)) {
+      if (data.participants.length > 0) {
+        applyParticipantsList(data.participants);
+      } else {
+        setParticipantInputReady(
+          "請手動輸入編號 (如 1A)",
+          "⚠️ Participants 工作表沒有 participant_id 資料",
+          true
+        );
+      }
+    } else {
+      return false;
+    }
+
+    if (data.messaging_status) {
+      applyMessagingStatus(data.messaging_status);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn("Bootstrap load failed:", err);
+    return false;
+  }
 }
 
 async function loadParticipants() {
@@ -1377,6 +1467,11 @@ async function handleLogin(e) {
   }
 
   try {
+    await Promise.race([
+      warmUpApi(),
+      new Promise((resolve) => setTimeout(resolve, 200))
+    ]);
+
     await runWithProgress(
       loginBtn,
       () => apiFetchMessages(participantId, phoneNumber, "inbox"),
@@ -1387,6 +1482,7 @@ async function handleLogin(e) {
           state.sentMessages = [];
           state.sentLoaded = false;
           applyInboxFromApi(data);
+          saveInboxCache(participantId, state.inboxMessages);
           saveSession();
           showDashboard();
           renderInbox();
@@ -1416,6 +1512,7 @@ async function handleRefreshInbox() {
           applyInboxFromApi(data);
           renderInbox();
           updateInboxBadge();
+          saveInboxCache(state.participantId, state.inboxMessages);
           showToast("📥 收件箱已更新！", "success");
         } else {
           showToast(data.message || "同步失敗", "error");
@@ -1543,12 +1640,15 @@ async function handleSendMessage(e) {
    Actions: Logout
    ========================================== */
 function handleLogout() {
+  const previousParticipantId = state.participantId;
   state.participantId = null;
   state.phoneNumber = null;
   state.inboxMessages = [];
   state.sentMessages = [];
   state.sentLoaded = false;
+  state.messagingStatusLoaded = false;
   clearSession();
+  clearInboxCache(previousParticipantId);
   closeAllComboboxes();
   loginForm.reset();
   sendForm.reset();
@@ -1560,15 +1660,53 @@ function handleLogout() {
 /* ==========================================
    Session Restore
    ========================================== */
+async function refreshSessionInBackground(participantId, phoneNumber) {
+  try {
+    const data = await apiFetchMessages(participantId, phoneNumber, "inbox");
+
+    if (
+      data.status === "success" &&
+      normalizeParticipantId(state.participantId) === normalizeParticipantId(participantId)
+    ) {
+      applyInboxFromApi(data);
+      saveInboxCache(participantId, state.inboxMessages);
+      renderInbox();
+      updateInboxBadge();
+      return;
+    }
+
+    if (data.status !== "success") {
+      clearSession();
+      clearInboxCache(participantId);
+      showLogin();
+    }
+  } catch (err) {
+    console.warn("Background session refresh failed:", err);
+  }
+}
+
 async function tryRestoreSession() {
   const participantId = sessionStorage.getItem("ams_participant_id");
   const phoneNumber = sessionStorage.getItem("ams_phone_number");
 
   if (!participantId || !phoneNumber) return;
 
+  const cachedInbox = getCachedInbox(participantId);
+  if (cachedInbox) {
+    state.participantId = participantId;
+    state.phoneNumber = phoneNumber;
+    state.sentMessages = [];
+    state.sentLoaded = false;
+    state.inboxMessages = cachedInbox;
+    showDashboard();
+    renderInbox();
+    refreshSessionInBackground(participantId, phoneNumber);
+    return;
+  }
+
   try {
     await runWithProgress(
-      null,
+      loginBtn,
       () => apiFetchMessages(participantId, phoneNumber, "inbox"),
       (data) => {
         if (data.status === "success") {
@@ -1577,13 +1715,15 @@ async function tryRestoreSession() {
           state.sentMessages = [];
           state.sentLoaded = false;
           applyInboxFromApi(data);
+          saveInboxCache(participantId, state.inboxMessages);
           showDashboard();
           renderInbox();
         } else {
           clearSession();
         }
       },
-      "🔄 恢復登入中..."
+      "🔐 恢復登入中...",
+      { useGlobalOverlay: false }
     );
   } catch {
     clearSession();
@@ -1595,6 +1735,10 @@ async function tryRestoreSession() {
    ========================================== */
 document.getElementById("phone-number").addEventListener("input", (e) => {
   e.target.value = e.target.value.replace(/\D/g, "");
+});
+
+document.getElementById("phone-number").addEventListener("focus", () => {
+  warmUpApi();
 });
 
 loginForm.addEventListener("submit", handleLogin);
@@ -1668,8 +1812,20 @@ window.addEventListener("orientationchange", () => {
 /* ==========================================
    Init
    ========================================== */
-validateMessageInput();
-updateAdminButtonsVisibility();
-loadParticipants();
-loadMessagingStatus();
-tryRestoreSession();
+async function initApp() {
+  validateMessageInput();
+  updateAdminButtonsVisibility();
+  warmUpApi();
+
+  const bootstrapOk = await loadBootstrap();
+  if (!bootstrapOk) {
+    await Promise.all([
+      loadParticipants(),
+      loadMessagingStatus({ silent: true })
+    ]);
+  }
+
+  tryRestoreSession();
+}
+
+initApp();
