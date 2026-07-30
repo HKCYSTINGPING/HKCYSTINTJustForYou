@@ -52,6 +52,168 @@ body.is-loading {
   overflow: hidden;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
+/* ==========================================
+   Settings Button & Modal
+   ========================================== */
+.settings-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9000;
+  width: 44px;
+  height: 44px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition), background var(--transition), box-shadow var(--transition);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.settings-btn:hover {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.settings-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 28px 24px;
+  animation: fadeUp 0.25s ease;
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.settings-card-header h2 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.settings-close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.settings-close-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.settings-desc {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.settings-status {
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
+}
+
+.settings-status.is-open {
+  color: var(--success);
+  border-color: rgba(16, 185, 129, 0.35);
+  background: #ecfdf5;
+}
+
+.settings-status.is-closed {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: #fef2f2;
+}
+
+.settings-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.settings-actions .btn {
+  width: 100%;
+  min-height: 44px;
+}
+
+.settings-disable-btn {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.settings-disable-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: #fef2f2;
+}
+
+.messaging-closed-banner {
+  margin: -8px 0 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: #fef2f2;
+  border: 2px solid rgba(239, 68, 68, 0.35);
+  color: var(--danger);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.send-form.is-closed {
+  opacity: 0.72;
+}
+
+.send-form.is-closed .combobox input:disabled,
+.send-form.is-closed textarea:disabled {
+  cursor: not-allowed;
+}
+
 /* ==========================================
    Global Loading Overlay
    ========================================== */

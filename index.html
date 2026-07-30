@@ -19,6 +19,35 @@
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
+  <!-- Settings Button -->
+  <button type="button" id="settings-btn" class="settings-btn" aria-label="系統設定" title="系統設定">⚙️</button>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="settings-modal hidden" aria-hidden="true">
+    <div class="settings-backdrop" id="settings-backdrop"></div>
+    <div class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-card-header">
+        <h2 id="settings-title">⚙️ 系統設定</h2>
+        <button type="button" id="settings-close-modal" class="settings-close-btn" aria-label="關閉">✕</button>
+      </div>
+      <p class="settings-desc">管理留言功能開關（需管理員密碼）</p>
+      <p id="settings-status" class="settings-status">目前狀態：載入中...</p>
+      <div class="form-group">
+        <label for="settings-password">🔑 管理員密碼</label>
+        <input
+          type="password"
+          id="settings-password"
+          placeholder="請輸入管理員密碼"
+          autocomplete="off"
+        >
+      </div>
+      <div class="settings-actions">
+        <button type="button" id="settings-enable-btn" class="btn btn-primary">✅ 開通留言</button>
+        <button type="button" id="settings-disable-btn" class="btn btn-secondary settings-disable-btn">🚫 關閉留言</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Login Screen -->
   <section id="login-screen" class="screen login-screen">
     <div class="login-card">
@@ -124,6 +153,7 @@
         <div class="panel-card">
           <h2>✏️ 發送匿名留言</h2>
           <p class="panel-desc">選擇接收對象，寫下您想說的話 💌</p>
+          <p id="messaging-closed-banner" class="messaging-closed-banner hidden">🚫 留言功能目前已關閉，暫時無法發送留言</p>
 
           <form id="send-form" class="send-form" novalidate>
             <div class="form-group">

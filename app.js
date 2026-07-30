@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbw7ij8wdlIa3a0-5MenOcURenuhXamf0cqPdPyNNo5cA0A5h6YcBFVmK4nVQvWw_PLuVA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbze9ceywXpnce-hXn27XwDbyMVpSNBURG-CFs-THn-lMmaIHdDpWnBDvsnqUosENj77/exec";
 
 const MAX_CHARS = 300;
 
@@ -35,7 +35,8 @@ const state = {
   participants: [],
   inboxMessages: [],
   sentMessages: [],
-  sentLoaded: false
+  sentLoaded: false,
+  messagingOpen: true
 };
 
 /* ==========================================
@@ -98,6 +99,15 @@ const toastContainer = document.getElementById("toast-container");
 const loadingOverlay = document.getElementById("loading-overlay");
 const loadingOverlayText = document.getElementById("loading-overlay-text");
 const loadingOverlayPercent = document.getElementById("loading-overlay-percent");
+const settingsBtn = document.getElementById("settings-btn");
+const settingsModal = document.getElementById("settings-modal");
+const settingsBackdrop = document.getElementById("settings-backdrop");
+const settingsCloseModal = document.getElementById("settings-close-modal");
+const settingsStatus = document.getElementById("settings-status");
+const settingsPassword = document.getElementById("settings-password");
+const settingsEnableBtn = document.getElementById("settings-enable-btn");
+const settingsDisableBtn = document.getElementById("settings-disable-btn");
+const messagingClosedBanner = document.getElementById("messaging-closed-banner");
 
 let loadingCount = 0;
 
@@ -391,6 +401,125 @@ async function apiSendMessage(senderId, phoneNumber, receiverId, content) {
   return response.json();
 }
 
+async function apiGetMessagingStatus() {
+  const response = await fetchWithTimeout(`${API_URL}?action=get_messaging_status`);
+  return parseJsonResponse(response);
+}
+
+async function apiSetMessagingStatus(password, messagingStatus) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "set_messaging_status",
+      password,
+      messaging_status: messagingStatus
+    })
+  });
+  return parseJsonResponse(response);
+}
+
+function isMessagingOpen() {
+  return state.messagingOpen !== false;
+}
+
+function applyMessagingStatus(messagingStatus) {
+  state.messagingOpen = String(messagingStatus || "OPEN").trim().toUpperCase() !== "CLOSE";
+  updateMessagingUI();
+}
+
+function updateMessagingUI() {
+  const open = isMessagingOpen();
+
+  if (settingsStatus) {
+    settingsStatus.textContent = open ? "目前狀態：✅ 開通留言" : "目前狀態：🚫 關閉留言";
+    settingsStatus.classList.toggle("is-open", open);
+    settingsStatus.classList.toggle("is-closed", !open);
+  }
+
+  if (messagingClosedBanner) {
+    messagingClosedBanner.classList.toggle("hidden", open);
+  }
+
+  if (sendForm) {
+    sendForm.classList.toggle("is-closed", !open);
+  }
+
+  if (receiverSelect) receiverSelect.disabled = !open;
+  if (receiverToggle) receiverToggle.disabled = !open;
+  if (messageContent) messageContent.disabled = !open;
+  if (!open) closeAllComboboxes();
+
+  validateMessageInput();
+}
+
+async function loadMessagingStatus(options = {}) {
+  const { silent = false } = options;
+
+  try {
+    const data = await apiGetMessagingStatus();
+    if (data.status === "success" && data.messaging_status) {
+      applyMessagingStatus(data.messaging_status);
+      return true;
+    }
+  } catch (err) {
+    console.warn("Load messaging status error:", err);
+  }
+
+  if (!silent) {
+    applyMessagingStatus("OPEN");
+  }
+
+  return false;
+}
+
+function openSettingsModal() {
+  settingsModal.classList.remove("hidden");
+  settingsModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  settingsPassword.value = "";
+  loadMessagingStatus({ silent: true });
+  settingsPassword.focus();
+}
+
+function closeSettingsModal() {
+  settingsModal.classList.add("hidden");
+  settingsModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+  settingsPassword.value = "";
+}
+
+async function handleSetMessagingStatus(targetStatus) {
+  const password = settingsPassword.value.trim();
+
+  if (!password) {
+    showToast("請輸入管理員密碼", "warning");
+    settingsPassword.focus();
+    return;
+  }
+
+  const button = targetStatus === "OPEN" ? settingsEnableBtn : settingsDisableBtn;
+
+  try {
+    button.disabled = true;
+    const data = await apiSetMessagingStatus(password, targetStatus);
+
+    if (data.status === "success") {
+      applyMessagingStatus(data.messaging_status);
+      settingsPassword.value = "";
+      showToast(data.message || (targetStatus === "OPEN" ? "留言功能已開通" : "留言功能已關閉"), "success");
+      closeSettingsModal();
+      return;
+    }
+
+    showToast(data.message || "設定失敗", "error");
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+    console.error("Set messaging status error:", err);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* ==========================================
    UI: Login & Dashboard
    ========================================== */
@@ -587,6 +716,7 @@ function showDashboard() {
   renderComboboxPicker(receiverCombobox);
   renderSentMessages();
   updateInboxBadge();
+  loadMessagingStatus({ silent: true });
 }
 
 function switchTab(tabName) {
@@ -652,7 +782,7 @@ function validateMessageInput() {
     badWordWarning.classList.add("hidden");
   }
 
-  const canSend = receiver && content.trim().length > 0 && !hasBadWords;
+  const canSend = isMessagingOpen() && receiver && content.trim().length > 0 && !hasBadWords;
   sendBtn.disabled = !canSend;
 }
 
@@ -815,6 +945,11 @@ async function handleRefreshSent() {
 async function handleSendMessage(e) {
   e.preventDefault();
 
+  if (!isMessagingOpen()) {
+    showToast("留言功能目前已關閉，暫時無法發送留言", "warning");
+    return;
+  }
+
   const receiverId = normalizeParticipantId(receiverSelect.value);
   const content = messageContent.value.trim();
 
@@ -837,12 +972,19 @@ async function handleSendMessage(e) {
   try {
     await runWithProgress(
       sendBtn,
-      () => apiSendMessage(
-        state.participantId,
-        state.phoneNumber,
-        receiverId,
-        content
-      ),
+      async () => {
+        await loadMessagingStatus({ silent: true });
+        if (!isMessagingOpen()) {
+          return { status: "error", message: "留言功能目前已關閉，暫時無法發送留言" };
+        }
+
+        return apiSendMessage(
+          state.participantId,
+          state.phoneNumber,
+          receiverId,
+          content
+        );
+      },
       async (data) => {
         if (data.status === "success") {
           messageContent.value = "";
@@ -869,6 +1011,9 @@ async function handleSendMessage(e) {
           switchTab("sent");
           showToast("📨 留言已成功發送！", "success");
         } else {
+          if (data.messaging_status === "CLOSE" || (data.message && data.message.includes("關閉"))) {
+            applyMessagingStatus("CLOSE");
+          }
           showToast(data.message || "發送失敗", "error");
         }
       },
@@ -963,8 +1108,17 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeAllComboboxes();
+    if (!settingsModal.classList.contains("hidden")) {
+      closeSettingsModal();
+    }
   }
 });
+
+settingsBtn.addEventListener("click", openSettingsModal);
+settingsBackdrop.addEventListener("click", closeSettingsModal);
+settingsCloseModal.addEventListener("click", closeSettingsModal);
+settingsEnableBtn.addEventListener("click", () => handleSetMessagingStatus("OPEN"));
+settingsDisableBtn.addEventListener("click", () => handleSetMessagingStatus("CLOSE"));
 
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
@@ -975,4 +1129,5 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
    ========================================== */
 validateMessageInput();
 loadParticipants();
+loadMessagingStatus();
 tryRestoreSession();
