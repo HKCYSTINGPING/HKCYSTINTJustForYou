@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbzkM9FiKRDDs8_biVpAS3s808iOI4kmHYNcxGmOSQoNhELnQzfueP2gKefmXDlEVM8MDg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbz4s9J9IEpgv38801aiC2p7b-5Y_ZSWcyoMLM_UNlg0lumMoO-EGB8kxhGTtS3G9xCh_Q/exec";
 
 const MAX_CHARS = 300;
 
