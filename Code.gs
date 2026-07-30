@@ -6,7 +6,7 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 3;
+const SCRIPT_VERSION = 4;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
@@ -31,7 +31,19 @@ function doGet(e) {
     }
 
     if (action === "get_messaging_status") {
-      return jsonResponse_(handleGetMessagingStatus_());
+      return jsonResponse_(handleGetMessagingStatus_(params));
+    }
+
+    if (action === "admin_list_messages") {
+      return jsonResponse_(handleAdminListMessages_(params.password));
+    }
+
+    if (action === "admin_delete_message") {
+      return jsonResponse_(handleAdminDeleteMessage_(params.password, params.message_id));
+    }
+
+    if (action === "set_messaging_status") {
+      return jsonResponse_(handleSetMessagingStatus_(params.password, params.messaging_status));
     }
 
     const participantId = normalizeId_(params.participant_id);
@@ -87,6 +99,13 @@ function doPost(e) {
       return jsonResponse_(handleAdminDeleteMessage_(data.password, data.message_id));
     }
 
+    if (data.action) {
+      return jsonResponse_({
+        status: "error",
+        message: "不支援的操作"
+      });
+    }
+
     return jsonResponse_(handleSendMessage_(data));
   } catch (err) {
     return jsonResponse_({
@@ -114,6 +133,7 @@ function listParticipants_() {
     return {
       status: "success",
       version: SCRIPT_VERSION,
+      api_version: SCRIPT_VERSION,
       participants: []
     };
   }
@@ -143,6 +163,7 @@ function listParticipants_() {
   return {
     status: "success",
     version: SCRIPT_VERSION,
+    api_version: SCRIPT_VERSION,
     participants: unique
   };
 }
@@ -446,10 +467,26 @@ function isMessagingOpen_() {
   return getMessagingStatusValue_() === "OPEN";
 }
 
-function handleGetMessagingStatus_() {
+function handleGetMessagingStatus_(params) {
+  params = params || {};
+  const admin = String(params.admin || "").trim();
+
+  if (admin === "list_messages") {
+    return handleAdminListMessages_(params.password);
+  }
+
+  if (admin === "delete_message") {
+    return handleAdminDeleteMessage_(params.password, params.message_id);
+  }
+
+  if (admin === "set_status") {
+    return handleSetMessagingStatus_(params.password, params.messaging_status);
+  }
+
   return {
     status: "success",
-    messaging_status: getMessagingStatusValue_()
+    messaging_status: getMessagingStatusValue_(),
+    api_version: SCRIPT_VERSION
   };
 }
 

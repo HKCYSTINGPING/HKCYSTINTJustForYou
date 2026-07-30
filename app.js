@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbze9ceywXpnce-hXn27XwDbyMVpSNBURG-CFs-THn-lMmaIHdDpWnBDvsnqUosENj77/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxFPMmQcfK_bR7V-JfFFNkaBYSTEADW0fyqG88C703njpuRjMhWM5_JVcxL_24FWIuH4w/exec";
 
 const MAX_CHARS = 300;
 
@@ -425,39 +425,100 @@ async function apiGetMessagingStatus() {
   return parseJsonResponse(response);
 }
 
+async function apiAdminGet(params) {
+  const response = await fetchWithTimeout(`${API_URL}?${new URLSearchParams(params).toString()}`);
+  return parseJsonResponse(response);
+}
+
+function isLegacyBackendError(data) {
+  const message = data?.message || "";
+  return data?.status === "error" && (
+    message.includes("participant_id") ||
+    message.includes("phone_number") ||
+    message.includes("不支援")
+  );
+}
+
+async function apiAdminRequest(primaryParams, fallbackParams, validateFn) {
+  let data = await apiAdminGet(primaryParams);
+  if (validateFn(data)) return data;
+
+  if (fallbackParams && (isLegacyBackendError(data) || needsAdminFallback(data, validateFn))) {
+    data = await apiAdminGet(fallbackParams);
+    if (validateFn(data)) return data;
+  }
+
+  return data;
+}
+
+function needsAdminFallback(data, validateFn) {
+  return data?.status === "success" && !validateFn(data);
+}
+
 async function apiSetMessagingStatus(password, messagingStatus) {
-  const response = await fetch(API_URL, {
-    method: "POST",
-    body: JSON.stringify({
+  return apiAdminRequest(
+    {
       action: "set_messaging_status",
       password,
       messaging_status: messagingStatus
-    })
-  });
-  return parseJsonResponse(response);
+    },
+    {
+      action: "get_messaging_status",
+      admin: "set_status",
+      password,
+      messaging_status: messagingStatus
+    },
+    (data) => data.status === "success" && !!data.messaging_status
+  );
 }
 
 async function apiAdminListMessages(password) {
-  const response = await fetch(API_URL, {
-    method: "POST",
-    body: JSON.stringify({
-      action: "admin_list_messages",
-      password
-    })
-  });
-  return parseJsonResponse(response);
+  const data = await apiAdminRequest(
+    { action: "admin_list_messages", password },
+    { action: "get_messaging_status", admin: "list_messages", password },
+    (result) => result.status === "success" && Array.isArray(result.messages)
+  );
+
+  if (data.status === "success" && !Array.isArray(data.messages)) {
+    return { status: "error", message: "BACKEND_OUTDATED" };
+  }
+
+  return data;
 }
 
 async function apiAdminDeleteMessage(password, messageId) {
-  const response = await fetch(API_URL, {
-    method: "POST",
-    body: JSON.stringify({
+  return apiAdminRequest(
+    {
       action: "admin_delete_message",
       password,
       message_id: messageId
-    })
-  });
-  return parseJsonResponse(response);
+    },
+    {
+      action: "get_messaging_status",
+      admin: "delete_message",
+      password,
+      message_id: messageId
+    },
+    (data) => data.status === "success" && !!data.message_id
+  );
+}
+
+function getAdminAuthErrorMessage(data) {
+  const message = data?.message || "";
+
+  if (
+    message === "BACKEND_OUTDATED" ||
+    message.includes("participant_id") ||
+    message.includes("phone_number")
+  ) {
+    return "後端尚未部署監察功能，請將最新 Code.gs 貼到 Apps Script 並重新部署";
+  }
+
+  if (message.includes("留言功能目前已關閉")) {
+    return "管理員驗證失敗，請確認 Apps Script 已重新部署最新版本";
+  }
+
+  return message || "驗證失敗";
 }
 
 function isMessageDeleted(msg) {
@@ -634,7 +695,7 @@ async function handleMonitorLogin() {
           return;
         }
 
-        showToast(data.message || "驗證失敗", "error");
+        showToast(getAdminAuthErrorMessage(data), "error");
       },
       "🔐 驗證管理員中..."
     );
