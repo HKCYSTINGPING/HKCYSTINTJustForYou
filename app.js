@@ -28,7 +28,7 @@ const BAD_WORDS_LIST = [
 const PARTICIPANTS_CACHE_KEY = "ams_participants_cache";
 const PARTICIPANTS_CACHE_TTL = 30 * 60 * 1000;
 const PARTICIPANTS_FETCH_TIMEOUT = 20000;
-const MONITOR_POLL_INTERVAL = 5000;
+const MONITOR_POLL_INTERVAL = 100;
 const ADMIN_DELETED_REASON = "此留言已被管理員刪除（管理員監察）";
 
 const state = {
@@ -120,13 +120,13 @@ const monitorContent = document.getElementById("monitor-content");
 const monitorPassword = document.getElementById("monitor-password");
 const monitorLoginBtn = document.getElementById("monitor-login-btn");
 const monitorCloseBtn = document.getElementById("monitor-close-btn");
-const monitorRefreshBtn = document.getElementById("monitor-refresh-btn");
 const monitorList = document.getElementById("monitor-list");
 const monitorLastUpdated = document.getElementById("monitor-last-updated");
 const monitorMessageCount = document.getElementById("monitor-message-count");
 const monitorStatusText = document.getElementById("monitor-status-text");
 
 let monitorPollTimer = null;
+let monitorLoading = false;
 
 let loadingCount = 0;
 
@@ -639,8 +639,7 @@ function openMonitorScreen() {
 
   if (state.monitorAuthenticated) {
     showMonitorDashboard();
-    loadMonitorMessages({ silent: true });
-    startMonitorPolling();
+    startMonitorPolling(true);
   } else {
     showMonitorAuth();
   }
@@ -656,16 +655,18 @@ function closeMonitorScreen() {
 function showMonitorAuth() {
   monitorAuthPanel.classList.remove("hidden");
   monitorContent.classList.add("hidden");
-  monitorRefreshBtn.classList.add("hidden");
-  monitorStatusText.textContent = "請先完成管理員驗證";
+  monitorStatusText.innerHTML = "請先完成管理員驗證";
   monitorPassword.focus();
 }
 
 function showMonitorDashboard() {
   monitorAuthPanel.classList.add("hidden");
   monitorContent.classList.remove("hidden");
-  monitorRefreshBtn.classList.remove("hidden");
-  monitorStatusText.textContent = "實時監察中";
+  monitorStatusText.innerHTML = `
+    <span class="monitor-live-badge">
+      <span class="live-dot" aria-hidden="true"></span>
+      實時更新中（每 0.1 秒）
+    </span>`;
 }
 
 async function handleMonitorLogin() {
@@ -715,7 +716,7 @@ function updateMonitorMeta() {
   });
 }
 
-function renderMonitorList() {
+function renderMonitorList(newMessageIds = new Set()) {
   if (state.monitorMessages.length === 0) {
     monitorList.innerHTML = `
       <div class="empty-state">
@@ -726,7 +727,7 @@ function renderMonitorList() {
   }
 
   monitorList.innerHTML = state.monitorMessages.map((msg) => `
-    <article class="message-card monitor-card" data-message-id="${escapeHtml(msg.message_id)}">
+    <article class="message-card monitor-card ${newMessageIds.has(msg.message_id) ? "monitor-card-new" : ""}" data-message-id="${escapeHtml(msg.message_id)}">
       <div class="message-card-header">
         <div class="monitor-meta">
           <span class="monitor-route">📤 ${escapeHtml(formatParticipantLabel(msg.sender_id))} → 🎯 ${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
@@ -748,17 +749,29 @@ function renderMonitorList() {
 }
 
 async function loadMonitorMessages(options = {}) {
-  const { silent = false, button = null } = options;
+  const { silent = false } = options;
 
   if (!state.monitorAuthenticated || !state.adminPassword) return false;
+  if (monitorLoading) return false;
 
-  const task = async () => {
+  monitorLoading = true;
+
+  try {
+    const previousIds = new Set(state.monitorMessages.map((msg) => msg.message_id));
     const data = await apiAdminListMessages(state.adminPassword);
+
     if (data.status === "success") {
-      state.monitorMessages = data.messages || [];
-      renderMonitorList();
+      const messages = data.messages || [];
+      const newMessageIds = new Set(
+        messages
+          .filter((msg) => !previousIds.has(msg.message_id))
+          .map((msg) => msg.message_id)
+      );
+
+      state.monitorMessages = messages;
+      renderMonitorList(newMessageIds);
       updateMonitorMeta();
-      return data;
+      return true;
     }
 
     if (data.message === "密碼錯誤") {
@@ -768,23 +781,19 @@ async function loadMonitorMessages(options = {}) {
       showMonitorAuth();
     }
 
-    throw new Error(data.message || "載入監察留言失敗");
-  };
-
-  try {
-    if (button) {
-      await runWithProgress(button, task, null, "👁️ 更新監察留言...");
-      return true;
+    if (!silent) {
+      showToast(data.message || "載入監察留言失敗", "error");
     }
 
-    await task();
-    return true;
+    return false;
   } catch (err) {
     if (!silent) {
       showToast(err.message || "載入監察留言失敗", "error");
     }
     console.warn("Load monitor messages error:", err);
     return false;
+  } finally {
+    monitorLoading = false;
   }
 }
 
@@ -822,18 +831,31 @@ async function handleAdminDeleteMessage(messageId, button) {
   }
 }
 
-function startMonitorPolling() {
+function startMonitorPolling(runImmediately = false) {
   stopMonitorPolling();
-  monitorPollTimer = setInterval(() => {
-    if (!monitorScreen.classList.contains("hidden") && state.monitorAuthenticated) {
-      loadMonitorMessages({ silent: true });
+
+  const tick = async () => {
+    if (monitorScreen.classList.contains("hidden") || !state.monitorAuthenticated) {
+      return;
     }
-  }, MONITOR_POLL_INTERVAL);
+
+    if (!document.hidden) {
+      await loadMonitorMessages({ silent: true });
+    }
+
+    monitorPollTimer = window.setTimeout(tick, MONITOR_POLL_INTERVAL);
+  };
+
+  if (runImmediately) {
+    tick();
+  } else {
+    monitorPollTimer = window.setTimeout(tick, MONITOR_POLL_INTERVAL);
+  }
 }
 
 function stopMonitorPolling() {
   if (monitorPollTimer) {
-    clearInterval(monitorPollTimer);
+    clearTimeout(monitorPollTimer);
     monitorPollTimer = null;
   }
 }
@@ -1456,11 +1478,21 @@ settingsDisableBtn.addEventListener("click", () => handleSetMessagingStatus("CLO
 monitorBtn.addEventListener("click", openMonitorScreen);
 monitorCloseBtn.addEventListener("click", closeMonitorScreen);
 monitorLoginBtn.addEventListener("click", handleMonitorLogin);
-monitorRefreshBtn.addEventListener("click", () => loadMonitorMessages({ button: monitorRefreshBtn }));
 monitorPassword.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     handleMonitorLogin();
+  }
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (
+    !document.hidden &&
+    !monitorScreen.classList.contains("hidden") &&
+    state.monitorAuthenticated
+  ) {
+    loadMonitorMessages({ silent: true });
+    startMonitorPolling();
   }
 });
 

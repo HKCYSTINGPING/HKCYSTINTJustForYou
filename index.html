@@ -289,11 +289,6 @@
           <p id="monitor-status-text" class="monitor-status-text">管理員監察面板</p>
         </div>
         <div class="monitor-header-actions">
-          <button type="button" id="monitor-refresh-btn" class="btn btn-secondary btn-progress hidden">
-            <span class="btn-text">🔄 立即更新</span>
-            <span class="btn-progress-bar" aria-hidden="true"></span>
-            <span class="btn-progress-label" aria-hidden="true">0%</span>
-          </button>
           <button type="button" id="monitor-close-btn" class="btn btn-ghost">✕ 關閉</button>
         </div>
       </header>
@@ -323,7 +318,11 @@
             <div>
               <h2>📋 全部留言</h2>
               <p class="panel-desc">
-                自動更新中 · <span id="monitor-last-updated">—</span>
+                <span class="monitor-live-badge inline">
+                  <span class="live-dot" aria-hidden="true"></span>
+                  實時自動更新
+                </span>
+                · 上次同步 <span id="monitor-last-updated">—</span>
                 · 共 <span id="monitor-message-count">0</span> 則
               </p>
             </div>

@@ -282,6 +282,56 @@ body.modal-open {
   margin-top: 4px;
 }
 
+.monitor-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #86efac;
+}
+
+.monitor-live-badge.inline {
+  color: var(--success);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 0 rgba(134, 239, 172, 0.7);
+  animation: livePulse 1.6s ease infinite;
+}
+
+@keyframes livePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(134, 239, 172, 0.65);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(134, 239, 172, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(134, 239, 172, 0);
+  }
+}
+
+.monitor-card-new {
+  animation: monitorNewIn 0.45s ease;
+  border-color: rgba(16, 185, 129, 0.45);
+  background: #ecfdf5;
+}
+
+@keyframes monitorNewIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .monitor-header-actions {
   display: flex;
   gap: 10px;
@@ -1216,12 +1266,10 @@ body.modal-open {
   }
 
   .monitor-header-actions {
-    width: 100%;
+    width: auto;
   }
 
-  .monitor-header-actions .btn-secondary,
   .monitor-header-actions .btn-ghost {
-    flex: 1;
     min-height: 44px;
   }
 
