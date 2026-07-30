@@ -580,6 +580,11 @@ async function loadMessagingStatus(options = {}) {
 }
 
 function openSettingsModal() {
+  if (!isAdminAccessAllowed()) {
+    showToast("管理員功能僅可在登入頁使用，請先登出", "warning");
+    return;
+  }
+
   settingsModal.classList.remove("hidden");
   settingsModal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
@@ -633,8 +638,40 @@ async function handleSetMessagingStatus(targetStatus) {
   }
 }
 
+function isAdminAccessAllowed() {
+  return loginScreen && !loginScreen.classList.contains("hidden");
+}
+
+function updateAdminButtonsVisibility() {
+  const allowAdmin = isAdminAccessAllowed();
+  monitorBtn.classList.toggle("hidden", !allowAdmin);
+  settingsBtn.classList.toggle("hidden", !allowAdmin);
+}
+
+function clearAdminSession() {
+  state.monitorAuthenticated = false;
+  state.adminPassword = null;
+  state.monitorMessages = [];
+  stopMonitorPolling();
+  monitorPassword.value = "";
+  showMonitorAuth();
+  monitorList.innerHTML = `
+    <div class="empty-state">
+      <span class="empty-emoji">👁️</span>
+      <p>目前沒有留言</p>
+    </div>`;
+  monitorMessageCount.textContent = "0";
+  monitorLastUpdated.textContent = "—";
+}
+
 function openMonitorScreen() {
+  if (!isAdminAccessAllowed()) {
+    showToast("管理員監察僅可在登入頁使用，請先登出", "warning");
+    return;
+  }
+
   monitorScreen.classList.remove("hidden");
+  monitorScreen.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
 
   if (state.monitorAuthenticated) {
@@ -647,9 +684,9 @@ function openMonitorScreen() {
 
 function closeMonitorScreen() {
   monitorScreen.classList.add("hidden");
+  monitorScreen.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
-  stopMonitorPolling();
-  monitorPassword.value = "";
+  clearAdminSession();
 }
 
 function showMonitorAuth() {
@@ -866,6 +903,24 @@ function stopMonitorPolling() {
 function showLogin() {
   loginScreen.classList.remove("hidden");
   dashboardScreen.classList.add("hidden");
+  document.body.classList.remove("participant-active");
+  closeMonitorScreen();
+  closeSettingsModal();
+  updateAdminButtonsVisibility();
+}
+
+function showDashboard() {
+  loginScreen.classList.add("hidden");
+  dashboardScreen.classList.remove("hidden");
+  document.body.classList.add("participant-active");
+  closeMonitorScreen();
+  closeSettingsModal();
+  updateAdminButtonsVisibility();
+  userBadge.textContent = `🎫 目前身分：${formatParticipantLabel(state.participantId)}`;
+  renderComboboxPicker(receiverCombobox);
+  renderSentMessages();
+  updateInboxBadge();
+  loadMessagingStatus({ silent: true });
 }
 
 function getFilteredParticipants(filterText = "", excludeId = null) {
@@ -1047,16 +1102,6 @@ async function loadParticipants() {
     showToast(isTimeout ? "載入名單逾時，可先手動輸入編號" : "無法載入參加者名單，請手動輸入", "warning");
     console.error("Load participants error:", err);
   }
-}
-
-function showDashboard() {
-  loginScreen.classList.add("hidden");
-  dashboardScreen.classList.remove("hidden");
-  userBadge.textContent = `🎫 目前身分：${formatParticipantLabel(state.participantId)}`;
-  renderComboboxPicker(receiverCombobox);
-  renderSentMessages();
-  updateInboxBadge();
-  loadMessagingStatus({ silent: true });
 }
 
 function switchTab(tabName) {
@@ -1386,10 +1431,6 @@ function handleLogout() {
   state.sentLoaded = false;
   clearSession();
   closeAllComboboxes();
-  closeMonitorScreen();
-  state.monitorAuthenticated = false;
-  state.adminPassword = null;
-  state.monitorMessages = [];
   loginForm.reset();
   sendForm.reset();
   validateMessageInput();
@@ -1508,6 +1549,7 @@ window.addEventListener("orientationchange", () => {
    Init
    ========================================== */
 validateMessageInput();
+updateAdminButtonsVisibility();
 loadParticipants();
 loadMessagingStatus();
 tryRestoreSession();

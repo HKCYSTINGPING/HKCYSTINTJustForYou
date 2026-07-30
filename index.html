@@ -24,8 +24,8 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <!-- Settings Button -->
-  <button type="button" id="monitor-btn" class="monitor-btn" aria-label="管理員監察" title="管理員監察">👁️</button>
-  <button type="button" id="settings-btn" class="settings-btn" aria-label="系統設定" title="系統設定">⚙️</button>
+  <button type="button" id="monitor-btn" class="monitor-btn admin-only-btn" aria-label="管理員監察" title="管理員監察">👁️</button>
+  <button type="button" id="settings-btn" class="settings-btn admin-only-btn" aria-label="系統設定" title="系統設定">⚙️</button>
 
   <!-- Settings Modal -->
   <div id="settings-modal" class="settings-modal hidden" aria-hidden="true">
@@ -281,7 +281,7 @@
   </section>
 
   <!-- Admin Monitor Screen -->
-  <section id="monitor-screen" class="screen monitor-screen hidden">
+  <section id="monitor-screen" class="screen monitor-screen hidden" aria-hidden="true">
     <div class="monitor-shell">
       <header class="monitor-header">
         <div>
