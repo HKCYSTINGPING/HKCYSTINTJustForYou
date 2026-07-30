@@ -50,10 +50,42 @@ const userBadge = document.getElementById("user-badge");
 const sendForm = document.getElementById("send-form");
 const sendBtn = document.getElementById("send-btn");
 const participantSelect = document.getElementById("participant-id");
-const participantOptions = document.getElementById("participant-options");
+const participantToggle = document.getElementById("participant-toggle");
+const participantPicker = document.getElementById("participant-picker");
+const participantPickerList = document.getElementById("participant-picker-list");
+const participantPickerCount = document.getElementById("participant-picker-count");
 const participantHint = document.getElementById("participant-hint");
 const receiverSelect = document.getElementById("receiver-id");
-const receiverOptions = document.getElementById("receiver-options");
+const receiverToggle = document.getElementById("receiver-toggle");
+const receiverPicker = document.getElementById("receiver-picker");
+const receiverPickerList = document.getElementById("receiver-picker-list");
+const receiverPickerCount = document.getElementById("receiver-picker-count");
+
+const participantCombobox = {
+  root: document.getElementById("participant-combobox"),
+  input: participantSelect,
+  toggle: participantToggle,
+  picker: participantPicker,
+  list: participantPickerList,
+  count: participantPickerCount,
+  getExcludeId: () => null,
+  emptyNoList: "尚無參加者名單",
+  emptyNoMatch: "找不到符合的參加者",
+  onSelect: () => {}
+};
+
+const receiverCombobox = {
+  root: document.getElementById("receiver-combobox"),
+  input: receiverSelect,
+  toggle: receiverToggle,
+  picker: receiverPicker,
+  list: receiverPickerList,
+  count: receiverPickerCount,
+  getExcludeId: () => state.participantId,
+  emptyNoList: "尚無接收對象名單",
+  emptyNoMatch: "找不到符合的接收對象",
+  onSelect: () => validateMessageInput()
+};
 const messageContent = document.getElementById("message-content");
 const charCount = document.getElementById("char-count");
 const badWordWarning = document.getElementById("bad-word-warning");
@@ -318,8 +350,8 @@ async function apiFetchParticipants() {
 
 function applyParticipantsList(participants) {
   state.participants = participants.map(normalizeParticipantId);
-  populateDatalist(participantOptions);
-  populateReceiverSelect();
+  renderComboboxPicker(participantCombobox);
+  renderComboboxPicker(receiverCombobox);
   saveParticipantsCache(state.participants);
   setParticipantInputReady("請選擇或輸入編號 (如 1A, 3C...)");
 }
@@ -367,25 +399,120 @@ function showLogin() {
   dashboardScreen.classList.add("hidden");
 }
 
-function populateDatalist(datalistElement, excludeId = null) {
-  datalistElement.innerHTML = "";
+function getFilteredParticipants(filterText = "", excludeId = null) {
+  const query = normalizeParticipantId(filterText);
+  let list = state.participants.filter(
+    (id) => normalizeParticipantId(id) !== normalizeParticipantId(excludeId)
+  );
 
-  state.participants
-    .filter((id) => normalizeParticipantId(id) !== normalizeParticipantId(excludeId))
-    .forEach((id) => {
-      const option = document.createElement("option");
-      option.value = id;
-      option.label = formatParticipantLabel(id);
-      datalistElement.appendChild(option);
-    });
+  if (!query) return list;
+
+  return list.filter((id) =>
+    id.includes(query) || formatParticipantLabel(id).includes(query)
+  );
 }
 
-function populateReceiverSelect() {
-  populateDatalist(receiverOptions, state.participantId);
+function renderComboboxPicker(combobox, filterText = combobox.input.value) {
+  const filtered = getFilteredParticipants(filterText, combobox.getExcludeId());
+  const currentId = normalizeParticipantId(combobox.input.value);
+
+  combobox.list.innerHTML = "";
+
+  if (filtered.length === 0) {
+    combobox.list.innerHTML = `
+      <p class="participant-picker-empty">
+        ${state.participants.length === 0 ? combobox.emptyNoList : combobox.emptyNoMatch}
+      </p>`;
+    combobox.count.textContent = "";
+    return;
+  }
+
+  combobox.count.textContent = `${filtered.length} 位`;
+
+  filtered.forEach((id) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "participant-picker-item";
+    item.dataset.id = id;
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", id === currentId ? "true" : "false");
+    if (id === currentId) item.classList.add("selected");
+    item.innerHTML = `
+      <span class="picker-id">${escapeHtml(id)}</span>
+      <span>${escapeHtml(formatParticipantLabel(id))}</span>`;
+    item.addEventListener("click", () => selectFromCombobox(combobox, id));
+    combobox.list.appendChild(item);
+  });
+}
+
+function setComboboxOpen(combobox, isOpen) {
+  combobox.picker.classList.toggle("hidden", !isOpen);
+  combobox.input.setAttribute("aria-expanded", String(isOpen));
+  combobox.toggle.setAttribute("aria-expanded", String(isOpen));
+
+  if (isOpen) {
+    renderComboboxPicker(combobox);
+  }
+}
+
+function openCombobox(combobox) {
+  if (combobox.input.disabled) return;
+  closeAllComboboxes(combobox);
+  setComboboxOpen(combobox, true);
+}
+
+function closeCombobox(combobox) {
+  setComboboxOpen(combobox, false);
+}
+
+function closeAllComboboxes(except = null) {
+  [participantCombobox, receiverCombobox].forEach((combobox) => {
+    if (combobox !== except) {
+      closeCombobox(combobox);
+    }
+  });
+}
+
+function toggleCombobox(combobox) {
+  if (combobox.picker.classList.contains("hidden")) {
+    openCombobox(combobox);
+  } else {
+    closeCombobox(combobox);
+  }
+}
+
+function selectFromCombobox(combobox, id) {
+  combobox.input.value = id;
+  closeCombobox(combobox);
+  combobox.input.focus();
+  combobox.onSelect(id);
+}
+
+function setupComboboxEvents(combobox) {
+  combobox.input.addEventListener("input", () => {
+    combobox.input.value = normalizeParticipantId(combobox.input.value);
+    if (!combobox.picker.classList.contains("hidden")) {
+      renderComboboxPicker(combobox);
+    }
+    combobox.onSelect();
+  });
+
+  combobox.input.addEventListener("focus", () => {
+    if (!combobox.input.disabled && state.participants.length > 0) {
+      openCombobox(combobox);
+    }
+  });
+
+  combobox.toggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleCombobox(combobox);
+  });
 }
 
 function setParticipantInputReady(placeholder, hintText = "", hintWarning = false) {
   participantSelect.disabled = false;
+  participantToggle.disabled = false;
   participantSelect.placeholder = placeholder;
   participantHint.textContent = hintText;
   participantHint.classList.toggle("hidden", !hintText);
@@ -402,9 +529,11 @@ async function loadParticipants() {
   }
 
   participantSelect.disabled = true;
+  participantToggle.disabled = true;
   participantSelect.value = "";
   participantSelect.placeholder = "載入參加者名單中...";
   participantHint.classList.add("hidden");
+  closeAllComboboxes();
 
   const enableManualTimer = setTimeout(() => {
     setParticipantInputReady(
@@ -455,7 +584,7 @@ function showDashboard() {
   loginScreen.classList.add("hidden");
   dashboardScreen.classList.remove("hidden");
   userBadge.textContent = `🎫 目前身分：${formatParticipantLabel(state.participantId)}`;
-  populateReceiverSelect();
+  renderComboboxPicker(receiverCombobox);
   renderSentMessages();
   updateInboxBadge();
 }
@@ -763,6 +892,7 @@ function handleLogout() {
   state.sentMessages = [];
   state.sentLoaded = false;
   clearSession();
+  closeAllComboboxes();
   loginForm.reset();
   sendForm.reset();
   validateMessageInput();
@@ -817,13 +947,23 @@ refreshInboxBtn.addEventListener("click", handleRefreshInbox);
 refreshSentBtn.addEventListener("click", handleRefreshSent);
 
 messageContent.addEventListener("input", validateMessageInput);
-receiverSelect.addEventListener("input", validateMessageInput);
-participantSelect.addEventListener("input", () => {
-  participantSelect.value = normalizeParticipantId(participantSelect.value);
+
+setupComboboxEvents(participantCombobox);
+setupComboboxEvents(receiverCombobox);
+
+document.addEventListener("click", (e) => {
+  const insideCombobox = [participantCombobox, receiverCombobox].some(
+    (combobox) => combobox.root.contains(e.target)
+  );
+  if (!insideCombobox) {
+    closeAllComboboxes();
+  }
 });
-receiverSelect.addEventListener("input", () => {
-  receiverSelect.value = normalizeParticipantId(receiverSelect.value);
-  validateMessageInput();
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    closeAllComboboxes();
+  }
 });
 
 document.querySelectorAll(".tab-btn").forEach((btn) => {

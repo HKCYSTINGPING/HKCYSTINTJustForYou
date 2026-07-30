@@ -32,17 +32,40 @@
       <form id="login-form" class="login-form" novalidate>
         <div class="form-group">
           <label for="participant-id">👤 參加者編號</label>
-          <input
-            type="text"
-            id="participant-id"
-            name="participant_id"
-            list="participant-options"
-            placeholder="載入參加者名單中..."
-            autocomplete="off"
-            required
-            disabled
-          >
-          <datalist id="participant-options"></datalist>
+          <div class="combobox" id="participant-combobox">
+            <input
+              type="text"
+              id="participant-id"
+              name="participant_id"
+              placeholder="載入參加者名單中..."
+              autocomplete="off"
+              required
+              disabled
+              aria-autocomplete="list"
+              aria-controls="participant-picker"
+              aria-expanded="false"
+            >
+            <button
+              type="button"
+              id="participant-toggle"
+              class="combobox-toggle"
+              aria-label="開啟參加者名單"
+              aria-expanded="false"
+              aria-controls="participant-picker"
+              disabled
+            >
+              <svg class="combobox-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <div id="participant-picker" class="participant-picker hidden" role="listbox" aria-label="參加者名單">
+              <div class="participant-picker-header">
+                <span>👥 選擇參加者</span>
+                <span id="participant-picker-count" class="participant-picker-count"></span>
+              </div>
+              <div id="participant-picker-list" class="participant-picker-list"></div>
+            </div>
+          </div>
           <p id="participant-hint" class="field-hint hidden"></p>
         </div>
 
@@ -105,16 +128,38 @@
           <form id="send-form" class="send-form" novalidate>
             <div class="form-group">
               <label for="receiver-id">🎯 接收對象</label>
-              <input
-                type="text"
-                id="receiver-id"
-                name="receiver_id"
-                list="receiver-options"
-                placeholder="請選擇或輸入接收者"
-                autocomplete="off"
-                required
-              >
-              <datalist id="receiver-options"></datalist>
+              <div class="combobox" id="receiver-combobox">
+                <input
+                  type="text"
+                  id="receiver-id"
+                  name="receiver_id"
+                  placeholder="請選擇或輸入接收者"
+                  autocomplete="off"
+                  required
+                  aria-autocomplete="list"
+                  aria-controls="receiver-picker"
+                  aria-expanded="false"
+                >
+                <button
+                  type="button"
+                  id="receiver-toggle"
+                  class="combobox-toggle"
+                  aria-label="開啟接收對象名單"
+                  aria-expanded="false"
+                  aria-controls="receiver-picker"
+                >
+                  <svg class="combobox-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <div id="receiver-picker" class="participant-picker hidden" role="listbox" aria-label="接收對象名單">
+                  <div class="participant-picker-header">
+                    <span>🎯 選擇接收對象</span>
+                    <span id="receiver-picker-count" class="participant-picker-count"></span>
+                  </div>
+                  <div id="receiver-picker-list" class="participant-picker-list"></div>
+                </div>
+              </div>
             </div>
 
             <div class="form-group">
