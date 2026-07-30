@@ -34,14 +34,21 @@
 html {
   font-size: 16px;
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+  background-attachment: fixed;
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--text);
   line-height: 1.6;
+  -webkit-tap-highlight-color: transparent;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .hidden {
@@ -61,8 +68,8 @@ body.modal-open {
    ========================================== */
 .settings-btn {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
   z-index: 9000;
   width: 44px;
   height: 44px;
@@ -82,8 +89,8 @@ body.modal-open {
 
 .monitor-btn {
   position: fixed;
-  top: 16px;
-  right: 68px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(64px + env(safe-area-inset-right, 0px));
   z-index: 9000;
   width: 44px;
   height: 44px;
@@ -244,6 +251,8 @@ body.modal-open {
   align-items: stretch;
   justify-content: flex-start;
   padding: 16px;
+  padding-top: calc(60px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .monitor-shell {
@@ -289,8 +298,9 @@ body.modal-open {
 }
 
 .monitor-list {
-  max-height: calc(100vh - 220px);
+  max-height: calc(100dvh - 240px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .monitor-card .message-card-header {
@@ -415,14 +425,14 @@ body.modal-open {
    ========================================== */
 .toast-container {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: min(420px, calc(100% - 32px));
+  width: min(420px, calc(100% - 24px));
   pointer-events: none;
 }
 
@@ -460,18 +470,24 @@ body.modal-open {
    ========================================== */
 .screen {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  padding-top: calc(64px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
 
 .dashboard-screen {
   flex-direction: column;
   align-items: stretch;
   padding: 16px;
+  padding-top: calc(60px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   max-width: 860px;
   margin: 0 auto;
+  width: 100%;
 }
 
 /* ==========================================
@@ -570,11 +586,12 @@ body.modal-open {
   padding: 12px 16px;
   border: 2px solid var(--border);
   border-radius: var(--radius);
-  font-size: 1rem;
+  font-size: 16px;
   font-family: inherit;
   background: var(--surface-alt);
   color: var(--text);
   transition: border-color var(--transition), box-shadow var(--transition);
+  touch-action: manipulation;
 }
 
 .form-group input:focus,
@@ -604,7 +621,8 @@ body.modal-open {
 }
 
 .combobox input {
-  padding-right: 44px;
+  padding-right: 48px;
+  min-height: 48px;
 }
 
 .combobox-toggle {
@@ -612,7 +630,8 @@ body.modal-open {
   top: 2px;
   right: 2px;
   bottom: 2px;
-  width: 40px;
+  width: 44px;
+  min-width: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -622,6 +641,7 @@ body.modal-open {
   color: var(--text-muted);
   cursor: pointer;
   transition: color var(--transition), background var(--transition);
+  touch-action: manipulation;
 }
 
 .combobox-toggle:hover:not(:disabled) {
@@ -676,9 +696,10 @@ body.modal-open {
 }
 
 .participant-picker-list {
-  max-height: 240px;
+  max-height: min(240px, 40dvh);
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .participant-picker-item {
@@ -686,6 +707,7 @@ body.modal-open {
   align-items: center;
   gap: 10px;
   width: 100%;
+  min-height: 48px;
   padding: 12px 16px;
   border: none;
   border-bottom: 1px solid var(--border);
@@ -768,6 +790,8 @@ body.modal-open {
   transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
   position: relative;
   overflow: hidden;
+  touch-action: manipulation;
+  min-height: 44px;
 }
 
 .btn:active:not(:disabled) {
@@ -904,6 +928,7 @@ body.modal-open {
 .tab-btn {
   flex: 1;
   min-width: 0;
+  min-height: 44px;
   padding: 12px 10px;
   border: none;
   border-radius: calc(var(--radius-lg) - 4px);
@@ -1068,46 +1093,217 @@ body.modal-open {
 }
 
 /* ==========================================
-   Responsive
+   Responsive — Mobile First Enhancements
    ========================================== */
 @media (max-width: 600px) {
+  .login-screen {
+    align-items: flex-start;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
   .login-card {
-    padding: 28px 20px;
+    padding: 24px 18px;
+    margin-top: 8px;
+  }
+
+  .login-header {
+    margin-bottom: 24px;
   }
 
   .login-header h1 {
-    font-size: 1.45rem;
+    font-size: 1.35rem;
+  }
+
+  .login-emoji {
+    font-size: 2.5rem;
   }
 
   .dashboard-header {
-    flex-direction: column;
+    flex-direction: row;
     align-items: flex-start;
+    padding: 8px 0 12px;
+    gap: 12px;
+  }
+
+  .header-info {
+    flex: 1;
+    min-width: 0;
+    padding-right: 88px;
+  }
+
+  .header-info h1 {
+    font-size: 1.15rem;
+    line-height: 1.35;
+  }
+
+  .user-badge {
+    font-size: 0.82rem;
+    word-break: break-word;
   }
 
   .dashboard-header .btn-ghost {
-    align-self: flex-end;
+    align-self: flex-start;
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  .tab-nav {
+    margin-bottom: 12px;
   }
 
   .tab-btn {
-    font-size: 0.78rem;
-    padding: 10px 8px;
+    font-size: 0.76rem;
+    padding: 10px 6px;
+    min-height: 44px;
   }
 
   .panel-card {
-    padding: 20px 16px;
+    padding: 18px 14px;
+    border-radius: var(--radius);
+  }
+
+  .panel-card h2 {
+    font-size: 1.1rem;
+  }
+
+  .panel-desc {
+    font-size: 0.85rem;
+    margin-bottom: 18px;
   }
 
   .panel-header-row {
     flex-direction: column;
+    gap: 12px;
   }
 
   .panel-header-row .btn-secondary {
     width: 100%;
+    min-height: 44px;
+  }
+
+  .settings-modal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .settings-card {
+    max-width: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: 24px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+    max-height: 92dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-actions .btn {
+    min-height: 48px;
+  }
+
+  .monitor-header {
+    padding-top: 0;
+  }
+
+  .monitor-header h1 {
+    font-size: 1.2rem;
+    padding-right: 0;
+  }
+
+  .monitor-header-actions {
+    width: 100%;
+  }
+
+  .monitor-header-actions .btn-secondary,
+  .monitor-header-actions .btn-ghost {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .monitor-card .message-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .monitor-delete-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .monitor-route {
+    font-size: 0.82rem;
+    word-break: break-word;
+  }
+
+  .message-card {
+    padding: 14px;
+  }
+
+  .message-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .message-receiver {
+    font-size: 0.82rem;
+    word-break: break-word;
+  }
+
+  .message-content {
+    font-size: 0.92rem;
+  }
+
+  .form-group textarea {
+    min-height: 120px;
+  }
+
+  .loading-overlay-content {
+    padding: 24px 28px;
+    margin: 0 16px;
+  }
+
+  .toast {
+    font-size: 0.9rem;
+    padding: 12px 16px;
   }
 }
 
 @media (max-width: 380px) {
   .tab-btn {
-    font-size: 0.72rem;
+    font-size: 0.7rem;
+    padding: 10px 4px;
+  }
+
+  .monitor-btn,
+  .settings-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 1.05rem;
+  }
+
+  .monitor-btn {
+    right: calc(56px + env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .btn:active:not(:disabled),
+  .tab-btn:active,
+  .participant-picker-item:active,
+  .monitor-btn:active,
+  .settings-btn:active {
+    transform: scale(0.97);
+  }
+
+  .monitor-btn:hover,
+  .settings-btn:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.18);
   }
 }

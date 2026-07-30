@@ -1468,6 +1468,10 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
 
+window.addEventListener("orientationchange", () => {
+  closeAllComboboxes();
+});
+
 /* ==========================================
    Init
    ========================================== */
