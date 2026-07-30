@@ -28,6 +28,8 @@ const BAD_WORDS_LIST = [
 const PARTICIPANTS_CACHE_KEY = "ams_participants_cache";
 const PARTICIPANTS_CACHE_TTL = 30 * 60 * 1000;
 const PARTICIPANTS_FETCH_TIMEOUT = 20000;
+const MONITOR_POLL_INTERVAL = 5000;
+const ADMIN_DELETED_REASON = "此留言已被管理員刪除（管理員監察）";
 
 const state = {
   participantId: null,
@@ -36,7 +38,10 @@ const state = {
   inboxMessages: [],
   sentMessages: [],
   sentLoaded: false,
-  messagingOpen: true
+  messagingOpen: true,
+  monitorAuthenticated: false,
+  adminPassword: null,
+  monitorMessages: []
 };
 
 /* ==========================================
@@ -108,6 +113,20 @@ const settingsPassword = document.getElementById("settings-password");
 const settingsEnableBtn = document.getElementById("settings-enable-btn");
 const settingsDisableBtn = document.getElementById("settings-disable-btn");
 const messagingClosedBanner = document.getElementById("messaging-closed-banner");
+const monitorBtn = document.getElementById("monitor-btn");
+const monitorScreen = document.getElementById("monitor-screen");
+const monitorAuthPanel = document.getElementById("monitor-auth-panel");
+const monitorContent = document.getElementById("monitor-content");
+const monitorPassword = document.getElementById("monitor-password");
+const monitorLoginBtn = document.getElementById("monitor-login-btn");
+const monitorCloseBtn = document.getElementById("monitor-close-btn");
+const monitorRefreshBtn = document.getElementById("monitor-refresh-btn");
+const monitorList = document.getElementById("monitor-list");
+const monitorLastUpdated = document.getElementById("monitor-last-updated");
+const monitorMessageCount = document.getElementById("monitor-message-count");
+const monitorStatusText = document.getElementById("monitor-status-text");
+
+let monitorPollTimer = null;
 
 let loadingCount = 0;
 
@@ -418,6 +437,33 @@ async function apiSetMessagingStatus(password, messagingStatus) {
   return parseJsonResponse(response);
 }
 
+async function apiAdminListMessages(password) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "admin_list_messages",
+      password
+    })
+  });
+  return parseJsonResponse(response);
+}
+
+async function apiAdminDeleteMessage(password, messageId) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "admin_delete_message",
+      password,
+      message_id: messageId
+    })
+  });
+  return parseJsonResponse(response);
+}
+
+function isMessageDeleted(msg) {
+  return String(msg?.status || "").trim().toLowerCase() === "deleted";
+}
+
 function isMessagingOpen() {
   return state.messagingOpen !== false;
 }
@@ -498,25 +544,236 @@ async function handleSetMessagingStatus(targetStatus) {
   }
 
   const button = targetStatus === "OPEN" ? settingsEnableBtn : settingsDisableBtn;
+  const loadingText = targetStatus === "OPEN" ? "✅ 開通留言中..." : "🚫 關閉留言中...";
 
   try {
-    button.disabled = true;
-    const data = await apiSetMessagingStatus(password, targetStatus);
+    await runWithProgress(
+      button,
+      () => apiSetMessagingStatus(password, targetStatus),
+      (data) => {
+        if (data.status === "success") {
+          applyMessagingStatus(data.messaging_status);
+          settingsPassword.value = "";
+          showToast(
+            data.message || (targetStatus === "OPEN" ? "留言功能已開通" : "留言功能已關閉"),
+            "success"
+          );
+          closeSettingsModal();
+          return;
+        }
 
-    if (data.status === "success") {
-      applyMessagingStatus(data.messaging_status);
-      settingsPassword.value = "";
-      showToast(data.message || (targetStatus === "OPEN" ? "留言功能已開通" : "留言功能已關閉"), "success");
-      closeSettingsModal();
-      return;
-    }
-
-    showToast(data.message || "設定失敗", "error");
+        showToast(data.message || "設定失敗", "error");
+      },
+      loadingText
+    );
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
     console.error("Set messaging status error:", err);
-  } finally {
-    button.disabled = false;
+  }
+}
+
+function openMonitorScreen() {
+  monitorScreen.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+
+  if (state.monitorAuthenticated) {
+    showMonitorDashboard();
+    loadMonitorMessages({ silent: true });
+    startMonitorPolling();
+  } else {
+    showMonitorAuth();
+  }
+}
+
+function closeMonitorScreen() {
+  monitorScreen.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  stopMonitorPolling();
+  monitorPassword.value = "";
+}
+
+function showMonitorAuth() {
+  monitorAuthPanel.classList.remove("hidden");
+  monitorContent.classList.add("hidden");
+  monitorRefreshBtn.classList.add("hidden");
+  monitorStatusText.textContent = "請先完成管理員驗證";
+  monitorPassword.focus();
+}
+
+function showMonitorDashboard() {
+  monitorAuthPanel.classList.add("hidden");
+  monitorContent.classList.remove("hidden");
+  monitorRefreshBtn.classList.remove("hidden");
+  monitorStatusText.textContent = "實時監察中";
+}
+
+async function handleMonitorLogin() {
+  const password = monitorPassword.value.trim();
+
+  if (!password) {
+    showToast("請輸入管理員密碼", "warning");
+    monitorPassword.focus();
+    return;
+  }
+
+  try {
+    await runWithProgress(
+      monitorLoginBtn,
+      () => apiAdminListMessages(password),
+      (data) => {
+        if (data.status === "success") {
+          state.monitorAuthenticated = true;
+          state.adminPassword = password;
+          state.monitorMessages = data.messages || [];
+          monitorPassword.value = "";
+          showMonitorDashboard();
+          renderMonitorList();
+          updateMonitorMeta();
+          startMonitorPolling();
+          showToast("已进入管理員監察頁面", "success");
+          return;
+        }
+
+        showToast(data.message || "驗證失敗", "error");
+      },
+      "🔐 驗證管理員中..."
+    );
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+    console.error("Monitor login error:", err);
+  }
+}
+
+function updateMonitorMeta() {
+  monitorMessageCount.textContent = String(state.monitorMessages.length);
+  monitorLastUpdated.textContent = new Date().toLocaleTimeString("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+}
+
+function renderMonitorList() {
+  if (state.monitorMessages.length === 0) {
+    monitorList.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-emoji">👁️</span>
+        <p>目前沒有留言</p>
+      </div>`;
+    return;
+  }
+
+  monitorList.innerHTML = state.monitorMessages.map((msg) => `
+    <article class="message-card monitor-card" data-message-id="${escapeHtml(msg.message_id)}">
+      <div class="message-card-header">
+        <div class="monitor-meta">
+          <span class="monitor-route">📤 ${escapeHtml(formatParticipantLabel(msg.sender_id))} → 🎯 ${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
+          <span class="message-meta">🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
+        </div>
+        <button
+          type="button"
+          class="btn btn-secondary monitor-delete-btn btn-progress"
+          data-message-id="${escapeHtml(msg.message_id)}"
+        ><span class="btn-text">🗑️ 刪除留言</span><span class="btn-progress-bar" aria-hidden="true"></span><span class="btn-progress-label" aria-hidden="true">0%</span></button>
+      </div>
+      <p class="message-content">${escapeHtml(msg.content)}</p>
+    </article>
+  `).join("");
+
+  monitorList.querySelectorAll(".monitor-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", () => handleAdminDeleteMessage(btn.dataset.messageId, btn));
+  });
+}
+
+async function loadMonitorMessages(options = {}) {
+  const { silent = false, button = null } = options;
+
+  if (!state.monitorAuthenticated || !state.adminPassword) return false;
+
+  const task = async () => {
+    const data = await apiAdminListMessages(state.adminPassword);
+    if (data.status === "success") {
+      state.monitorMessages = data.messages || [];
+      renderMonitorList();
+      updateMonitorMeta();
+      return data;
+    }
+
+    if (data.message === "密碼錯誤") {
+      state.monitorAuthenticated = false;
+      state.adminPassword = null;
+      stopMonitorPolling();
+      showMonitorAuth();
+    }
+
+    throw new Error(data.message || "載入監察留言失敗");
+  };
+
+  try {
+    if (button) {
+      await runWithProgress(button, task, null, "👁️ 更新監察留言...");
+      return true;
+    }
+
+    await task();
+    return true;
+  } catch (err) {
+    if (!silent) {
+      showToast(err.message || "載入監察留言失敗", "error");
+    }
+    console.warn("Load monitor messages error:", err);
+    return false;
+  }
+}
+
+async function handleAdminDeleteMessage(messageId, button) {
+  if (!state.adminPassword || !messageId) return;
+
+  const confirmed = window.confirm("確定要刪除此留言嗎？發送者將會在「送出的留言」看到已被管理員刪除。");
+  if (!confirmed) return;
+
+  const deleteBtn = button;
+
+  try {
+    await runWithProgress(
+      deleteBtn,
+      () => apiAdminDeleteMessage(state.adminPassword, messageId),
+      async (data) => {
+        if (data.status === "success") {
+          showToast("留言已刪除", "success");
+          await loadMonitorMessages({ silent: true });
+
+          if (state.participantId && state.sentLoaded) {
+            await handleRefreshSent();
+          }
+          return;
+        }
+
+        showToast(data.message || "刪除失敗", "error");
+      },
+      "🗑️ 刪除留言中...",
+      { useGlobalOverlay: false }
+    );
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+    console.error("Admin delete message error:", err);
+  }
+}
+
+function startMonitorPolling() {
+  stopMonitorPolling();
+  monitorPollTimer = setInterval(() => {
+    if (!monitorScreen.classList.contains("hidden") && state.monitorAuthenticated) {
+      loadMonitorMessages({ silent: true });
+    }
+  }, MONITOR_POLL_INTERVAL);
+}
+
+function stopMonitorPolling() {
+  if (monitorPollTimer) {
+    clearInterval(monitorPollTimer);
+    monitorPollTimer = null;
   }
 }
 
@@ -834,15 +1091,23 @@ function renderSentMessages() {
     (a, b) => new Date(b.created_at) - new Date(a.created_at)
   );
 
-  sentList.innerHTML = sorted.map((msg) => `
-    <article class="message-card">
+  sentList.innerHTML = sorted.map((msg) => {
+    const deleted = isMessageDeleted(msg);
+    const deletedNotice = msg.deleted_reason || ADMIN_DELETED_REASON;
+
+    return `
+    <article class="message-card ${deleted ? "deleted" : ""}">
       <div class="message-card-header">
         <span class="message-receiver">🎯 接收對象：${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
         <span class="message-meta">🕐 ${escapeHtml(msg.created_at)}</span>
       </div>
-      <p class="message-content">${escapeHtml(msg.content)}</p>
-    </article>
-  `).join("");
+      ${deleted ? `
+        <p class="message-deleted-notice">🚫 ${escapeHtml(deletedNotice)}</p>
+        ${msg.deleted_at ? `<p class="message-deleted-time">刪除時間：${escapeHtml(msg.deleted_at)}</p>` : ""}
+      ` : ""}
+      <p class="message-content ${deleted ? "is-deleted" : ""}">${escapeHtml(msg.content)}</p>
+    </article>`;
+  }).join("");
 }
 
 /* ==========================================
@@ -1038,6 +1303,10 @@ function handleLogout() {
   state.sentLoaded = false;
   clearSession();
   closeAllComboboxes();
+  closeMonitorScreen();
+  state.monitorAuthenticated = false;
+  state.adminPassword = null;
+  state.monitorMessages = [];
   loginForm.reset();
   sendForm.reset();
   validateMessageInput();
@@ -1111,6 +1380,9 @@ document.addEventListener("keydown", (e) => {
     if (!settingsModal.classList.contains("hidden")) {
       closeSettingsModal();
     }
+    if (!monitorScreen.classList.contains("hidden")) {
+      closeMonitorScreen();
+    }
   }
 });
 
@@ -1119,6 +1391,17 @@ settingsBackdrop.addEventListener("click", closeSettingsModal);
 settingsCloseModal.addEventListener("click", closeSettingsModal);
 settingsEnableBtn.addEventListener("click", () => handleSetMessagingStatus("OPEN"));
 settingsDisableBtn.addEventListener("click", () => handleSetMessagingStatus("CLOSE"));
+
+monitorBtn.addEventListener("click", openMonitorScreen);
+monitorCloseBtn.addEventListener("click", closeMonitorScreen);
+monitorLoginBtn.addEventListener("click", handleMonitorLogin);
+monitorRefreshBtn.addEventListener("click", () => loadMonitorMessages({ button: monitorRefreshBtn }));
+monitorPassword.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    handleMonitorLogin();
+  }
+});
 
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));

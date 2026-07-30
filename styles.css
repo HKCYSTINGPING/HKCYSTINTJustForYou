@@ -80,6 +80,28 @@ body.modal-open {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
+.monitor-btn {
+  position: fixed;
+  top: 16px;
+  right: 68px;
+  z-index: 9000;
+  width: 44px;
+  height: 44px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition), background var(--transition), box-shadow var(--transition);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.monitor-btn:hover,
 .settings-btn:hover {
   transform: scale(1.05);
   background: rgba(255, 255, 255, 0.28);
@@ -212,6 +234,117 @@ body.modal-open {
 .send-form.is-closed .combobox input:disabled,
 .send-form.is-closed textarea:disabled {
   cursor: not-allowed;
+}
+
+/* ==========================================
+   Admin Monitor Screen
+   ========================================== */
+.monitor-screen {
+  z-index: 9400;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 16px;
+}
+
+.monitor-shell {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.monitor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0 16px;
+  flex-wrap: wrap;
+}
+
+.monitor-header h1 {
+  font-size: 1.45rem;
+  color: #fff;
+  font-weight: 700;
+}
+
+.monitor-status-text {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 4px;
+}
+
+.monitor-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.monitor-auth-panel {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.monitor-content .panel-card {
+  margin-top: 0;
+}
+
+.monitor-list {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.monitor-card .message-card-header {
+  align-items: flex-start;
+}
+
+.monitor-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.monitor-route {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.monitor-delete-btn {
+  flex-shrink: 0;
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.35);
+  min-width: 112px;
+}
+
+.monitor-delete-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: #fef2f2;
+}
+
+.message-card.deleted {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: #fef2f2;
+}
+
+.message-deleted-notice {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+
+.message-deleted-time {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.message-content.is-deleted {
+  opacity: 0.65;
+  text-decoration: line-through;
 }
 
 /* ==========================================

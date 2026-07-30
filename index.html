@@ -20,6 +20,7 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <!-- Settings Button -->
+  <button type="button" id="monitor-btn" class="monitor-btn" aria-label="管理員監察" title="管理員監察">👁️</button>
   <button type="button" id="settings-btn" class="settings-btn" aria-label="系統設定" title="系統設定">⚙️</button>
 
   <!-- Settings Modal -->
@@ -42,8 +43,16 @@
         >
       </div>
       <div class="settings-actions">
-        <button type="button" id="settings-enable-btn" class="btn btn-primary">✅ 開通留言</button>
-        <button type="button" id="settings-disable-btn" class="btn btn-secondary settings-disable-btn">🚫 關閉留言</button>
+        <button type="button" id="settings-enable-btn" class="btn btn-primary btn-progress">
+          <span class="btn-text">✅ 開通留言</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+          <span class="btn-progress-label" aria-hidden="true">0%</span>
+        </button>
+        <button type="button" id="settings-disable-btn" class="btn btn-secondary settings-disable-btn btn-progress">
+          <span class="btn-text">🚫 關閉留言</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+          <span class="btn-progress-label" aria-hidden="true">0%</span>
+        </button>
       </div>
     </div>
   </div>
@@ -265,6 +274,65 @@
         </div>
       </section>
     </main>
+  </section>
+
+  <!-- Admin Monitor Screen -->
+  <section id="monitor-screen" class="screen monitor-screen hidden">
+    <div class="monitor-shell">
+      <header class="monitor-header">
+        <div>
+          <h1>👁️ 實時監察留言</h1>
+          <p id="monitor-status-text" class="monitor-status-text">管理員監察面板</p>
+        </div>
+        <div class="monitor-header-actions">
+          <button type="button" id="monitor-refresh-btn" class="btn btn-secondary btn-progress hidden">
+            <span class="btn-text">🔄 立即更新</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+            <span class="btn-progress-label" aria-hidden="true">0%</span>
+          </button>
+          <button type="button" id="monitor-close-btn" class="btn btn-ghost">✕ 關閉</button>
+        </div>
+      </header>
+
+      <div id="monitor-auth-panel" class="panel-card monitor-auth-panel">
+        <h2>🔐 管理員驗證</h2>
+        <p class="panel-desc">請輸入管理員密碼以進入監察頁面</p>
+        <div class="form-group">
+          <label for="monitor-password">🔑 管理員密碼</label>
+          <input
+            type="password"
+            id="monitor-password"
+            placeholder="請輸入管理員密碼"
+            autocomplete="off"
+          >
+        </div>
+        <button type="button" id="monitor-login-btn" class="btn btn-primary btn-progress">
+          <span class="btn-text">🚀 進入監察</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+          <span class="btn-progress-label" aria-hidden="true">0%</span>
+        </button>
+      </div>
+
+      <div id="monitor-content" class="monitor-content hidden">
+        <div class="panel-card">
+          <div class="panel-header-row">
+            <div>
+              <h2>📋 全部留言</h2>
+              <p class="panel-desc">
+                自動更新中 · <span id="monitor-last-updated">—</span>
+                · 共 <span id="monitor-message-count">0</span> 則
+              </p>
+            </div>
+          </div>
+          <div id="monitor-list" class="message-list monitor-list">
+            <div class="empty-state">
+              <span class="empty-emoji">👁️</span>
+              <p>目前沒有留言</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <script src="app.js"></script>

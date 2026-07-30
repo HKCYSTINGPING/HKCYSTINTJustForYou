@@ -2,7 +2,7 @@
  * HKCYSTINTJustForYou — Anonymous Messaging Web App
  * Google Sheets tabs:
  *   - Participants: participant_id, phone_number
- *   - Messages: message_id, sender_id, receiver_id, content, created_at
+ *   - Messages: message_id, sender_id, receiver_id, content, created_at, status, deleted_at
  *   - Open: A2 = OPEN or CLOSE
  */
 
@@ -13,6 +13,9 @@ const MESSAGES_SHEET_NAME = "Messages";
 const OPEN_SHEET_NAME = "Open";
 const OPEN_CELL = "A2";
 const ADMIN_PASSWORD = "TNIT23082026";
+
+const MESSAGE_STATUS_ACTIVE = "active";
+const MESSAGE_STATUS_DELETED = "deleted";
 
 /* ==========================================
    Entry Points
@@ -74,6 +77,14 @@ function doPost(e) {
 
     if (data.action === "set_messaging_status") {
       return jsonResponse_(handleSetMessagingStatus_(data.password, data.messaging_status));
+    }
+
+    if (data.action === "admin_list_messages") {
+      return jsonResponse_(handleAdminListMessages_(data.password));
+    }
+
+    if (data.action === "admin_delete_message") {
+      return jsonResponse_(handleAdminDeleteMessage_(data.password, data.message_id));
     }
 
     return jsonResponse_(handleSendMessage_(data));
@@ -169,49 +180,85 @@ function participantExists_(participantId) {
    Messages
    ========================================== */
 
-function getInboxMessages_(participantId) {
+function getMessageSheetContext_() {
   const sheet = getSheetByName_(MESSAGES_SHEET_NAME);
-  if (!sheet) return [];
+  if (!sheet) return null;
 
+  ensureMessageHeaders_(sheet);
   const headers = getHeaders_(sheet);
-  const receiverCol = getColumnIndex_(headers, "receiver_id");
-  const contentCol = getColumnIndex_(headers, "content");
-  const createdCol = getColumnIndex_(headers, "created_at");
-  const messageIdCol = getColumnIndex_(headers, "message_id");
 
-  if (receiverCol < 0 || contentCol < 0) return [];
+  return {
+    sheet: sheet,
+    headers: headers,
+    cols: {
+      messageId: getColumnIndex_(headers, "message_id"),
+      senderId: getColumnIndex_(headers, "sender_id"),
+      receiverId: getColumnIndex_(headers, "receiver_id"),
+      content: getColumnIndex_(headers, "content"),
+      createdAt: getColumnIndex_(headers, "created_at"),
+      status: getColumnIndex_(headers, "status"),
+      deletedAt: getColumnIndex_(headers, "deleted_at")
+    }
+  };
+}
 
-  return getDataRows_(sheet)
-    .filter((row) => normalizeId_(row[receiverCol - 1]) === participantId)
-    .map((row) => ({
-      message_id: messageIdCol > 0 ? String(row[messageIdCol - 1] || "") : "",
-      content: String(row[contentCol - 1] || ""),
-      created_at: createdCol > 0 ? formatCellDateTime_(row[createdCol - 1]) : ""
-    }))
+function getCell_(row, col) {
+  return col > 0 ? row[col - 1] : "";
+}
+
+function isMessageDeleted_(row, cols) {
+  if (cols.status > 0) {
+    return String(getCell_(row, cols.status)).trim().toLowerCase() === MESSAGE_STATUS_DELETED;
+  }
+  return false;
+}
+
+function mapMessageRow_(row, cols, options) {
+  const includeSender = options && options.includeSender;
+  const message = {
+    message_id: String(getCell_(row, cols.messageId) || ""),
+    receiver_id: normalizeId_(getCell_(row, cols.receiverId)),
+    content: String(getCell_(row, cols.content) || ""),
+    created_at: cols.createdAt > 0 ? formatCellDateTime_(getCell_(row, cols.createdAt)) : "",
+    status: cols.status > 0 ? String(getCell_(row, cols.status) || MESSAGE_STATUS_ACTIVE).trim().toLowerCase() : MESSAGE_STATUS_ACTIVE,
+    deleted_at: cols.deletedAt > 0 ? formatCellDateTime_(getCell_(row, cols.deletedAt)) : ""
+  };
+
+  if (includeSender) {
+    message.sender_id = normalizeId_(getCell_(row, cols.senderId));
+  }
+
+  if (message.status === MESSAGE_STATUS_DELETED) {
+    message.deleted_reason = "此留言已被管理員刪除（管理員監察）";
+  }
+
+  return message;
+}
+
+function getInboxMessages_(participantId) {
+  const ctx = getMessageSheetContext_();
+  if (!ctx) return [];
+
+  const cols = ctx.cols;
+  if (cols.receiverId < 0 || cols.content < 0) return [];
+
+  return getDataRows_(ctx.sheet)
+    .filter((row) => normalizeId_(getCell_(row, cols.receiverId)) === participantId)
+    .filter((row) => !isMessageDeleted_(row, cols))
+    .map((row) => mapMessageRow_(row, cols))
     .filter((msg) => msg.content);
 }
 
 function getSentMessages_(participantId) {
-  const sheet = getSheetByName_(MESSAGES_SHEET_NAME);
-  if (!sheet) return [];
+  const ctx = getMessageSheetContext_();
+  if (!ctx) return [];
 
-  const headers = getHeaders_(sheet);
-  const senderCol = getColumnIndex_(headers, "sender_id");
-  const receiverCol = getColumnIndex_(headers, "receiver_id");
-  const contentCol = getColumnIndex_(headers, "content");
-  const createdCol = getColumnIndex_(headers, "created_at");
-  const messageIdCol = getColumnIndex_(headers, "message_id");
+  const cols = ctx.cols;
+  if (cols.senderId < 0 || cols.receiverId < 0 || cols.content < 0) return [];
 
-  if (senderCol < 0 || receiverCol < 0 || contentCol < 0) return [];
-
-  return getDataRows_(sheet)
-    .filter((row) => normalizeId_(row[senderCol - 1]) === participantId)
-    .map((row) => ({
-      message_id: messageIdCol > 0 ? String(row[messageIdCol - 1] || "") : "",
-      receiver_id: normalizeId_(row[receiverCol - 1]),
-      content: String(row[contentCol - 1] || ""),
-      created_at: createdCol > 0 ? formatCellDateTime_(row[createdCol - 1]) : ""
-    }))
+  return getDataRows_(ctx.sheet)
+    .filter((row) => normalizeId_(getCell_(row, cols.senderId)) === participantId)
+    .map((row) => mapMessageRow_(row, cols))
     .filter((msg) => msg.content);
 }
 
@@ -257,32 +304,126 @@ function handleSendMessage_(data) {
     };
   }
 
-  const sheet = getSheetByName_(MESSAGES_SHEET_NAME);
-  if (!sheet) {
+  const ctx = getMessageSheetContext_();
+  if (!ctx) {
     return {
       status: "error",
       message: '找不到 "Messages" 工作表'
     };
   }
 
-  ensureMessageHeaders_(sheet);
-
   const messageId = `MSG-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   const createdAt = new Date();
+  const rowValues = buildMessageRowValues_(ctx.cols, {
+    message_id: messageId,
+    sender_id: senderId,
+    receiver_id: receiverId,
+    content: content,
+    created_at: createdAt,
+    status: MESSAGE_STATUS_ACTIVE,
+    deleted_at: ""
+  });
 
-  sheet.appendRow([
-    messageId,
-    senderId,
-    receiverId,
-    content,
-    createdAt
-  ]);
+  ctx.sheet.appendRow(rowValues);
 
   return {
     status: "success",
     message_id: messageId,
     created_at: formatDateTime_(createdAt)
   };
+}
+
+function handleAdminListMessages_(password) {
+  if (!verifyAdminPassword_(password)) {
+    return { status: "error", message: "密碼錯誤" };
+  }
+
+  const ctx = getMessageSheetContext_();
+  if (!ctx) {
+    return { status: "error", message: '找不到 "Messages" 工作表' };
+  }
+
+  const messages = getDataRows_(ctx.sheet)
+    .filter((row) => !isMessageDeleted_(row, ctx.cols))
+    .map((row) => mapMessageRow_(row, ctx.cols, { includeSender: true }))
+    .filter((msg) => msg.content)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+  return {
+    status: "success",
+    messages: messages
+  };
+}
+
+function handleAdminDeleteMessage_(password, messageId) {
+  if (!verifyAdminPassword_(password)) {
+    return { status: "error", message: "密碼錯誤" };
+  }
+
+  const normalizedId = String(messageId || "").trim();
+  if (!normalizedId) {
+    return { status: "error", message: "請提供 message_id" };
+  }
+
+  const ctx = getMessageSheetContext_();
+  if (!ctx) {
+    return { status: "error", message: '找不到 "Messages" 工作表' };
+  }
+
+  const cols = ctx.cols;
+  if (cols.messageId < 0) {
+    return { status: "error", message: "Messages 工作表缺少 message_id 欄位" };
+  }
+
+  const rows = getDataRows_(ctx.sheet);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (String(getCell_(row, cols.messageId)).trim() !== normalizedId) continue;
+
+    if (isMessageDeleted_(row, cols)) {
+      return { status: "error", message: "此留言已被刪除" };
+    }
+
+    const sheetRow = i + 2;
+    if (cols.status > 0) {
+      ctx.sheet.getRange(sheetRow, cols.status).setValue(MESSAGE_STATUS_DELETED);
+    }
+    if (cols.deletedAt > 0) {
+      ctx.sheet.getRange(sheetRow, cols.deletedAt).setValue(new Date());
+    }
+
+    return {
+      status: "success",
+      message_id: normalizedId,
+      message: "留言已刪除"
+    };
+  }
+
+  return { status: "error", message: "找不到指定留言" };
+}
+
+function buildMessageRowValues_(cols, data) {
+  const lastCol = Math.max(
+    cols.messageId,
+    cols.senderId,
+    cols.receiverId,
+    cols.content,
+    cols.createdAt,
+    cols.status,
+    cols.deletedAt
+  );
+
+  const row = new Array(lastCol).fill("");
+
+  if (cols.messageId > 0) row[cols.messageId - 1] = data.message_id;
+  if (cols.senderId > 0) row[cols.senderId - 1] = data.sender_id;
+  if (cols.receiverId > 0) row[cols.receiverId - 1] = data.receiver_id;
+  if (cols.content > 0) row[cols.content - 1] = data.content;
+  if (cols.createdAt > 0) row[cols.createdAt - 1] = data.created_at;
+  if (cols.status > 0) row[cols.status - 1] = data.status;
+  if (cols.deletedAt > 0) row[cols.deletedAt - 1] = data.deleted_at;
+
+  return row;
 }
 
 /* ==========================================
@@ -313,7 +454,7 @@ function handleGetMessagingStatus_() {
 }
 
 function handleSetMessagingStatus_(password, messagingStatus) {
-  if (String(password || "") !== ADMIN_PASSWORD) {
+  if (!verifyAdminPassword_(password)) {
     return { status: "error", message: "密碼錯誤" };
   }
 
@@ -334,6 +475,10 @@ function handleSetMessagingStatus_(password, messagingStatus) {
     messaging_status: normalized,
     message: normalized === "OPEN" ? "留言功能已開通" : "留言功能已關閉"
   };
+}
+
+function verifyAdminPassword_(password) {
+  return String(password || "") === ADMIN_PASSWORD;
 }
 
 /* ==========================================
@@ -363,15 +508,31 @@ function getColumnIndex_(headers, columnName) {
 }
 
 function ensureMessageHeaders_(sheet) {
-  if (sheet.getLastRow() > 0 && sheet.getLastColumn() > 0) return;
-
-  sheet.getRange(1, 1, 1, 5).setValues([[
+  const requiredHeaders = [
     "message_id",
     "sender_id",
     "receiver_id",
     "content",
-    "created_at"
-  ]]);
+    "created_at",
+    "status",
+    "deleted_at"
+  ];
+
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+    return;
+  }
+
+  const headers = getHeaders_(sheet);
+  let lastCol = sheet.getLastColumn();
+
+  requiredHeaders.forEach((header) => {
+    if (getColumnIndex_(headers, header) < 0) {
+      lastCol += 1;
+      sheet.getRange(1, lastCol).setValue(header);
+      headers.push(header);
+    }
+  });
 }
 
 function normalizeId_(value) {
