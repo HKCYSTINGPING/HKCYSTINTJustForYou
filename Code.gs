@@ -6,7 +6,7 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 4;
+const SCRIPT_VERSION = 6;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
@@ -36,6 +36,10 @@ function doGet(e) {
 
     if (action === "admin_list_messages") {
       return jsonResponse_(handleAdminListMessages_(params.password));
+    }
+
+    if (action === "admin_watch_messages") {
+      return jsonResponse_(handleAdminWatchMessages_(params.password, params.revision));
     }
 
     if (action === "admin_delete_message") {
@@ -93,6 +97,10 @@ function doPost(e) {
 
     if (data.action === "admin_list_messages") {
       return jsonResponse_(handleAdminListMessages_(data.password));
+    }
+
+    if (data.action === "admin_watch_messages") {
+      return jsonResponse_(handleAdminWatchMessages_(data.password, data.revision));
     }
 
     if (data.action === "admin_delete_message") {
@@ -354,24 +362,62 @@ function handleSendMessage_(data) {
   };
 }
 
+function getAdminActiveMessages_() {
+  const ctx = getMessageSheetContext_();
+  if (!ctx) {
+    return null;
+  }
+
+  return getDataRows_(ctx.sheet)
+    .filter((row) => !isMessageDeleted_(row, ctx.cols))
+    .map((row) => mapMessageRow_(row, ctx.cols, { includeSender: true }))
+    .filter((msg) => msg.content)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
+function getAdminMessagesRevision_(messages) {
+  return messages
+    .map(function (msg) {
+      return String(msg.message_id || "");
+    })
+    .sort()
+    .join("\u0001");
+}
+
 function handleAdminListMessages_(password) {
   if (!verifyAdminPassword_(password)) {
     return { status: "error", message: "密碼錯誤" };
   }
 
-  const ctx = getMessageSheetContext_();
-  if (!ctx) {
+  const messages = getAdminActiveMessages_();
+  if (!messages) {
     return { status: "error", message: '找不到 "Messages" 工作表' };
   }
 
-  const messages = getDataRows_(ctx.sheet)
-    .filter((row) => !isMessageDeleted_(row, ctx.cols))
-    .map((row) => mapMessageRow_(row, ctx.cols, { includeSender: true }))
-    .filter((msg) => msg.content)
-    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  return {
+    status: "success",
+    messages: messages,
+    revision: getAdminMessagesRevision_(messages)
+  };
+}
+
+function handleAdminWatchMessages_(password, clientRevision) {
+  if (!verifyAdminPassword_(password)) {
+    return { status: "error", message: "密碼錯誤" };
+  }
+
+  const messages = getAdminActiveMessages_();
+  if (!messages) {
+    return { status: "error", message: '找不到 "Messages" 工作表' };
+  }
+
+  const revision = getAdminMessagesRevision_(messages);
+  const normalizedRevision = String(clientRevision || "").trim();
 
   return {
     status: "success",
+    changed: !normalizedRevision || normalizedRevision !== revision,
+    revision: revision,
     messages: messages
   };
 }
@@ -392,8 +438,12 @@ function handleAdminDeleteMessage_(password, messageId) {
   }
 
   const cols = ctx.cols;
-  if (cols.messageId < 0) {
+  if (cols.messageId < 1) {
     return { status: "error", message: "Messages 工作表缺少 message_id 欄位" };
+  }
+
+  if (cols.status < 1) {
+    return { status: "error", message: "Messages 工作表缺少 status 欄位，無法刪除留言" };
   }
 
   const rows = getDataRows_(ctx.sheet);
@@ -406,9 +456,7 @@ function handleAdminDeleteMessage_(password, messageId) {
     }
 
     const sheetRow = i + 2;
-    if (cols.status > 0) {
-      ctx.sheet.getRange(sheetRow, cols.status).setValue(MESSAGE_STATUS_DELETED);
-    }
+    ctx.sheet.getRange(sheetRow, cols.status).setValue(MESSAGE_STATUS_DELETED);
     if (cols.deletedAt > 0) {
       ctx.sheet.getRange(sheetRow, cols.deletedAt).setValue(new Date());
     }
@@ -473,6 +521,10 @@ function handleGetMessagingStatus_(params) {
 
   if (admin === "list_messages") {
     return handleAdminListMessages_(params.password);
+  }
+
+  if (admin === "watch_messages") {
+    return handleAdminWatchMessages_(params.password, params.revision);
   }
 
   if (admin === "delete_message") {

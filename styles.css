@@ -541,6 +541,7 @@ body.modal-open {
 .dashboard-screen {
   flex-direction: column;
   align-items: stretch;
+  justify-content: flex-start;
   padding: 16px;
   padding-top: calc(60px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -558,8 +559,9 @@ body.participant-active .dashboard-screen {
   inset: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  max-width: none;
-  margin: 0;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
   padding-left: calc(16px + env(safe-area-inset-left, 0px));
   padding-right: calc(16px + env(safe-area-inset-right, 0px));
 }
@@ -1108,6 +1110,15 @@ body.participant-active .dashboard-screen {
   box-shadow: 0 2px 12px rgba(99, 102, 241, 0.1);
 }
 
+.inbox-card .inbox-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
 .message-card-header {
   display: flex;
   align-items: center;
@@ -1316,7 +1327,7 @@ body.participant-active .dashboard-screen {
     padding: 14px;
   }
 
-  .message-card-header {
+  .message-card:not(.inbox-card) .message-card-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;

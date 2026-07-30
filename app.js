@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbxFPMmQcfK_bR7V-JfFFNkaBYSTEADW0fyqG88C703njpuRjMhWM5_JVcxL_24FWIuH4w/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzkM9FiKRDDs8_biVpAS3s808iOI4kmHYNcxGmOSQoNhELnQzfueP2gKefmXDlEVM8MDg/exec";
 
 const MAX_CHARS = 300;
 
@@ -28,7 +28,9 @@ const BAD_WORDS_LIST = [
 const PARTICIPANTS_CACHE_KEY = "ams_participants_cache";
 const PARTICIPANTS_CACHE_TTL = 30 * 60 * 1000;
 const PARTICIPANTS_FETCH_TIMEOUT = 20000;
-const MONITOR_POLL_INTERVAL = 100;
+const MONITOR_WATCH_TIMEOUT = 15000;
+const MONITOR_WATCH_INTERVAL = 800;
+const MONITOR_WATCH_RETRY_MS = 2000;
 const ADMIN_DELETED_REASON = "此留言已被管理員刪除（管理員監察）";
 
 const state = {
@@ -125,7 +127,8 @@ const monitorLastUpdated = document.getElementById("monitor-last-updated");
 const monitorMessageCount = document.getElementById("monitor-message-count");
 const monitorStatusText = document.getElementById("monitor-status-text");
 
-let monitorPollTimer = null;
+let monitorWatchActive = false;
+let monitorWatchController = null;
 let monitorLoading = false;
 
 let loadingCount = 0;
@@ -365,6 +368,10 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = PARTICIPANTS_FETC
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  if (options.signal) {
+    options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -425,8 +432,12 @@ async function apiGetMessagingStatus() {
   return parseJsonResponse(response);
 }
 
-async function apiAdminGet(params) {
-  const response = await fetchWithTimeout(`${API_URL}?${new URLSearchParams(params).toString()}`);
+async function apiAdminGet(params, timeoutMs = PARTICIPANTS_FETCH_TIMEOUT, options = {}) {
+  const response = await fetchWithTimeout(
+    `${API_URL}?${new URLSearchParams(params).toString()}`,
+    options,
+    timeoutMs
+  );
   return parseJsonResponse(response);
 }
 
@@ -481,6 +492,49 @@ async function apiAdminListMessages(password) {
 
   if (data.status === "success" && !Array.isArray(data.messages)) {
     return { status: "error", message: "BACKEND_OUTDATED" };
+  }
+
+  return data;
+}
+
+async function apiAdminWatchMessages(password, revision, options = {}) {
+  const params = {
+    action: "admin_watch_messages",
+    password,
+    revision: revision || ""
+  };
+  const fallbackParams = {
+    action: "get_messaging_status",
+    admin: "watch_messages",
+    password,
+    revision: revision || ""
+  };
+  const fetchOptions = options.signal ? { signal: options.signal } : {};
+
+  let data = await apiAdminGet(params, MONITOR_WATCH_TIMEOUT, fetchOptions);
+  const isValidWatch = (result) =>
+    result.status === "success" && Array.isArray(result.messages) && typeof result.changed === "boolean";
+
+  if (isValidWatch(data)) return data;
+
+  if (isLegacyBackendError(data) || needsAdminFallback(data, isValidWatch)) {
+    data = await apiAdminGet(fallbackParams, MONITOR_WATCH_TIMEOUT, fetchOptions);
+    if (isValidWatch(data)) return data;
+  }
+
+  // 舊版後端：退回一次性載入，由前端比對 revision
+  if (data.status !== "success" || typeof data.changed !== "boolean") {
+    const listData = await apiAdminListMessages(password);
+    if (listData.status !== "success") return listData;
+
+    const nextRevision = getMonitorRevision(listData.messages || []);
+    return {
+      status: "success",
+      changed: nextRevision !== revision,
+      revision: nextRevision,
+      messages: listData.messages || [],
+      legacyWatch: true
+    };
   }
 
   return data;
@@ -652,7 +706,7 @@ function clearAdminSession() {
   state.monitorAuthenticated = false;
   state.adminPassword = null;
   state.monitorMessages = [];
-  stopMonitorPolling();
+  stopMonitorWatch();
   monitorPassword.value = "";
   showMonitorAuth();
   monitorList.innerHTML = `
@@ -676,7 +730,7 @@ function openMonitorScreen() {
 
   if (state.monitorAuthenticated) {
     showMonitorDashboard();
-    startMonitorPolling(true);
+    startMonitorWatch();
   } else {
     showMonitorAuth();
   }
@@ -702,8 +756,31 @@ function showMonitorDashboard() {
   monitorStatusText.innerHTML = `
     <span class="monitor-live-badge">
       <span class="live-dot" aria-hidden="true"></span>
-      實時更新中（每 0.1 秒）
+      偵測到新留言即時顯示（約 1 秒內）
     </span>`;
+}
+
+function getMonitorRevision(messages = state.monitorMessages) {
+  return messages
+    .map((msg) => String(msg.message_id || ""))
+    .sort()
+    .join("\u0001");
+}
+
+function applyMonitorMessages(messages, options = {}) {
+  const { highlightNew = true } = options;
+  const previousIds = new Set(state.monitorMessages.map((msg) => msg.message_id));
+  const newMessageIds = highlightNew
+    ? new Set(
+        messages
+          .filter((msg) => !previousIds.has(msg.message_id))
+          .map((msg) => msg.message_id)
+      )
+    : new Set();
+
+  state.monitorMessages = messages;
+  renderMonitorList(newMessageIds);
+  updateMonitorMeta();
 }
 
 async function handleMonitorLogin() {
@@ -723,12 +800,10 @@ async function handleMonitorLogin() {
         if (data.status === "success") {
           state.monitorAuthenticated = true;
           state.adminPassword = password;
-          state.monitorMessages = data.messages || [];
+          applyMonitorMessages(data.messages || [], { highlightNew: false });
           monitorPassword.value = "";
           showMonitorDashboard();
-          renderMonitorList();
-          updateMonitorMeta();
-          startMonitorPolling();
+          startMonitorWatch();
           showToast("已进入管理員監察頁面", "success");
           return;
         }
@@ -794,27 +869,17 @@ async function loadMonitorMessages(options = {}) {
   monitorLoading = true;
 
   try {
-    const previousIds = new Set(state.monitorMessages.map((msg) => msg.message_id));
     const data = await apiAdminListMessages(state.adminPassword);
 
     if (data.status === "success") {
-      const messages = data.messages || [];
-      const newMessageIds = new Set(
-        messages
-          .filter((msg) => !previousIds.has(msg.message_id))
-          .map((msg) => msg.message_id)
-      );
-
-      state.monitorMessages = messages;
-      renderMonitorList(newMessageIds);
-      updateMonitorMeta();
+      applyMonitorMessages(data.messages || [], { highlightNew: !silent });
       return true;
     }
 
     if (data.message === "密碼錯誤") {
       state.monitorAuthenticated = false;
       state.adminPassword = null;
-      stopMonitorPolling();
+      stopMonitorWatch();
       showMonitorAuth();
     }
 
@@ -841,6 +906,7 @@ async function handleAdminDeleteMessage(messageId, button) {
   if (!confirmed) return;
 
   const deleteBtn = button;
+  stopMonitorWatch();
 
   try {
     await runWithProgress(
@@ -848,6 +914,11 @@ async function handleAdminDeleteMessage(messageId, button) {
       () => apiAdminDeleteMessage(state.adminPassword, messageId),
       async (data) => {
         if (data.status === "success") {
+          state.monitorMessages = state.monitorMessages.filter(
+            (msg) => msg.message_id !== messageId
+          );
+          renderMonitorList();
+          updateMonitorMeta();
           showToast("留言已刪除", "success");
           await loadMonitorMessages({ silent: true });
 
@@ -865,35 +936,85 @@ async function handleAdminDeleteMessage(messageId, button) {
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
     console.error("Admin delete message error:", err);
+  } finally {
+    if (
+      state.monitorAuthenticated &&
+      !monitorScreen.classList.contains("hidden")
+    ) {
+      startMonitorWatch();
+    }
   }
 }
 
-function startMonitorPolling(runImmediately = false) {
-  stopMonitorPolling();
+function startMonitorWatch() {
+  stopMonitorWatch();
+  monitorWatchActive = true;
+  runMonitorWatchLoop();
+}
 
-  const tick = async () => {
-    if (monitorScreen.classList.contains("hidden") || !state.monitorAuthenticated) {
+function stopMonitorWatch() {
+  monitorWatchActive = false;
+  if (monitorWatchController) {
+    monitorWatchController.abort();
+    monitorWatchController = null;
+  }
+}
+
+async function runMonitorWatchLoop() {
+  if (!monitorWatchActive || !state.monitorAuthenticated || !state.adminPassword) {
+    return;
+  }
+
+  if (monitorScreen.classList.contains("hidden")) {
+    return;
+  }
+
+  if (document.hidden) {
+    return;
+  }
+
+  monitorWatchController = new AbortController();
+  const revision = getMonitorRevision();
+
+  try {
+    const data = await apiAdminWatchMessages(state.adminPassword, revision, {
+      signal: monitorWatchController.signal
+    });
+
+    if (!monitorWatchActive || !state.monitorAuthenticated) {
       return;
     }
 
-    if (!document.hidden) {
-      await loadMonitorMessages({ silent: true });
+    if (data.status === "success") {
+      if (data.changed) {
+        applyMonitorMessages(data.messages || []);
+        runMonitorWatchLoop();
+      } else {
+        window.setTimeout(runMonitorWatchLoop, MONITOR_WATCH_INTERVAL);
+      }
+      return;
     }
 
-    monitorPollTimer = window.setTimeout(tick, MONITOR_POLL_INTERVAL);
-  };
+    if (data.message === "密碼錯誤") {
+      state.monitorAuthenticated = false;
+      state.adminPassword = null;
+      stopMonitorWatch();
+      showMonitorAuth();
+      return;
+    }
 
-  if (runImmediately) {
-    tick();
-  } else {
-    monitorPollTimer = window.setTimeout(tick, MONITOR_POLL_INTERVAL);
-  }
-}
+    window.setTimeout(runMonitorWatchLoop, MONITOR_WATCH_RETRY_MS);
+  } catch (err) {
+    if (err.name === "AbortError") {
+      return;
+    }
 
-function stopMonitorPolling() {
-  if (monitorPollTimer) {
-    clearTimeout(monitorPollTimer);
-    monitorPollTimer = null;
+    console.warn("Monitor watch error:", err);
+    if (monitorWatchActive && state.monitorAuthenticated) {
+      window.setTimeout(runMonitorWatchLoop, MONITOR_WATCH_RETRY_MS);
+    }
+  } finally {
+    monitorWatchController = null;
   }
 }
 
@@ -1193,12 +1314,10 @@ function renderInbox() {
   inboxList.innerHTML = sorted.map((msg) => {
     const isUnread = !readIds.includes(msg.message_id);
     return `
-      <article class="message-card ${isUnread ? "unread" : ""}">
-        <div class="message-card-header">
-          <div class="message-meta">
-            <span>🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
-            ${isUnread ? '<span class="message-badge">NEW</span>' : ""}
-          </div>
+      <article class="message-card inbox-card ${isUnread ? "unread" : ""}">
+        <div class="message-meta inbox-meta">
+          <span>🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
+          ${isUnread ? '<span class="message-badge">NEW</span>' : ""}
         </div>
         <p class="message-content">${escapeHtml(msg.content)}</p>
       </article>`;
@@ -1532,8 +1651,9 @@ document.addEventListener("visibilitychange", () => {
     !monitorScreen.classList.contains("hidden") &&
     state.monitorAuthenticated
   ) {
-    loadMonitorMessages({ silent: true });
-    startMonitorPolling();
+    startMonitorWatch();
+  } else if (document.hidden) {
+    stopMonitorWatch();
   }
 });
 
