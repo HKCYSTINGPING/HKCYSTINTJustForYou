@@ -23,44 +23,6 @@
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-  <!-- Settings Button -->
-  <button type="button" id="monitor-btn" class="monitor-btn admin-only-btn" aria-label="管理員監察" title="管理員監察">👁️</button>
-  <button type="button" id="settings-btn" class="settings-btn admin-only-btn" aria-label="系統設定" title="系統設定">⚙️</button>
-
-  <!-- Settings Modal -->
-  <div id="settings-modal" class="settings-modal hidden" aria-hidden="true">
-    <div class="settings-backdrop" id="settings-backdrop"></div>
-    <div class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <div class="settings-card-header">
-        <h2 id="settings-title">⚙️ 系統設定</h2>
-        <button type="button" id="settings-close-modal" class="settings-close-btn" aria-label="關閉">✕</button>
-      </div>
-      <p class="settings-desc">管理留言功能開關（需管理員密碼）</p>
-      <p id="settings-status" class="settings-status">目前狀態：載入中...</p>
-      <div class="form-group">
-        <label for="settings-password">🔑 管理員密碼</label>
-        <input
-          type="password"
-          id="settings-password"
-          placeholder="請輸入管理員密碼"
-          autocomplete="off"
-        >
-      </div>
-      <div class="settings-actions">
-        <button type="button" id="settings-enable-btn" class="btn btn-primary btn-progress">
-          <span class="btn-text">✅ 開通留言</span>
-          <span class="btn-progress-bar" aria-hidden="true"></span>
-          <span class="btn-progress-label" aria-hidden="true">0%</span>
-        </button>
-        <button type="button" id="settings-disable-btn" class="btn btn-secondary settings-disable-btn btn-progress">
-          <span class="btn-text">🚫 關閉留言</span>
-          <span class="btn-progress-bar" aria-hidden="true"></span>
-          <span class="btn-progress-label" aria-hidden="true">0%</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- Login Screen -->
   <section id="login-screen" class="screen login-screen">
     <div class="login-card">
@@ -300,82 +262,60 @@
     </main>
   </section>
 
-  <!-- Admin Monitor Screen -->
-  <section id="monitor-screen" class="screen monitor-screen hidden" aria-hidden="true">
-    <div class="monitor-shell">
-      <header class="monitor-header">
-        <div>
-          <h1>👁️ 實時監察留言</h1>
-          <p id="monitor-status-text" class="monitor-status-text">管理員監察面板</p>
-        </div>
-        <div class="monitor-header-actions">
-          <button type="button" id="monitor-close-btn" class="btn btn-ghost">✕ 關閉</button>
-        </div>
-      </header>
-
-      <div id="monitor-auth-panel" class="panel-card monitor-auth-panel">
-        <h2>🔐 管理員驗證</h2>
-        <p class="panel-desc">請輸入管理員密碼以進入監察頁面</p>
-        <div class="form-group">
-          <label for="monitor-password">🔑 管理員密碼</label>
-          <input
-            type="password"
-            id="monitor-password"
-            placeholder="請輸入管理員密碼"
-            autocomplete="off"
-          >
-        </div>
-        <button type="button" id="monitor-login-btn" class="btn btn-primary btn-progress">
-          <span class="btn-text">🚀 進入監察</span>
-          <span class="btn-progress-bar" aria-hidden="true"></span>
-          <span class="btn-progress-label" aria-hidden="true">0%</span>
-        </button>
+  <!-- Admin Dashboard -->
+  <section id="admin-screen" class="screen admin-screen hidden">
+    <header class="dashboard-header admin-header">
+      <div class="header-info">
+        <h1>🛡️ 管理員控制台</h1>
+        <p id="admin-status-text" class="user-badge">
+          <span class="monitor-live-badge inline">
+            <span class="live-dot" aria-hidden="true"></span>
+            即時監察留言
+          </span>
+        </p>
       </div>
+      <button type="button" id="admin-logout-btn" class="btn btn-ghost">🚪 登出</button>
+    </header>
 
-      <div id="monitor-content" class="monitor-content hidden">
-        <div class="panel-card">
-          <div class="panel-header-row">
-            <div>
-              <h2>📋 全部留言</h2>
-              <p class="panel-desc">
-                <span class="monitor-live-badge inline">
-                  <span class="live-dot" aria-hidden="true"></span>
-                  偵測到新留言即時顯示（約 1 秒內）
-                </span>
-                · 上次同步 <span id="monitor-last-updated">—</span>
-                · 共 <span id="monitor-message-count">0</span> 則
-              </p>
-            </div>
+    <main class="admin-content">
+      <div class="panel-card">
+        <div class="panel-header-row">
+          <div>
+            <h2>📋 全部留言</h2>
+            <p class="panel-desc">
+              上次同步 <span id="monitor-last-updated">—</span>
+              · 共 <span id="monitor-message-count">0</span> 則
+            </p>
           </div>
-          <div class="monitor-messaging-controls">
-            <p id="monitor-messaging-status" class="settings-status">目前狀態：載入中...</p>
-            <div class="monitor-messaging-actions settings-actions">
-              <button type="button" id="monitor-enable-btn" class="btn btn-primary btn-progress">
-                <span class="btn-text">✅ 開通留言</span>
-                <span class="btn-progress-bar" aria-hidden="true"></span>
-                <span class="btn-progress-label" aria-hidden="true">0%</span>
-              </button>
-              <button type="button" id="monitor-disable-btn" class="btn btn-secondary settings-disable-btn btn-progress">
-                <span class="btn-text">🚫 關閉留言</span>
-                <span class="btn-progress-bar" aria-hidden="true"></span>
-                <span class="btn-progress-label" aria-hidden="true">0%</span>
-              </button>
-            </div>
+        </div>
+        <div class="monitor-messaging-controls">
+          <p id="monitor-messaging-status" class="settings-status">目前狀態：載入中...</p>
+          <div class="monitor-messaging-actions settings-actions">
+            <button type="button" id="monitor-enable-btn" class="btn btn-primary btn-progress">
+              <span class="btn-text">✅ 開通留言</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+              <span class="btn-progress-label" aria-hidden="true">0%</span>
+            </button>
+            <button type="button" id="monitor-disable-btn" class="btn btn-secondary settings-disable-btn btn-progress">
+              <span class="btn-text">🚫 關閉留言</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+              <span class="btn-progress-label" aria-hidden="true">0%</span>
+            </button>
           </div>
-          <div class="monitor-filter-nav" role="tablist" aria-label="留言篩選">
-            <button type="button" class="monitor-filter-btn active" data-monitor-filter="all" role="tab" aria-selected="true">全部</button>
-            <button type="button" class="monitor-filter-btn" data-monitor-filter="active" role="tab" aria-selected="false">已送出</button>
-            <button type="button" class="monitor-filter-btn" data-monitor-filter="deleted" role="tab" aria-selected="false">已刪除</button>
-          </div>
-          <div id="monitor-list" class="message-list monitor-list">
-            <div class="empty-state">
-              <span class="empty-emoji">👁️</span>
-              <p>目前沒有留言</p>
-            </div>
+        </div>
+        <div class="monitor-filter-nav" role="tablist" aria-label="留言篩選">
+          <button type="button" class="monitor-filter-btn active" data-monitor-filter="all" role="tab" aria-selected="true">全部</button>
+          <button type="button" class="monitor-filter-btn" data-monitor-filter="active" role="tab" aria-selected="false">已送出</button>
+          <button type="button" class="monitor-filter-btn" data-monitor-filter="deleted" role="tab" aria-selected="false">已刪除</button>
+        </div>
+        <div id="monitor-list" class="message-list monitor-list">
+          <div class="empty-state">
+            <span class="empty-emoji">👁️</span>
+            <p>目前沒有留言</p>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   </section>
 
   <script src="app.js"></script>

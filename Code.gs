@@ -6,13 +6,15 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 10;
+const SCRIPT_VERSION = 11;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
 const OPEN_SHEET_NAME = "Open";
 const OPEN_CELL = "A2";
 const ADMIN_PASSWORD = "TNIT23082026";
+const ADMIN_PARTICIPANT_ID = "ADMIN";
+const ADMIN_PHONE = "23082026";
 
 const MESSAGE_STATUS_ACTIVE = "active";
 const MESSAGE_STATUS_DELETED = "deleted";
@@ -39,24 +41,49 @@ function doGet(e) {
     }
 
     if (action === "admin_list_messages") {
-      return jsonResponse_(handleAdminListMessages_(params.password));
+      return jsonResponse_(handleAdminListMessages_(params.password, params.participant_id, params.phone_number));
     }
 
     if (action === "admin_watch_messages") {
-      return jsonResponse_(handleAdminWatchMessages_(params.password, params.revision));
+      return jsonResponse_(handleAdminWatchMessages_(params.password, params.participant_id, params.phone_number, params.revision));
     }
 
     if (action === "admin_delete_message") {
-      return jsonResponse_(handleAdminDeleteMessage_(params.password, params.message_id));
+      return jsonResponse_(handleAdminDeleteMessage_(params.password, params.participant_id, params.phone_number, params.message_id));
     }
 
     if (action === "set_messaging_status") {
-      return jsonResponse_(handleSetMessagingStatus_(params.password, params.messaging_status));
+      return jsonResponse_(handleSetMessagingStatus_(params.password, params.participant_id, params.phone_number, params.messaging_status));
     }
 
     const participantId = normalizeId_(params.participant_id);
     const phoneNumber = normalizePhone_(params.phone_number);
     const fetchType = String(params.fetch_type || "inbox").trim().toLowerCase();
+
+    if (isAdminCredentials_(participantId, phoneNumber)) {
+      if (fetchType === "admin") {
+        const messages = getAdminAllMessages_();
+        if (!messages) {
+          return jsonResponse_({
+            status: "error",
+            message: '找不到 "Messages" 工作表'
+          });
+        }
+
+        return jsonResponse_({
+          status: "success",
+          role: "admin",
+          messages: messages,
+          revision: getAdminMessagesRevision_(messages),
+          messaging_status: getMessagingStatusValue_()
+        });
+      }
+
+      return jsonResponse_({
+        status: "error",
+        message: "管理員身份驗證失敗"
+      });
+    }
 
     if (!participantId || !phoneNumber) {
       return jsonResponse_({
@@ -98,19 +125,19 @@ function doPost(e) {
     const data = parsePostBody_(e);
 
     if (data.action === "set_messaging_status") {
-      return jsonResponse_(handleSetMessagingStatus_(data.password, data.messaging_status));
+      return jsonResponse_(handleSetMessagingStatus_(data.password, data.participant_id, data.phone_number, data.messaging_status));
     }
 
     if (data.action === "admin_list_messages") {
-      return jsonResponse_(handleAdminListMessages_(data.password));
+      return jsonResponse_(handleAdminListMessages_(data.password, data.participant_id, data.phone_number));
     }
 
     if (data.action === "admin_watch_messages") {
-      return jsonResponse_(handleAdminWatchMessages_(data.password, data.revision));
+      return jsonResponse_(handleAdminWatchMessages_(data.password, data.participant_id, data.phone_number, data.revision));
     }
 
     if (data.action === "admin_delete_message") {
-      return jsonResponse_(handleAdminDeleteMessage_(data.password, data.message_id));
+      return jsonResponse_(handleAdminDeleteMessage_(data.password, data.participant_id, data.phone_number, data.message_id));
     }
 
     if (data.action) {
@@ -452,9 +479,9 @@ function getAdminMessagesRevision_(messages) {
     .join("\u0001");
 }
 
-function handleAdminListMessages_(password) {
-  if (!verifyAdminPassword_(password)) {
-    return { status: "error", message: "密碼錯誤" };
+function handleAdminListMessages_(password, participantId, phoneNumber) {
+  if (!verifyAdminAccess_(password, participantId, phoneNumber)) {
+    return { status: "error", message: "身份驗證失敗" };
   }
 
   const messages = getAdminAllMessages_();
@@ -469,9 +496,9 @@ function handleAdminListMessages_(password) {
   };
 }
 
-function handleAdminWatchMessages_(password, clientRevision) {
-  if (!verifyAdminPassword_(password)) {
-    return { status: "error", message: "密碼錯誤" };
+function handleAdminWatchMessages_(password, participantId, phoneNumber, clientRevision) {
+  if (!verifyAdminAccess_(password, participantId, phoneNumber)) {
+    return { status: "error", message: "身份驗證失敗" };
   }
 
   const messages = getAdminAllMessages_();
@@ -490,9 +517,9 @@ function handleAdminWatchMessages_(password, clientRevision) {
   };
 }
 
-function handleAdminDeleteMessage_(password, messageId) {
-  if (!verifyAdminPassword_(password)) {
-    return { status: "error", message: "密碼錯誤" };
+function handleAdminDeleteMessage_(password, participantId, phoneNumber, messageId) {
+  if (!verifyAdminAccess_(password, participantId, phoneNumber)) {
+    return { status: "error", message: "身份驗證失敗" };
   }
 
   const normalizedId = String(messageId || "").trim();
@@ -588,19 +615,19 @@ function handleGetMessagingStatus_(params) {
   const admin = String(params.admin || "").trim();
 
   if (admin === "list_messages") {
-    return handleAdminListMessages_(params.password);
+    return handleAdminListMessages_(params.password, params.participant_id, params.phone_number);
   }
 
   if (admin === "watch_messages") {
-    return handleAdminWatchMessages_(params.password, params.revision);
+    return handleAdminWatchMessages_(params.password, params.participant_id, params.phone_number, params.revision);
   }
 
   if (admin === "delete_message") {
-    return handleAdminDeleteMessage_(params.password, params.message_id);
+    return handleAdminDeleteMessage_(params.password, params.participant_id, params.phone_number, params.message_id);
   }
 
   if (admin === "set_status") {
-    return handleSetMessagingStatus_(params.password, params.messaging_status);
+    return handleSetMessagingStatus_(params.password, params.participant_id, params.phone_number, params.messaging_status);
   }
 
   return {
@@ -610,9 +637,9 @@ function handleGetMessagingStatus_(params) {
   };
 }
 
-function handleSetMessagingStatus_(password, messagingStatus) {
-  if (!verifyAdminPassword_(password)) {
-    return { status: "error", message: "密碼錯誤" };
+function handleSetMessagingStatus_(password, participantId, phoneNumber, messagingStatus) {
+  if (!verifyAdminAccess_(password, participantId, phoneNumber)) {
+    return { status: "error", message: "身份驗證失敗" };
   }
 
   const normalized = String(messagingStatus || "").trim().toUpperCase();
@@ -636,6 +663,18 @@ function handleSetMessagingStatus_(password, messagingStatus) {
 
 function verifyAdminPassword_(password) {
   return String(password || "") === ADMIN_PASSWORD;
+}
+
+function isAdminCredentials_(participantId, phoneNumber) {
+  return normalizeId_(participantId) === ADMIN_PARTICIPANT_ID &&
+    normalizePhone_(phoneNumber) === ADMIN_PHONE;
+}
+
+function verifyAdminAccess_(password, participantId, phoneNumber) {
+  if (isAdminCredentials_(participantId, phoneNumber)) {
+    return true;
+  }
+  return verifyAdminPassword_(password);
 }
 
 /* ==========================================
