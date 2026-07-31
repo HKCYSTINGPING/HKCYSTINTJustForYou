@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbzu1fly9MZY_OcuZug9oLqjZmkPtWK15QHUHN7bcfKSTz6xXh4QEF-tU3ApolWxDnPOlg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzIB37diXGv1L65ztatr7N1IVFmfYOs4FWwpmFdvrCdpDhlM3cot17G6R9G8ovIOf2Hgg/exec";
 
 const MAX_CHARS = 300;
 
@@ -39,6 +39,7 @@ const state = {
   participantId: null,
   phoneNumber: null,
   participants: [],
+  participantsLoaded: false,
   inboxMessages: [],
   sentMessages: [],
   sentLoaded: false,
@@ -84,7 +85,7 @@ const participantCombobox = {
   list: participantPickerList,
   count: participantPickerCount,
   getExcludeId: () => null,
-  emptyNoList: "尚無參加者名單",
+  emptyNoList: "請手動輸入編號",
   emptyNoMatch: "找不到符合的參加者",
   onSelect: () => {}
 };
@@ -98,7 +99,7 @@ const receiverCombobox = {
   list: receiverPickerList,
   count: receiverPickerCount,
   getExcludeId: () => state.participantId,
-  emptyNoList: "尚無接收對象名單",
+  emptyNoList: "請手動輸入編號",
   emptyNoMatch: "找不到符合的接收對象",
   onSelect: () => validateMessageInput()
 };
@@ -134,6 +135,9 @@ const monitorList = document.getElementById("monitor-list");
 const monitorLastUpdated = document.getElementById("monitor-last-updated");
 const monitorMessageCount = document.getElementById("monitor-message-count");
 const monitorStatusText = document.getElementById("monitor-status-text");
+const monitorMessagingStatus = document.getElementById("monitor-messaging-status");
+const monitorEnableBtn = document.getElementById("monitor-enable-btn");
+const monitorDisableBtn = document.getElementById("monitor-disable-btn");
 
 let monitorWatchActive = false;
 let monitorWatchController = null;
@@ -428,8 +432,20 @@ async function apiFetchBootstrap() {
   return parseJsonResponse(response);
 }
 
+function markParticipantsLoaded() {
+  state.participantsLoaded = true;
+}
+
+function getComboboxEmptyListMessage(combobox) {
+  if (!state.participantsLoaded) {
+    return "加載中，可手動輸入";
+  }
+  return combobox.emptyNoList;
+}
+
 function applyParticipantsList(participants) {
   state.participants = participants.map(normalizeParticipantId);
+  markParticipantsLoaded();
   renderComboboxPicker(participantCombobox);
   renderComboboxPicker(receiverCombobox);
   saveParticipantsCache(state.participants);
@@ -625,7 +641,10 @@ function getAdminAuthErrorMessage(data) {
 }
 
 function isMessageDeleted(msg) {
-  return String(msg?.status || "").trim().toLowerCase() === "deleted";
+  if (String(msg?.status || "").trim().toLowerCase() === "deleted") {
+    return true;
+  }
+  return Boolean(String(msg?.deleted_at || "").trim());
 }
 
 function isMessagingOpen() {
@@ -650,6 +669,15 @@ function updateMessagingUI() {
   if (messagingClosedBanner) {
     messagingClosedBanner.classList.toggle("hidden", open);
   }
+
+  if (monitorMessagingStatus) {
+    monitorMessagingStatus.textContent = open ? "目前狀態：✅ 開通留言" : "目前狀態：🚫 關閉留言";
+    monitorMessagingStatus.classList.toggle("is-open", open);
+    monitorMessagingStatus.classList.toggle("is-closed", !open);
+  }
+
+  if (monitorEnableBtn) monitorEnableBtn.disabled = open;
+  if (monitorDisableBtn) monitorDisableBtn.disabled = !open;
 
   if (sendForm) {
     sendForm.classList.toggle("is-closed", !open);
@@ -705,16 +733,8 @@ function closeSettingsModal() {
   settingsPassword.value = "";
 }
 
-async function handleSetMessagingStatus(targetStatus) {
-  const password = settingsPassword.value.trim();
-
-  if (!password) {
-    showToast("請輸入管理員密碼", "warning");
-    settingsPassword.focus();
-    return;
-  }
-
-  const button = targetStatus === "OPEN" ? settingsEnableBtn : settingsDisableBtn;
+async function setMessagingStatusWithPassword(password, targetStatus, button, options = {}) {
+  const { closeModal = false } = options;
   const loadingText = targetStatus === "OPEN" ? "✅ 開通留言中..." : "🚫 關閉留言中...";
 
   try {
@@ -724,12 +744,14 @@ async function handleSetMessagingStatus(targetStatus) {
       (data) => {
         if (data.status === "success") {
           applyMessagingStatus(data.messaging_status);
-          settingsPassword.value = "";
+          if (closeModal) {
+            settingsPassword.value = "";
+            closeSettingsModal();
+          }
           showToast(
             data.message || (targetStatus === "OPEN" ? "留言功能已開通" : "留言功能已關閉"),
             "success"
           );
-          closeSettingsModal();
           return;
         }
 
@@ -741,6 +763,29 @@ async function handleSetMessagingStatus(targetStatus) {
     showToast("連線失敗，請稍後再試", "error");
     console.error("Set messaging status error:", err);
   }
+}
+
+async function handleSetMessagingStatus(targetStatus) {
+  const password = settingsPassword.value.trim();
+
+  if (!password) {
+    showToast("請輸入管理員密碼", "warning");
+    settingsPassword.focus();
+    return;
+  }
+
+  const button = targetStatus === "OPEN" ? settingsEnableBtn : settingsDisableBtn;
+  await setMessagingStatusWithPassword(password, targetStatus, button, { closeModal: true });
+}
+
+async function handleMonitorSetMessagingStatus(targetStatus) {
+  if (!state.monitorAuthenticated || !state.adminPassword) {
+    showToast("請先登入管理員監察", "warning");
+    return;
+  }
+
+  const button = targetStatus === "OPEN" ? monitorEnableBtn : monitorDisableBtn;
+  await setMessagingStatusWithPassword(state.adminPassword, targetStatus, button);
 }
 
 function isAdminAccessAllowed() {
@@ -811,6 +856,7 @@ function showMonitorDashboard() {
       <span class="live-dot" aria-hidden="true"></span>
       偵測到新留言即時顯示（約 1 秒內）
     </span>`;
+  loadMessagingStatus({ silent: true });
 }
 
 function getMonitorRevision(messages = state.monitorMessages) {
@@ -818,6 +864,29 @@ function getMonitorRevision(messages = state.monitorMessages) {
     .map((msg) => `${String(msg.message_id || "")}:${String(msg.status || "active")}`)
     .sort()
     .join("\u0001");
+}
+
+function normalizeMonitorMessage(msg) {
+  const deletedAt = String(msg?.deleted_at || "").trim();
+  let status = String(msg?.status || "").trim().toLowerCase();
+
+  if (deletedAt || status === "deleted") {
+    status = "deleted";
+  } else if (!status) {
+    status = "active";
+  }
+
+  const normalized = {
+    ...msg,
+    status,
+    deleted_at: deletedAt
+  };
+
+  if (status === "deleted") {
+    normalized.deleted_reason = msg.deleted_reason || ADMIN_DELETED_REASON;
+  }
+
+  return normalized;
 }
 
 function mergeMonitorMessages(apiMessages = []) {
@@ -840,7 +909,8 @@ function mergeMonitorMessages(apiMessages = []) {
 
 function applyMonitorMessages(messages, options = {}) {
   const { highlightNew = true } = options;
-  const merged = mergeMonitorMessages(messages || []);
+  const normalized = (messages || []).map(normalizeMonitorMessage);
+  const merged = mergeMonitorMessages(normalized);
   const previousIds = new Set(state.monitorMessages.map((msg) => msg.message_id));
   const newMessageIds = highlightNew
     ? new Set(
@@ -1217,7 +1287,7 @@ function renderComboboxPicker(combobox, filterText = combobox.input.value) {
   if (filtered.length === 0) {
     combobox.list.innerHTML = `
       <p class="participant-picker-empty">
-        ${state.participants.length === 0 ? combobox.emptyNoList : combobox.emptyNoMatch}
+        ${state.participants.length === 0 ? getComboboxEmptyListMessage(combobox) : combobox.emptyNoMatch}
       </p>`;
     combobox.count.textContent = "";
     return;
@@ -1312,7 +1382,7 @@ function setupComboboxEvents(combobox) {
 
   combobox.input.addEventListener("focus", () => {
     warmUpApi();
-    if (!combobox.input.disabled && state.participants.length > 0) {
+    if (!combobox.input.disabled && (state.participants.length > 0 || !state.participantsLoaded)) {
       openCombobox(combobox);
     }
   });
@@ -1349,6 +1419,7 @@ async function loadBootstrap() {
       if (data.participants.length > 0) {
         applyParticipantsList(data.participants);
       } else {
+        markParticipantsLoaded();
         setParticipantInputReady(
           "請手動輸入編號 (如 1A)",
           "⚠️ Participants 工作表沒有 participant_id 資料",
@@ -1394,6 +1465,7 @@ async function loadParticipants() {
     }
 
     if (data.status === "success" && Array.isArray(data.participants) && data.participants.length === 0) {
+      markParticipantsLoaded();
       setParticipantInputReady(
         "請手動輸入編號 (如 1A)",
         "⚠️ Participants 工作表沒有 participant_id 資料",
@@ -1402,6 +1474,7 @@ async function loadParticipants() {
       return;
     }
 
+    markParticipantsLoaded();
     setParticipantInputReady(
       "請手動輸入編號 (如 1A)",
       "⚠️ 無法從 Sheet 載入名單，請手動輸入",
@@ -1409,6 +1482,7 @@ async function loadParticipants() {
     );
     showToast(data.message || "無法載入參加者名單", "warning");
   } catch (err) {
+    markParticipantsLoaded();
     const isTimeout = err.name === "AbortError";
     setParticipantInputReady(
       "請手動輸入編號 (如 1A)",
@@ -1851,6 +1925,8 @@ settingsDisableBtn.addEventListener("click", () => handleSetMessagingStatus("CLO
 monitorBtn.addEventListener("click", openMonitorScreen);
 monitorCloseBtn.addEventListener("click", closeMonitorScreen);
 monitorLoginBtn.addEventListener("click", handleMonitorLogin);
+monitorEnableBtn.addEventListener("click", () => handleMonitorSetMessagingStatus("OPEN"));
+monitorDisableBtn.addEventListener("click", () => handleMonitorSetMessagingStatus("CLOSE"));
 document.querySelectorAll(".monitor-filter-btn").forEach((btn) => {
   btn.addEventListener("click", () => setMonitorViewFilter(btn.dataset.monitorFilter));
 });

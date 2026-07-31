@@ -397,6 +397,22 @@ body.modal-open {
   background: #fef2f2;
 }
 
+.monitor-messaging-controls {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--surface-alt);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.monitor-messaging-controls .settings-status {
+  margin-bottom: 12px;
+}
+
+.monitor-messaging-actions {
+  margin-top: 0;
+}
+
 .monitor-filter-nav {
   display: flex;
   gap: 6px;

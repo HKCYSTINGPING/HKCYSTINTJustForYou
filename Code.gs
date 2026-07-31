@@ -6,7 +6,7 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 9;
+const SCRIPT_VERSION = 10;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
@@ -300,8 +300,16 @@ function getCell_(row, col) {
 
 function isMessageDeleted_(row, cols) {
   if (cols.status > 0) {
-    return String(getCell_(row, cols.status)).trim().toLowerCase() === MESSAGE_STATUS_DELETED;
+    const status = String(getCell_(row, cols.status)).trim().toLowerCase();
+    if (status === MESSAGE_STATUS_DELETED) {
+      return true;
+    }
   }
+
+  if (cols.deletedAt > 0) {
+    return String(getCell_(row, cols.deletedAt)).trim() !== "";
+  }
+
   return false;
 }
 
@@ -318,6 +326,10 @@ function mapMessageRow_(row, cols, options) {
 
   if (includeSender) {
     message.sender_id = normalizeId_(getCell_(row, cols.senderId));
+  }
+
+  if (message.deleted_at) {
+    message.status = MESSAGE_STATUS_DELETED;
   }
 
   if (message.status === MESSAGE_STATUS_DELETED) {
