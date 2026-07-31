@@ -32,7 +32,14 @@ const LOGIN_FETCH_TIMEOUT = 25000;
 const SEND_FETCH_TIMEOUT = 25000;
 const MONITOR_WATCH_TIMEOUT = 15000;
 const MONITOR_WATCH_INTERVAL = 800;
+const MONITOR_WATCH_HIDDEN_INTERVAL = 3000;
 const MONITOR_WATCH_RETRY_MS = 2000;
+const MONITOR_SYNC_INTERVAL = 12000;
+const SENT_WATCH_TIMEOUT = 15000;
+const SENT_WATCH_INTERVAL = 1500;
+const SENT_WATCH_HIDDEN_INTERVAL = 4000;
+const SENT_WATCH_RETRY_MS = 2000;
+const SENT_SYNC_INTERVAL = 15000;
 const ADMIN_PARTICIPANT_ID = "ADMIN";
 const ADMIN_PHONE = "23082026";
 const ADMIN_DELETED_REASON = "此留言已被管理員撤回，未能送達接收者（管理員決定）";
@@ -47,11 +54,13 @@ const state = {
   participantsLoaded: false,
   inboxMessages: [],
   sentMessages: [],
+  sentRevision: "",
   sentLoaded: false,
   messagingOpen: true,
   messagingStatusLoaded: false,
   isAdmin: false,
   monitorMessages: [],
+  monitorRevision: "",
   monitorViewFilter: "all",
   trophy: {
     loaded: false,
@@ -182,6 +191,10 @@ const trophySummaryTableWrap = document.getElementById("trophy-summary-table-wra
 let monitorWatchActive = false;
 let monitorWatchController = null;
 let monitorLoading = false;
+let monitorSyncTimer = null;
+let sentWatchActive = false;
+let sentWatchController = null;
+let sentSyncTimer = null;
 
 let loadingCount = 0;
 
@@ -376,10 +389,188 @@ function applyInboxFromApi(data) {
 }
 
 function applySentFromApi(data) {
-  state.sentMessages = data.sent_messages || [];
-  state.sentLoaded = true;
+  applySentMessages(data.sent_messages || [], {
+    revision: data.revision || null
+  });
   if (data.messaging_status) {
     applyMessagingStatus(data.messaging_status);
+  }
+}
+
+function setSentRevision(revision) {
+  state.sentRevision = String(revision || "").trim();
+}
+
+function applySentMessages(messages, options = {}) {
+  const { revision = null } = options;
+  const normalized = (messages || []).map(normalizeMonitorMessage);
+
+  state.sentMessages = normalized.sort(
+    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+  );
+  state.sentLoaded = true;
+
+  if (revision) {
+    setSentRevision(revision);
+  }
+
+  renderSentMessages();
+}
+
+function shouldApplySentUpdate(data) {
+  if (!data || data.status !== "success") return false;
+  if (data.changed) return true;
+
+  const serverCount = typeof data.message_count === "number"
+    ? data.message_count
+    : (data.sent_messages || []).length;
+
+  if (serverCount !== state.sentMessages.length) {
+    return true;
+  }
+
+  if (data.revision && data.revision !== state.sentRevision) {
+    return true;
+  }
+
+  return false;
+}
+
+async function apiWatchSentMessages(revision, options = {}) {
+  const params = {
+    action: "watch_sent_messages",
+    participant_id: normalizeParticipantId(state.participantId),
+    phone_number: normalizePhone(state.phoneNumber),
+    revision: revision || ""
+  };
+  const fetchOptions = options.signal ? { signal: options.signal } : {};
+  let data = await apiAdminGet(params, SENT_WATCH_TIMEOUT, fetchOptions);
+
+  const isValidWatch = (result) =>
+    result.status === "success" &&
+    typeof result.changed === "boolean" &&
+    typeof result.message_count === "number" &&
+    Array.isArray(result.sent_messages);
+
+  if (isValidWatch(data)) return data;
+
+  if (data.status !== "success" || typeof data.changed !== "boolean") {
+    const listData = await apiFetchMessages(state.participantId, state.phoneNumber, "sent");
+    if (listData.status !== "success") return listData;
+
+    const nextRevision = listData.revision || "";
+    const messageCount = (listData.sent_messages || []).length;
+    return {
+      status: "success",
+      changed: nextRevision !== revision || messageCount !== state.sentMessages.length,
+      revision: nextRevision,
+      message_count: messageCount,
+      sent_messages: listData.sent_messages || [],
+      legacyWatch: true
+    };
+  }
+
+  if (typeof data.message_count !== "number") {
+    data.message_count = (data.sent_messages || []).length;
+  }
+
+  if (!Array.isArray(data.sent_messages)) {
+    data.sent_messages = [];
+  }
+
+  return data;
+}
+
+function startSentPeriodicSync() {
+  stopSentPeriodicSync();
+
+  sentSyncTimer = window.setInterval(() => {
+    if (state.isAdmin || !state.participantId || !dashboardScreen || dashboardScreen.classList.contains("hidden")) {
+      return;
+    }
+
+    loadSentMessages({ silent: true });
+  }, SENT_SYNC_INTERVAL);
+}
+
+function stopSentPeriodicSync() {
+  if (sentSyncTimer) {
+    window.clearInterval(sentSyncTimer);
+    sentSyncTimer = null;
+  }
+}
+
+function startSentWatch() {
+  if (state.isAdmin || !state.participantId || !state.phoneNumber) {
+    return;
+  }
+
+  stopSentWatch();
+  sentWatchActive = true;
+  runSentWatchLoop();
+}
+
+function stopSentWatch() {
+  sentWatchActive = false;
+  if (sentWatchController) {
+    sentWatchController.abort();
+    sentWatchController = null;
+  }
+}
+
+async function runSentWatchLoop() {
+  if (!sentWatchActive || state.isAdmin || !state.participantId || !state.phoneNumber) {
+    return;
+  }
+
+  if (dashboardScreen.classList.contains("hidden")) {
+    return;
+  }
+
+  const pollInterval = document.hidden ? SENT_WATCH_HIDDEN_INTERVAL : SENT_WATCH_INTERVAL;
+  sentWatchController = new AbortController();
+  const revision = state.sentRevision || "";
+
+  try {
+    const data = await apiWatchSentMessages(revision, {
+      signal: sentWatchController.signal
+    });
+
+    if (!sentWatchActive || state.isAdmin || !state.participantId) {
+      return;
+    }
+
+    if (data.status === "success") {
+      if (shouldApplySentUpdate(data)) {
+        if ((data.sent_messages || []).length > 0) {
+          applySentMessages(data.sent_messages || [], {
+            revision: data.revision || null
+          });
+        } else if (data.changed || data.message_count !== state.sentMessages.length) {
+          await loadSentMessages({ silent: true });
+        } else if (data.revision) {
+          setSentRevision(data.revision);
+        }
+      } else if (data.revision) {
+        setSentRevision(data.revision);
+      }
+
+      window.setTimeout(runSentWatchLoop, pollInterval);
+      return;
+    }
+
+    window.setTimeout(runSentWatchLoop, SENT_WATCH_RETRY_MS);
+  } catch (err) {
+    if (err.name === "AbortError") {
+      return;
+    }
+
+    console.warn("Sent watch error:", err);
+    if (sentWatchActive && !state.isAdmin && state.participantId) {
+      window.setTimeout(runSentWatchLoop, SENT_WATCH_RETRY_MS);
+    }
+  } finally {
+    sentWatchController = null;
   }
 }
 
@@ -685,7 +876,10 @@ async function apiAdminWatchMessages(revision, options = {}) {
 
   let data = await apiAdminGet(params, MONITOR_WATCH_TIMEOUT, fetchOptions);
   const isValidWatch = (result) =>
-    result.status === "success" && Array.isArray(result.messages) && typeof result.changed === "boolean";
+    result.status === "success" &&
+    typeof result.changed === "boolean" &&
+    typeof result.message_count === "number" &&
+    Array.isArray(result.messages);
 
   if (isValidWatch(data)) return data;
 
@@ -698,14 +892,24 @@ async function apiAdminWatchMessages(revision, options = {}) {
     const listData = await apiAdminListMessages();
     if (listData.status !== "success") return listData;
 
-    const nextRevision = getMonitorRevision(listData.messages || []);
+    const nextRevision = listData.revision || getMonitorRevision(listData.messages || []);
+    const messageCount = (listData.messages || []).length;
     return {
       status: "success",
-      changed: nextRevision !== revision,
+      changed: nextRevision !== revision || messageCount !== state.monitorMessages.length,
       revision: nextRevision,
+      message_count: messageCount,
       messages: listData.messages || [],
       legacyWatch: true
     };
+  }
+
+  if (typeof data.message_count !== "number") {
+    data.message_count = (data.messages || []).length;
+  }
+
+  if (!Array.isArray(data.messages)) {
+    data.messages = [];
   }
 
   return data;
@@ -855,8 +1059,10 @@ async function handleAdminSetMessagingStatus(targetStatus) {
 
 function resetAdminState() {
   stopMonitorWatch();
+  stopMonitorPeriodicSync();
   state.isAdmin = false;
   state.monitorMessages = [];
+  state.monitorRevision = "";
   state.monitorViewFilter = "all";
   setMonitorViewFilter("all");
   monitorList.innerHTML = renderEmptyState("目前沒有留言", "留言會即時顯示在這裡", "eye");
@@ -869,6 +1075,29 @@ function getMonitorRevision(messages = state.monitorMessages) {
     .map((msg) => `${String(msg.message_id || "")}:${String(msg.status || "active")}`)
     .sort()
     .join("\u0001");
+}
+
+function shouldApplyMonitorUpdate(data) {
+  if (!data || data.status !== "success") return false;
+  if (data.changed) return true;
+
+  const serverCount = typeof data.message_count === "number"
+    ? data.message_count
+    : (data.messages || []).length;
+
+  if (serverCount !== state.monitorMessages.length) {
+    return true;
+  }
+
+  if (data.revision && data.revision !== state.monitorRevision) {
+    return true;
+  }
+
+  return false;
+}
+
+function setMonitorRevision(revision) {
+  state.monitorRevision = String(revision || "").trim();
 }
 
 function normalizeMonitorMessage(msg) {
@@ -913,7 +1142,7 @@ function mergeMonitorMessages(apiMessages = []) {
 }
 
 function applyMonitorMessages(messages, options = {}) {
-  const { highlightNew = true } = options;
+  const { highlightNew = true, revision = null } = options;
   const normalized = (messages || []).map(normalizeMonitorMessage);
   const merged = mergeMonitorMessages(normalized);
   const previousIds = new Set(state.monitorMessages.map((msg) => msg.message_id));
@@ -926,6 +1155,11 @@ function applyMonitorMessages(messages, options = {}) {
     : new Set();
 
   state.monitorMessages = merged;
+  if (revision) {
+    setMonitorRevision(revision);
+  } else if (merged.length > 0) {
+    setMonitorRevision(getMonitorRevision(merged));
+  }
   renderMonitorList(newMessageIds);
   updateMonitorMeta();
 }
@@ -942,7 +1176,10 @@ async function loadMonitorMessages(options = {}) {
     const data = await apiAdminListMessages();
 
     if (data.status === "success") {
-      applyMonitorMessages(data.messages || [], { highlightNew: !silent });
+      applyMonitorMessages(data.messages || [], {
+        highlightNew: !silent,
+        revision: data.revision || null
+      });
       return true;
     }
 
@@ -1119,6 +1356,25 @@ async function handleAdminDeleteMessage(messageId, button) {
   }
 }
 
+function startMonitorPeriodicSync() {
+  stopMonitorPeriodicSync();
+
+  monitorSyncTimer = window.setInterval(() => {
+    if (!state.isAdmin || !adminScreen || adminScreen.classList.contains("hidden")) {
+      return;
+    }
+
+    loadMonitorMessages({ silent: true });
+  }, MONITOR_SYNC_INTERVAL);
+}
+
+function stopMonitorPeriodicSync() {
+  if (monitorSyncTimer) {
+    window.clearInterval(monitorSyncTimer);
+    monitorSyncTimer = null;
+  }
+}
+
 function startMonitorWatch() {
   stopMonitorWatch();
   monitorWatchActive = true;
@@ -1142,12 +1398,10 @@ async function runMonitorWatchLoop() {
     return;
   }
 
-  if (document.hidden) {
-    return;
-  }
+  const pollInterval = document.hidden ? MONITOR_WATCH_HIDDEN_INTERVAL : MONITOR_WATCH_INTERVAL;
 
   monitorWatchController = new AbortController();
-  const revision = getMonitorRevision();
+  const revision = state.monitorRevision || "";
 
   try {
     const data = await apiAdminWatchMessages(revision, {
@@ -1159,12 +1413,22 @@ async function runMonitorWatchLoop() {
     }
 
     if (data.status === "success") {
-      if (data.changed) {
-        applyMonitorMessages(data.messages || []);
-        runMonitorWatchLoop();
-      } else {
-        window.setTimeout(runMonitorWatchLoop, MONITOR_WATCH_INTERVAL);
+      if (shouldApplyMonitorUpdate(data)) {
+        if ((data.messages || []).length > 0) {
+          applyMonitorMessages(data.messages || [], {
+            highlightNew: true,
+            revision: data.revision || null
+          });
+        } else if (data.changed || data.message_count !== state.monitorMessages.length) {
+          await loadMonitorMessages({ silent: true });
+        } else if (data.revision) {
+          setMonitorRevision(data.revision);
+        }
+      } else if (data.revision) {
+        setMonitorRevision(data.revision);
       }
+
+      window.setTimeout(runMonitorWatchLoop, pollInterval);
       return;
     }
 
@@ -1198,6 +1462,8 @@ function showLogin() {
   adminScreen.classList.add("hidden");
   document.body.classList.remove("participant-active", "admin-active");
   stopMonitorWatch();
+  stopSentWatch();
+  stopSentPeriodicSync();
 }
 
 function showDashboard() {
@@ -1213,6 +1479,9 @@ function showDashboard() {
   if (!state.messagingStatusLoaded) {
     loadMessagingStatus({ silent: true });
   }
+  loadSentMessages({ silent: true });
+  startSentWatch();
+  startSentPeriodicSync();
 }
 
 function showAdminDashboard() {
@@ -1222,7 +1491,9 @@ function showAdminDashboard() {
   document.body.classList.add("admin-active");
   document.body.classList.remove("participant-active");
   loadMessagingStatus({ silent: true });
+  loadMonitorMessages({ silent: true });
   startMonitorWatch();
+  startMonitorPeriodicSync();
   loadAdminTrophyData({ silent: true });
 }
 
@@ -1626,7 +1897,6 @@ async function loadSentMessages(options = {}) {
 
     if (data.status === "success") {
       applySentFromApi(data);
-      renderSentMessages();
       if (showToastOnSuccess) {
         showToast("送出的留言已更新", "success");
       }
@@ -1681,7 +1951,10 @@ async function handleLogin(e) {
             state.isAdmin = true;
             state.participantId = ADMIN_PARTICIPANT_ID;
             state.phoneNumber = ADMIN_PHONE;
-            applyMonitorMessages(data.messages || [], { highlightNew: false });
+            applyMonitorMessages(data.messages || [], {
+              highlightNew: false,
+              revision: data.revision || null
+            });
             if (data.messaging_status) {
               applyMessagingStatus(data.messaging_status);
             }
@@ -1716,6 +1989,7 @@ async function handleLogin(e) {
           state.participantId = participantId;
           state.phoneNumber = phoneNumber;
           state.sentMessages = [];
+          state.sentRevision = "";
           state.sentLoaded = false;
           applyInboxFromApi(data);
           saveInboxCache(participantId, state.inboxMessages);
@@ -1894,6 +2168,7 @@ function handleLogout() {
   state.isAdmin = false;
   state.inboxMessages = [];
   state.sentMessages = [];
+  state.sentRevision = "";
   state.sentLoaded = false;
   state.messagingStatusLoaded = false;
   state.trophy = {
@@ -1969,15 +2244,29 @@ document.querySelectorAll(".monitor-filter-btn[data-monitor-filter]").forEach((b
 });
 
 document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    return;
+  }
+
   if (
-    !document.hidden &&
     adminScreen &&
     !adminScreen.classList.contains("hidden") &&
     state.isAdmin
   ) {
+    loadMonitorMessages({ silent: true });
     startMonitorWatch();
-  } else if (document.hidden) {
-    stopMonitorWatch();
+    startMonitorPeriodicSync();
+  }
+
+  if (
+    dashboardScreen &&
+    !dashboardScreen.classList.contains("hidden") &&
+    !state.isAdmin &&
+    state.participantId
+  ) {
+    loadSentMessages({ silent: true });
+    startSentWatch();
+    startSentPeriodicSync();
   }
 });
 
@@ -2294,7 +2583,11 @@ function setAdminMode(mode) {
   adminMessagesPanel.classList.toggle("hidden", mode !== "messages");
   adminMessagesPanel.classList.toggle("active", mode === "messages");
   adminTrophyPanel.classList.toggle("hidden", mode !== "trophy");
-  if (mode === "trophy") {
+  if (mode === "messages") {
+    renderMonitorList();
+    updateMonitorMeta();
+    loadMonitorMessages({ silent: true });
+  } else if (mode === "trophy") {
     loadAdminTrophyData();
   }
 }

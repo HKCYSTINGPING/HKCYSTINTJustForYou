@@ -69,6 +69,10 @@ function doGet(e) {
       return jsonResponse_(handleAdminWatchMessages_(params.password, params.participant_id, params.phone_number, params.revision));
     }
 
+    if (action === "watch_sent_messages") {
+      return jsonResponse_(handleWatchSentMessages_(params.participant_id, params.phone_number, params.revision));
+    }
+
     if (action === "admin_delete_message") {
       return jsonResponse_(handleAdminDeleteMessage_(params.password, params.participant_id, params.phone_number, params.message_id));
     }
@@ -159,9 +163,11 @@ function doGet(e) {
     }
 
     if (fetchType === "sent") {
+      const sentMessages = getSentMessages_(participantId);
       return jsonResponse_({
         status: "success",
-        sent_messages: getSentMessages_(participantId),
+        sent_messages: sentMessages,
+        revision: getAdminMessagesRevision_(sentMessages),
         messaging_status: getMessagingStatusValue_()
       });
     }
@@ -550,12 +556,18 @@ function getAdminAllMessages_() {
 }
 
 function getAdminMessagesRevision_(messages) {
-  return messages
+  const body = messages
     .map(function (msg) {
       return String(msg.message_id || "") + ":" + String(msg.status || MESSAGE_STATUS_ACTIVE);
     })
     .sort()
     .join("\u0001");
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, body, Utilities.Charset.UTF_8);
+  const hash = digest.map(function (byte) {
+    const value = byte < 0 ? byte + 256 : byte;
+    return ("0" + value.toString(16)).slice(-2);
+  }).join("");
+  return String(messages.length) + "-" + hash;
 }
 
 function handleAdminListMessages_(password, participantId, phoneNumber) {
@@ -588,11 +600,40 @@ function handleAdminWatchMessages_(password, participantId, phoneNumber, clientR
   const revision = getAdminMessagesRevision_(messages);
   const normalizedRevision = String(clientRevision || "").trim();
 
+  const changed = !normalizedRevision || normalizedRevision !== revision;
+
   return {
     status: "success",
-    changed: !normalizedRevision || normalizedRevision !== revision,
+    changed: changed,
     revision: revision,
-    messages: messages
+    message_count: messages.length,
+    messages: changed ? messages : []
+  };
+}
+
+function handleWatchSentMessages_(participantId, phoneNumber, clientRevision) {
+  const normalizedId = normalizeId_(participantId);
+  const normalizedPhone = normalizePhone_(phoneNumber);
+
+  if (!normalizedId || !normalizedPhone) {
+    return { status: "error", message: "請提供 participant_id 與 phone_number" };
+  }
+
+  if (!verifyParticipant_(normalizedId, normalizedPhone)) {
+    return { status: "error", message: "身份驗證失敗" };
+  }
+
+  const sentMessages = getSentMessages_(normalizedId);
+  const revision = getAdminMessagesRevision_(sentMessages);
+  const normalizedRevision = String(clientRevision || "").trim();
+  const changed = !normalizedRevision || normalizedRevision !== revision;
+
+  return {
+    status: "success",
+    changed: changed,
+    revision: revision,
+    message_count: sentMessages.length,
+    sent_messages: changed ? sentMessages : []
   };
 }
 
