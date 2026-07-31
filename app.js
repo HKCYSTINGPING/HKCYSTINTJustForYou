@@ -366,6 +366,14 @@ function normalizeParticipantId(id) {
   return String(id || "").trim().toUpperCase();
 }
 
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function isSameParticipantId(a, b) {
+  return normalizeParticipantId(a) === normalizeParticipantId(b);
+}
+
 function warmUpApi() {
   if (!apiWarmPromise) {
     apiWarmPromise = fetchWithTimeout(`${API_URL}?action=get_messaging_status`, {}, 8000).catch(() => {});
@@ -454,8 +462,8 @@ async function refreshParticipantsInBackground() {
 
 async function apiFetchMessages(participantId, phoneNumber, fetchType = "inbox") {
   const params = new URLSearchParams({
-    participant_id: participantId,
-    phone_number: phoneNumber,
+    participant_id: normalizeParticipantId(participantId),
+    phone_number: normalizePhone(phoneNumber),
     fetch_type: fetchType
   });
 
@@ -464,14 +472,14 @@ async function apiFetchMessages(participantId, phoneNumber, fetchType = "inbox")
 }
 
 function isAdminLogin(participantId, phoneNumber) {
-  return normalizeParticipantId(participantId) === ADMIN_PARTICIPANT_ID &&
-    String(phoneNumber || "").trim() === ADMIN_PHONE;
+  return isSameParticipantId(participantId, ADMIN_PARTICIPANT_ID) &&
+    normalizePhone(phoneNumber) === ADMIN_PHONE;
 }
 
 function buildAdminApiParams(extra = {}) {
   return {
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber,
+    participant_id: normalizeParticipantId(state.participantId),
+    phone_number: normalizePhone(state.phoneNumber),
     ...extra
   };
 }
@@ -1126,18 +1134,20 @@ function showAdminDashboard() {
 }
 
 function getFilteredParticipants(filterText = "", excludeId = null) {
-  const query = normalizeParticipantId(filterText);
+  const query = normalizeParticipantId(filterText).toLowerCase();
   let list = state.participants.filter(
     (id) =>
-      normalizeParticipantId(id) !== normalizeParticipantId(excludeId) &&
-      normalizeParticipantId(id) !== ADMIN_PARTICIPANT_ID
+      !isSameParticipantId(id, excludeId) &&
+      !isSameParticipantId(id, ADMIN_PARTICIPANT_ID)
   );
 
   if (!query) return list;
 
-  return list.filter((id) =>
-    id.includes(query) || formatParticipantLabel(id).includes(query)
-  );
+  return list.filter((id) => {
+    const normalizedId = normalizeParticipantId(id).toLowerCase();
+    const label = formatParticipantLabel(id).toLowerCase();
+    return normalizedId.includes(query) || label.includes(query);
+  });
 }
 
 function renderComboboxPicker(combobox, filterText = combobox.input.value) {
@@ -1234,7 +1244,6 @@ function selectFromCombobox(combobox, id) {
 
 function setupComboboxEvents(combobox) {
   combobox.input.addEventListener("input", () => {
-    combobox.input.value = normalizeParticipantId(combobox.input.value);
     if (!combobox.picker.classList.contains("hidden")) {
       renderComboboxPicker(combobox);
     }
@@ -1555,8 +1564,8 @@ async function handleLogin(e) {
         (data) => {
           if (data.status === "success" && data.role === "admin") {
             state.isAdmin = true;
-            state.participantId = participantId;
-            state.phoneNumber = phoneNumber;
+            state.participantId = ADMIN_PARTICIPANT_ID;
+            state.phoneNumber = ADMIN_PHONE;
             applyMonitorMessages(data.messages || [], { highlightNew: false });
             if (data.messaging_status) {
               applyMessagingStatus(data.messaging_status);
@@ -1782,7 +1791,7 @@ function handleLogout() {
    Event Listeners
    ========================================== */
 document.getElementById("phone-number").addEventListener("input", (e) => {
-  e.target.value = e.target.value.replace(/\D/g, "");
+  e.target.value = normalizePhone(e.target.value);
 });
 
 document.getElementById("phone-number").addEventListener("focus", () => {

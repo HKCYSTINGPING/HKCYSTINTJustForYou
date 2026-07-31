@@ -6,7 +6,7 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 11;
+const SCRIPT_VERSION = 12;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
@@ -662,7 +662,7 @@ function handleSetMessagingStatus_(password, participantId, phoneNumber, messagi
 }
 
 function verifyAdminPassword_(password) {
-  return String(password || "") === ADMIN_PASSWORD;
+  return String(password || "").trim().toUpperCase() === String(ADMIN_PASSWORD).toUpperCase();
 }
 
 function isAdminCredentials_(participantId, phoneNumber) {
