@@ -6,7 +6,7 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 8;
+const SCRIPT_VERSION = 9;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
@@ -419,14 +419,13 @@ function handleSendMessage_(data) {
   };
 }
 
-function getAdminActiveMessages_() {
+function getAdminAllMessages_() {
   const ctx = getMessageSheetContext_();
   if (!ctx) {
     return null;
   }
 
   return getDataRows_(ctx.sheet)
-    .filter((row) => !isMessageDeleted_(row, ctx.cols))
     .map((row) => mapMessageRow_(row, ctx.cols, { includeSender: true }))
     .filter((msg) => msg.content)
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
@@ -435,7 +434,7 @@ function getAdminActiveMessages_() {
 function getAdminMessagesRevision_(messages) {
   return messages
     .map(function (msg) {
-      return String(msg.message_id || "");
+      return String(msg.message_id || "") + ":" + String(msg.status || MESSAGE_STATUS_ACTIVE);
     })
     .sort()
     .join("\u0001");
@@ -446,7 +445,7 @@ function handleAdminListMessages_(password) {
     return { status: "error", message: "密碼錯誤" };
   }
 
-  const messages = getAdminActiveMessages_();
+  const messages = getAdminAllMessages_();
   if (!messages) {
     return { status: "error", message: '找不到 "Messages" 工作表' };
   }
@@ -463,7 +462,7 @@ function handleAdminWatchMessages_(password, clientRevision) {
     return { status: "error", message: "密碼錯誤" };
   }
 
-  const messages = getAdminActiveMessages_();
+  const messages = getAdminAllMessages_();
   if (!messages) {
     return { status: "error", message: '找不到 "Messages" 工作表' };
   }

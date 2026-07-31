@@ -79,7 +79,7 @@
               type="text"
               id="participant-id"
               name="participant_id"
-              placeholder="載入參加者名單中..."
+              placeholder="請選擇或輸入編號 (如 1A, 3C...)"
               autocomplete="off"
               required
               disabled
@@ -87,6 +87,15 @@
               aria-controls="participant-picker"
               aria-expanded="false"
             >
+            <button
+              type="button"
+              id="participant-clear"
+              class="combobox-clear hidden"
+              aria-label="清除參加者編號"
+              tabindex="-1"
+            >
+              ✕
+            </button>
             <button
               type="button"
               id="participant-toggle"
@@ -146,6 +155,22 @@
       <button type="button" id="logout-btn" class="btn btn-ghost">🚪 登出</button>
     </header>
 
+    <nav class="tab-nav" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="send" role="tab" aria-selected="true">
+        <span class="tab-label-long">✏️ 發送留言</span>
+        <span class="tab-label-short">✏️ 發送</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="inbox" role="tab" aria-selected="false">
+        <span class="tab-label-long">📥 收件箱</span>
+        <span class="tab-label-short">📥 收件</span>
+        <span id="inbox-badge" class="tab-badge hidden">0</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="sent" role="tab" aria-selected="false">
+        <span class="tab-label-long">📤 送出的留言</span>
+        <span class="tab-label-short">📤 送出</span>
+      </button>
+    </nav>
+
     <main class="tab-content">
       <!-- Send Message Tab -->
       <section id="tab-send" class="tab-panel active" role="tabpanel">
@@ -169,6 +194,15 @@
                   aria-controls="receiver-picker"
                   aria-expanded="false"
                 >
+                <button
+                  type="button"
+                  id="receiver-clear"
+                  class="combobox-clear hidden"
+                  aria-label="清除接收對象"
+                  tabindex="-1"
+                >
+                  ✕
+                </button>
                 <button
                   type="button"
                   id="receiver-toggle"
@@ -264,23 +298,6 @@
         </div>
       </section>
     </main>
-
-    <!-- Tab Navigation (bottom) -->
-    <nav class="tab-nav tab-nav-bottom" role="tablist">
-      <button type="button" class="tab-btn active" data-tab="send" role="tab" aria-selected="true">
-        <span class="tab-label-long">✏️ 發送留言</span>
-        <span class="tab-label-short">✏️<br>發送</span>
-      </button>
-      <button type="button" class="tab-btn" data-tab="inbox" role="tab" aria-selected="false">
-        <span class="tab-label-long">📥 收件箱</span>
-        <span class="tab-label-short">📥<br>收件</span>
-        <span id="inbox-badge" class="tab-badge hidden">0</span>
-      </button>
-      <button type="button" class="tab-btn" data-tab="sent" role="tab" aria-selected="false">
-        <span class="tab-label-long">📤 送出的留言</span>
-        <span class="tab-label-short">📤<br>送出</span>
-      </button>
-    </nav>
   </section>
 
   <!-- Admin Monitor Screen -->
@@ -329,6 +346,11 @@
                 · 共 <span id="monitor-message-count">0</span> 則
               </p>
             </div>
+          </div>
+          <div class="monitor-filter-nav" role="tablist" aria-label="留言篩選">
+            <button type="button" class="monitor-filter-btn active" data-monitor-filter="all" role="tab" aria-selected="true">全部</button>
+            <button type="button" class="monitor-filter-btn" data-monitor-filter="active" role="tab" aria-selected="false">已送出</button>
+            <button type="button" class="monitor-filter-btn" data-monitor-filter="deleted" role="tab" aria-selected="false">已刪除</button>
           </div>
           <div id="monitor-list" class="message-list monitor-list">
             <div class="empty-state">

@@ -27,7 +27,6 @@ const BAD_WORDS_LIST = [
    ========================================== */
 const PARTICIPANTS_CACHE_KEY = "ams_participants_cache";
 const PARTICIPANTS_CACHE_TTL = 30 * 60 * 1000;
-const INBOX_CACHE_TTL = 30 * 60 * 1000;
 const PARTICIPANTS_FETCH_TIMEOUT = 20000;
 const LOGIN_FETCH_TIMEOUT = 25000;
 const SEND_FETCH_TIMEOUT = 25000;
@@ -47,7 +46,8 @@ const state = {
   messagingStatusLoaded: false,
   monitorAuthenticated: false,
   adminPassword: null,
-  monitorMessages: []
+  monitorMessages: [],
+  monitorViewFilter: "all"
 };
 
 /* ==========================================
@@ -63,12 +63,14 @@ const sendForm = document.getElementById("send-form");
 const sendBtn = document.getElementById("send-btn");
 const participantSelect = document.getElementById("participant-id");
 const participantToggle = document.getElementById("participant-toggle");
+const participantClear = document.getElementById("participant-clear");
 const participantPicker = document.getElementById("participant-picker");
 const participantPickerList = document.getElementById("participant-picker-list");
 const participantPickerCount = document.getElementById("participant-picker-count");
 const participantHint = document.getElementById("participant-hint");
 const receiverSelect = document.getElementById("receiver-id");
 const receiverToggle = document.getElementById("receiver-toggle");
+const receiverClear = document.getElementById("receiver-clear");
 const receiverPicker = document.getElementById("receiver-picker");
 const receiverPickerList = document.getElementById("receiver-picker-list");
 const receiverPickerCount = document.getElementById("receiver-picker-count");
@@ -77,6 +79,7 @@ const participantCombobox = {
   root: document.getElementById("participant-combobox"),
   input: participantSelect,
   toggle: participantToggle,
+  clear: participantClear,
   picker: participantPicker,
   list: participantPickerList,
   count: participantPickerCount,
@@ -90,6 +93,7 @@ const receiverCombobox = {
   root: document.getElementById("receiver-combobox"),
   input: receiverSelect,
   toggle: receiverToggle,
+  clear: receiverClear,
   picker: receiverPicker,
   list: receiverPickerList,
   count: receiverPickerCount,
@@ -322,8 +326,7 @@ function applySentFromApi(data) {
 }
 
 function saveSession() {
-  sessionStorage.setItem("ams_participant_id", state.participantId);
-  sessionStorage.setItem("ams_phone_number", state.phoneNumber);
+  // Session is kept in memory only; no auto-login on refresh.
 }
 
 function clearSession() {
@@ -360,22 +363,6 @@ function saveInboxCache(participantId, messages) {
     messages,
     cachedAt: Date.now()
   }));
-}
-
-function getCachedInbox(participantId) {
-  try {
-    const raw = sessionStorage.getItem(getInboxCacheKey(participantId));
-    if (!raw) return null;
-
-    const { messages, cachedAt } = JSON.parse(raw);
-    if (!Array.isArray(messages) || Date.now() - cachedAt > INBOX_CACHE_TTL) {
-      return null;
-    }
-
-    return messages;
-  } catch {
-    return null;
-  }
 }
 
 function clearInboxCache(participantId) {
@@ -672,6 +659,7 @@ function updateMessagingUI() {
   if (receiverToggle) receiverToggle.disabled = !open;
   if (messageContent) messageContent.disabled = !open;
   if (!open) closeAllComboboxes();
+  updateComboboxClearButton(receiverCombobox);
 
   validateMessageInput();
 }
@@ -769,9 +757,11 @@ function clearAdminSession() {
   state.monitorAuthenticated = false;
   state.adminPassword = null;
   state.monitorMessages = [];
+  state.monitorViewFilter = "all";
   stopMonitorWatch();
   monitorPassword.value = "";
   showMonitorAuth();
+  setMonitorViewFilter("all");
   monitorList.innerHTML = `
     <div class="empty-state">
       <span class="empty-emoji">👁️</span>
@@ -825,23 +815,42 @@ function showMonitorDashboard() {
 
 function getMonitorRevision(messages = state.monitorMessages) {
   return messages
-    .map((msg) => String(msg.message_id || ""))
+    .map((msg) => `${String(msg.message_id || "")}:${String(msg.status || "active")}`)
     .sort()
     .join("\u0001");
 }
 
+function mergeMonitorMessages(apiMessages = []) {
+  const mergedById = new Map();
+
+  apiMessages.forEach((msg) => {
+    mergedById.set(msg.message_id, msg);
+  });
+
+  state.monitorMessages.forEach((msg) => {
+    if (isMessageDeleted(msg) && !mergedById.has(msg.message_id)) {
+      mergedById.set(msg.message_id, msg);
+    }
+  });
+
+  return Array.from(mergedById.values()).sort(
+    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+  );
+}
+
 function applyMonitorMessages(messages, options = {}) {
   const { highlightNew = true } = options;
+  const merged = mergeMonitorMessages(messages || []);
   const previousIds = new Set(state.monitorMessages.map((msg) => msg.message_id));
   const newMessageIds = highlightNew
     ? new Set(
-        messages
+        merged
           .filter((msg) => !previousIds.has(msg.message_id))
           .map((msg) => msg.message_id)
       )
     : new Set();
 
-  state.monitorMessages = messages;
+  state.monitorMessages = merged;
   renderMonitorList(newMessageIds);
   updateMonitorMeta();
 }
@@ -881,8 +890,44 @@ async function handleMonitorLogin() {
   }
 }
 
+function getMonitorMessagesForView() {
+  if (state.monitorViewFilter === "deleted") {
+    return state.monitorMessages.filter(isMessageDeleted);
+  }
+
+  if (state.monitorViewFilter === "active") {
+    return state.monitorMessages.filter((msg) => !isMessageDeleted(msg));
+  }
+
+  return state.monitorMessages;
+}
+
+function setMonitorViewFilter(filter) {
+  state.monitorViewFilter = filter;
+
+  document.querySelectorAll(".monitor-filter-btn").forEach((btn) => {
+    const isActive = btn.dataset.monitorFilter === filter;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+
+  renderMonitorList();
+  updateMonitorMeta();
+}
+
 function updateMonitorMeta() {
-  monitorMessageCount.textContent = String(state.monitorMessages.length);
+  const all = state.monitorMessages;
+  const deletedCount = all.filter(isMessageDeleted).length;
+  const activeCount = all.length - deletedCount;
+  const visible = getMonitorMessagesForView();
+
+  if (state.monitorViewFilter === "all") {
+    monitorMessageCount.textContent = deletedCount > 0
+      ? `${all.length}（${activeCount} 已送出 · ${deletedCount} 已刪除）`
+      : String(all.length);
+  } else {
+    monitorMessageCount.textContent = `${visible.length} / ${all.length}`;
+  }
   monitorLastUpdated.textContent = new Date().toLocaleTimeString("zh-TW", {
     hour: "2-digit",
     minute: "2-digit",
@@ -892,6 +937,8 @@ function updateMonitorMeta() {
 }
 
 function renderMonitorList(newMessageIds = new Set()) {
+  const visibleMessages = getMonitorMessagesForView();
+
   if (state.monitorMessages.length === 0) {
     monitorList.innerHTML = `
       <div class="empty-state">
@@ -901,22 +948,47 @@ function renderMonitorList(newMessageIds = new Set()) {
     return;
   }
 
-  monitorList.innerHTML = state.monitorMessages.map((msg) => `
-    <article class="message-card monitor-card ${newMessageIds.has(msg.message_id) ? "monitor-card-new" : ""}" data-message-id="${escapeHtml(msg.message_id)}">
+  if (visibleMessages.length === 0) {
+    const emptyText = {
+      active: "目前沒有已送出的留言",
+      deleted: "目前沒有已刪除的留言",
+      all: "目前沒有留言"
+    }[state.monitorViewFilter] || "目前沒有留言";
+
+    monitorList.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-emoji">🔍</span>
+        <p>${emptyText}</p>
+      </div>`;
+    return;
+  }
+
+  monitorList.innerHTML = visibleMessages.map((msg) => {
+    const deleted = isMessageDeleted(msg);
+    const deletedNotice = msg.deleted_reason || ADMIN_DELETED_REASON;
+
+    return `
+    <article class="message-card monitor-card ${deleted ? "deleted unsent" : ""} ${newMessageIds.has(msg.message_id) ? "monitor-card-new" : ""}" data-message-id="${escapeHtml(msg.message_id)}">
       <div class="message-card-header">
         <div class="monitor-meta">
           <span class="monitor-route">📤 ${escapeHtml(formatParticipantLabel(msg.sender_id))} → 🎯 ${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
           <span class="message-meta">🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
+          ${deleted ? '<span class="message-unsent-badge">已撤回</span>' : ""}
         </div>
+        ${deleted ? "" : `
         <button
           type="button"
           class="btn btn-secondary monitor-delete-btn btn-progress"
           data-message-id="${escapeHtml(msg.message_id)}"
-        ><span class="btn-text">🗑️ 刪除留言</span><span class="btn-progress-bar" aria-hidden="true"></span><span class="btn-progress-label" aria-hidden="true">0%</span></button>
+        ><span class="btn-text">🗑️ 刪除留言</span><span class="btn-progress-bar" aria-hidden="true"></span><span class="btn-progress-label" aria-hidden="true">0%</span></button>`}
       </div>
-      <p class="message-content">${escapeHtml(msg.content)}</p>
-    </article>
-  `).join("");
+      ${deleted ? `
+        <p class="message-deleted-notice">🚫 ${escapeHtml(deletedNotice)}</p>
+        ${msg.deleted_at ? `<p class="message-deleted-time">撤回時間：${escapeHtml(msg.deleted_at)}</p>` : ""}
+      ` : ""}
+      <p class="message-content ${deleted ? "is-deleted" : ""}">${escapeHtml(msg.content)}</p>
+    </article>`;
+  }).join("");
 
   monitorList.querySelectorAll(".monitor-delete-btn").forEach((btn) => {
     btn.addEventListener("click", () => handleAdminDeleteMessage(btn.dataset.messageId, btn));
@@ -977,13 +1049,27 @@ async function handleAdminDeleteMessage(messageId, button) {
       () => apiAdminDeleteMessage(state.adminPassword, messageId),
       async (data) => {
         if (data.status === "success") {
-          state.monitorMessages = state.monitorMessages.filter(
-            (msg) => msg.message_id !== messageId
-          );
+          state.monitorMessages = state.monitorMessages.map((msg) => {
+            if (msg.message_id !== messageId) return msg;
+
+            return {
+              ...msg,
+              status: "deleted",
+              deleted_at: new Date().toLocaleString("zh-TW", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false
+              }).replace(/\//g, "-"),
+              deleted_reason: ADMIN_DELETED_REASON
+            };
+          });
           renderMonitorList();
           updateMonitorMeta();
-          showToast("留言已刪除", "success");
-          await loadMonitorMessages({ silent: true });
+          showToast("留言已撤回", "success");
 
           if (state.participantId) {
             await loadSentMessages({ silent: true });
@@ -1191,9 +1277,24 @@ function toggleCombobox(combobox) {
   }
 }
 
+function updateComboboxClearButton(combobox) {
+  const hasValue = combobox.input.value.trim().length > 0 && !combobox.input.disabled;
+  combobox.clear.classList.toggle("hidden", !hasValue);
+  combobox.root.classList.toggle("has-value", hasValue);
+}
+
+function clearComboboxInput(combobox) {
+  combobox.input.value = "";
+  closeCombobox(combobox);
+  updateComboboxClearButton(combobox);
+  combobox.onSelect();
+  combobox.input.focus();
+}
+
 function selectFromCombobox(combobox, id) {
   combobox.input.value = id;
   closeCombobox(combobox);
+  updateComboboxClearButton(combobox);
   combobox.input.focus();
   warmUpApi();
   combobox.onSelect(id);
@@ -1205,6 +1306,7 @@ function setupComboboxEvents(combobox) {
     if (!combobox.picker.classList.contains("hidden")) {
       renderComboboxPicker(combobox);
     }
+    updateComboboxClearButton(combobox);
     combobox.onSelect();
   });
 
@@ -1213,6 +1315,12 @@ function setupComboboxEvents(combobox) {
     if (!combobox.input.disabled && state.participants.length > 0) {
       openCombobox(combobox);
     }
+  });
+
+  combobox.clear.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearComboboxInput(combobox);
   });
 
   combobox.toggle.addEventListener("click", (e) => {
@@ -1229,6 +1337,7 @@ function setParticipantInputReady(placeholder, hintText = "", hintWarning = fals
   participantHint.textContent = hintText;
   participantHint.classList.toggle("hidden", !hintText);
   participantHint.classList.toggle("warning", hintWarning);
+  updateComboboxClearButton(participantCombobox);
 }
 
 async function loadBootstrap() {
@@ -1270,23 +1379,14 @@ async function loadParticipants() {
     return;
   }
 
-  participantSelect.disabled = true;
-  participantToggle.disabled = true;
-  participantSelect.value = "";
-  participantSelect.placeholder = "載入參加者名單中...";
-  participantHint.classList.add("hidden");
+  setParticipantInputReady(
+    "請選擇或輸入編號 (如 1A, 3C...)",
+    "⏳ 名單載入中，可先手動輸入編號"
+  );
   closeAllComboboxes();
-
-  const enableManualTimer = setTimeout(() => {
-    setParticipantInputReady(
-      "請選擇或輸入編號 (如 1A)...",
-      "⏳ 名單載入中，可先手動輸入編號"
-    );
-  }, 1500);
 
   try {
     const data = await apiFetchParticipants();
-    clearTimeout(enableManualTimer);
 
     if (data.status === "success" && Array.isArray(data.participants) && data.participants.length > 0) {
       applyParticipantsList(data.participants);
@@ -1309,8 +1409,6 @@ async function loadParticipants() {
     );
     showToast(data.message || "無法載入參加者名單", "warning");
   } catch (err) {
-    clearTimeout(enableManualTimer);
-
     const isTimeout = err.name === "AbortError";
     setParticipantInputReady(
       "請手動輸入編號 (如 1A)",
@@ -1636,6 +1734,7 @@ async function handleSendMessage(e) {
         if (data.status === "success") {
           messageContent.value = "";
           receiverSelect.value = "";
+          updateComboboxClearButton(receiverCombobox);
           validateMessageInput();
 
           state.sentMessages.unshift({
@@ -1690,82 +1789,11 @@ function handleLogout() {
   closeAllComboboxes();
   loginForm.reset();
   sendForm.reset();
+  updateComboboxClearButton(participantCombobox);
+  updateComboboxClearButton(receiverCombobox);
   validateMessageInput();
   showLogin();
   showToast("👋 已成功登出", "info");
-}
-
-/* ==========================================
-   Session Restore
-   ========================================== */
-async function refreshSessionInBackground(participantId, phoneNumber) {
-  try {
-    const data = await apiFetchMessages(participantId, phoneNumber, "inbox");
-
-    if (
-      data.status === "success" &&
-      normalizeParticipantId(state.participantId) === normalizeParticipantId(participantId)
-    ) {
-      applyInboxFromApi(data);
-      saveInboxCache(participantId, state.inboxMessages);
-      renderInbox();
-      updateInboxBadge();
-      return;
-    }
-
-    if (data.status !== "success") {
-      clearSession();
-      clearInboxCache(participantId);
-      showLogin();
-    }
-  } catch (err) {
-    console.warn("Background session refresh failed:", err);
-  }
-}
-
-async function tryRestoreSession() {
-  const participantId = sessionStorage.getItem("ams_participant_id");
-  const phoneNumber = sessionStorage.getItem("ams_phone_number");
-
-  if (!participantId || !phoneNumber) return;
-
-  const cachedInbox = getCachedInbox(participantId);
-  if (cachedInbox) {
-    state.participantId = participantId;
-    state.phoneNumber = phoneNumber;
-    state.sentMessages = [];
-    state.sentLoaded = false;
-    state.inboxMessages = cachedInbox;
-    showDashboard();
-    renderInbox();
-    refreshSessionInBackground(participantId, phoneNumber);
-    return;
-  }
-
-  try {
-    await runWithProgress(
-      loginBtn,
-      () => apiFetchMessages(participantId, phoneNumber, "inbox"),
-      (data) => {
-        if (data.status === "success") {
-          state.participantId = participantId;
-          state.phoneNumber = phoneNumber;
-          state.sentMessages = [];
-          state.sentLoaded = false;
-          applyInboxFromApi(data);
-          saveInboxCache(participantId, state.inboxMessages);
-          showDashboard();
-          renderInbox();
-        } else {
-          clearSession();
-        }
-      },
-      "🔐 恢復登入中...",
-      { useGlobalOverlay: false }
-    );
-  } catch {
-    clearSession();
-  }
 }
 
 /* ==========================================
@@ -1823,6 +1851,9 @@ settingsDisableBtn.addEventListener("click", () => handleSetMessagingStatus("CLO
 monitorBtn.addEventListener("click", openMonitorScreen);
 monitorCloseBtn.addEventListener("click", closeMonitorScreen);
 monitorLoginBtn.addEventListener("click", handleMonitorLogin);
+document.querySelectorAll(".monitor-filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setMonitorViewFilter(btn.dataset.monitorFilter));
+});
 monitorPassword.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -1856,6 +1887,7 @@ window.addEventListener("orientationchange", () => {
 async function initApp() {
   validateMessageInput();
   updateAdminButtonsVisibility();
+  setParticipantInputReady("請選擇或輸入編號 (如 1A, 3C...)");
   warmUpApi();
 
   const bootstrapOk = await loadBootstrap();
@@ -1865,8 +1897,6 @@ async function initApp() {
       loadMessagingStatus({ silent: true })
     ]);
   }
-
-  tryRestoreSession();
 }
 
 initApp();
