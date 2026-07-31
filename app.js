@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbyuXjz93rfQgwRegranli192KiMzIOEonVw9kdxFo-6qvw_koYr8bY5MozwGs_fflMn7Q/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwxWmFxzfN5SFyg0b-GZgbCgqk8YsnIOV4UlwZSg3mKsz50NEgsIjCIKA6NhtjCNk7_/exec";
 
 const MAX_CHARS = 300;
 
@@ -69,6 +69,9 @@ const state = {
     overview: null,
     auditVotes: [],
     profiles: [],
+    trophySummary: [],
+    fallbackActivated: false,
+    resultsReady: false,
     view: "audit"
   }
 };
@@ -173,7 +176,8 @@ const trophyAuditSearch = document.getElementById("trophy-audit-search");
 const trophyAuditFilterTrophy = document.getElementById("trophy-audit-filter-trophy");
 const trophyAuditTableWrap = document.getElementById("trophy-audit-table-wrap");
 const trophyProfilesList = document.getElementById("trophy-profiles-list");
-const trophyCelebrationGrid = document.getElementById("trophy-celebration-grid");
+const trophyFallbackBanner = document.getElementById("trophy-fallback-banner");
+const trophySummaryTableWrap = document.getElementById("trophy-summary-table-wrap");
 
 let monitorWatchActive = false;
 let monitorWatchController = null;
@@ -2306,8 +2310,34 @@ function setTrophyAdminView(view) {
   document.getElementById("trophy-admin-audit").classList.toggle("hidden", view !== "audit");
   document.getElementById("trophy-admin-profiles").classList.toggle("active", view === "profiles");
   document.getElementById("trophy-admin-profiles").classList.toggle("hidden", view !== "profiles");
-  document.getElementById("trophy-admin-celebration").classList.toggle("active", view === "celebration");
-  document.getElementById("trophy-admin-celebration").classList.toggle("hidden", view !== "celebration");
+  document.getElementById("trophy-admin-summary-view").classList.toggle("active", view === "summary");
+  document.getElementById("trophy-admin-summary-view").classList.toggle("hidden", view !== "summary");
+}
+
+function renderTrophyFallbackBanner(fallbackActivated, resultsReady) {
+  if (!trophyFallbackBanner) return;
+
+  if (!resultsReady) {
+    trophyFallbackBanner.classList.add("hidden");
+    trophyFallbackBanner.textContent = "";
+    return;
+  }
+
+  trophyFallbackBanner.classList.remove("hidden");
+  trophyFallbackBanner.classList.toggle("is-fallback", fallbackActivated);
+  trophyFallbackBanner.classList.toggle("is-round1-only", !fallbackActivated);
+
+  if (fallbackActivated) {
+    trophyFallbackBanner.textContent = "已啟用【保底配對】機制，協助部分個人找到最受認同的特質稱號。";
+  } else {
+    trophyFallbackBanner.textContent = "所有參賽者均於第一輪全組競爭中獲得 Trophy。";
+  }
+}
+
+function formatTrophyAwardBadge(awardSource) {
+  return awardSource === "fallback"
+    ? '<span class="pill-badge pill-badge--sky">保底配對</span>'
+    : '<span class="pill-badge pill-badge--mint">全組最高票</span>';
 }
 
 function renderAdminTrophySummary(overview) {
@@ -2377,34 +2407,71 @@ function renderTrophyAuditTable(votes) {
     </table>`;
 }
 
-function renderTrophyProfiles(profiles) {
-  if (!profiles || profiles.length === 0) {
+function renderTrophyProfiles(profiles, resultsReady) {
+  if (!resultsReady || !profiles || profiles.length === 0) {
     trophyProfilesList.innerHTML = renderEmptyState("尚未計算結果", "請先完成投票並計算結果", "search");
     return;
   }
 
-  trophyProfilesList.innerHTML = profiles.map((profile) => `
+  trophyProfilesList.innerHTML = profiles.map((profile) => {
+    const trophies = profile.trophies || [];
+    const trophyItems = trophies.length > 0
+      ? trophies.map((t) => `
+        <div class="trophy-profile-trophy">
+          <div class="trophy-profile-trophy-head">
+            <strong>${escapeHtml(t.trophy_name || `Trophy ${t.trophy_id}`)}</strong>
+            ${formatTrophyAwardBadge(t.award_source)}
+          </div>
+          <p class="trophy-profile-reason">${escapeHtml(t.reason || "")}</p>
+        </div>`).join("")
+      : '<p class="trophy-profile-empty">尚未獲得 Trophy</p>';
+
+    return `
     <article class="trophy-profile-card">
       <p class="trophy-profile-name">${escapeHtml(formatParticipantLabel(profile.participant_id))}</p>
-      ${(profile.trophies || []).map((t) => `
-        <p class="trophy-profile-trophy">Trophy ${escapeHtml(String(t.trophy_id))} — ${escapeHtml(t.trophy_name || "")}
-          <span class="pill-badge pill-badge--lavender">${t.award_source === "fallback" ? "fallback" : "round1"}</span>
-        </p>`).join("")}
-    </article>`).join("");
+      ${trophyItems}
+    </article>`;
+  }).join("");
 }
 
-function renderTrophyCelebration(profiles) {
-  if (!profiles || profiles.length === 0) {
-    trophyCelebrationGrid.innerHTML = renderEmptyState("尚未計算結果", "", "search");
+function renderTrophySummaryTable(trophySummary, resultsReady) {
+  if (!trophySummaryTableWrap) return;
+
+  if (!resultsReady || !trophySummary || trophySummary.length === 0) {
+    trophySummaryTableWrap.innerHTML = renderEmptyState("尚未計算結果", "請先完成投票並計算結果", "search");
     return;
   }
 
-  trophyCelebrationGrid.innerHTML = profiles.map((profile) => `
-    <article class="trophy-celebration-card">
-      <p class="trophy-celebration-name">${escapeHtml(profile.participant_id)}</p>
-      ${(profile.trophies || []).map((t) => `
-        <p class="trophy-celebration-item">Trophy ${escapeHtml(String(t.trophy_id))}<br>${escapeHtml(t.trophy_name || "")}</p>`).join("")}
-    </article>`).join("");
+  trophySummaryTableWrap.innerHTML = `
+    <table class="trophy-table trophy-summary-table">
+      <thead>
+        <tr>
+          <th>Trophy</th>
+          <th>獲獎者</th>
+          <th>票數</th>
+          <th>配對來源</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${trophySummary.map((item) => {
+          const winners = item.winners || [];
+          if (winners.length === 0) {
+            return `
+              <tr>
+                <td>${escapeHtml(item.trophy_name || `Trophy ${item.trophy_id}`)}</td>
+                <td colspan="3">—</td>
+              </tr>`;
+          }
+          return winners.map((winner, index) => `
+            <tr>
+              ${index === 0 ? `<td rowspan="${winners.length}">${escapeHtml(item.trophy_name || `Trophy ${item.trophy_id}`)}</td>` : ""}
+              <td>${escapeHtml(formatParticipantLabel(winner.participant_id))}</td>
+              <td>${escapeHtml(String(winner.votes))}</td>
+              <td>${winner.award_source === "fallback" ? "保底配對" : "全組最高票"}</td>
+            </tr>`).join("");
+        }).join("")}
+      </tbody>
+    </table>`;
 }
 
 function populateTrophyAuditFilter(trophies) {
@@ -2466,13 +2533,20 @@ async function loadAdminTrophyData(options = {}) {
 
     if (results.status === "success") {
       state.adminTrophy.profiles = results.profiles || [];
-      renderTrophyProfiles(state.adminTrophy.profiles);
-      renderTrophyCelebration(state.adminTrophy.profiles);
+      state.adminTrophy.trophySummary = results.trophy_summary || [];
+      state.adminTrophy.fallbackActivated = results.fallback_activated === true;
+      state.adminTrophy.resultsReady = results.results_ready === true;
+
+      renderTrophyFallbackBanner(state.adminTrophy.fallbackActivated, state.adminTrophy.resultsReady);
+      renderTrophyProfiles(state.adminTrophy.profiles, state.adminTrophy.resultsReady);
+      renderTrophySummaryTable(state.adminTrophy.trophySummary, state.adminTrophy.resultsReady);
+
       if (typeof results.participants_with_trophy === "number" && trophyStatWithTrophy) {
         const total = results.total_participants || overview.stats?.total_participants || 0;
         trophyStatWithTrophy.textContent = `${results.participants_with_trophy} / ${total}`;
       }
     } else if (!silent) {
+      renderTrophyFallbackBanner(false, false);
       showToast(results.message || "尚未有計算結果", "info");
     }
   } catch (err) {
@@ -2530,9 +2604,12 @@ async function handleAdminCalculateTrophy() {
     );
 
     if (data.status === "success") {
-      showToast("Trophy 結果已計算", "success");
+      const fallbackMsg = data.fallback_activated
+        ? "Trophy 結果已計算（已啟用保底配對）"
+        : "Trophy 結果已計算";
+      showToast(fallbackMsg, "success");
       loadAdminTrophyData();
-      setTrophyAdminView("celebration");
+      setTrophyAdminView("profiles");
       return;
     }
     if (data.pending_participants && data.pending_participants.length) {

@@ -390,6 +390,7 @@
               <div class="trophy-summary-item"><span class="trophy-summary-label">已獲 Trophy</span><span id="trophy-stat-with-trophy" class="trophy-summary-value">—</span></div>
             </div>
             <div id="trophy-pending-list" class="trophy-pending-list hidden"></div>
+            <p id="trophy-fallback-banner" class="trophy-fallback-banner hidden"></p>
           </div>
 
           <div class="trophy-admin-controls settings-actions">
@@ -401,8 +402,8 @@
 
           <div class="monitor-filter-nav trophy-admin-view-nav" role="tablist" aria-label="Trophy 結果視圖">
             <button type="button" class="monitor-filter-btn active" data-trophy-view="audit" role="tab" aria-selected="true">投票清單</button>
-            <button type="button" class="monitor-filter-btn" data-trophy-view="profiles" role="tab" aria-selected="false">Trophy Profile</button>
-            <button type="button" class="monitor-filter-btn" data-trophy-view="celebration" role="tab" aria-selected="false">Celebration</button>
+            <button type="button" class="monitor-filter-btn" data-trophy-view="profiles" role="tab" aria-selected="false">個人頒獎榜</button>
+            <button type="button" class="monitor-filter-btn" data-trophy-view="summary" role="tab" aria-selected="false">Trophy 總結</button>
           </div>
 
           <div id="trophy-admin-audit" class="trophy-admin-view active">
@@ -417,9 +418,8 @@
             <div id="trophy-profiles-list" class="trophy-profiles-list"></div>
           </div>
 
-          <div id="trophy-admin-celebration" class="trophy-admin-view hidden">
-            <p class="panel-desc trophy-celebration-intro">Every participant has at least one Trophy.</p>
-            <div id="trophy-celebration-grid" class="trophy-celebration-grid"></div>
+          <div id="trophy-admin-summary-view" class="trophy-admin-view hidden">
+            <div id="trophy-summary-table-wrap" class="trophy-table-wrap"></div>
           </div>
         </div>
       </div>

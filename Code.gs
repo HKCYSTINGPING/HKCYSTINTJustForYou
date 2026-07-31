@@ -1555,13 +1555,37 @@ function buildVoteCountMap_(logRows, trophyIds) {
   return votes;
 }
 
+function getParticipantTrophyVoteCount_(votes, participantId, trophyId) {
+  return (votes[participantId] && votes[participantId][trophyId]) || 0;
+}
+
+function buildTrophyAwardReason_(awardSource, voteCount) {
+  if (awardSource === AWARD_ROUND1) {
+    return "全組最高票 (" + voteCount + "票)";
+  }
+  return "個人最高特質 (" + voteCount + "票 - 保底配對)";
+}
+
+function pushTrophyAward_(awards, participantId, trophyId, awardSource, votes) {
+  const voteCount = getParticipantTrophyVoteCount_(votes, participantId, trophyId);
+  awards[participantId].push({
+    trophy_id: trophyId,
+    award_source: awardSource,
+    votes: voteCount
+  });
+}
+
 function calculateTrophyResults_() {
   const trophiesResult = listTrophies_();
   if (trophiesResult.status !== "success") {
     return trophiesResult;
   }
 
-  const trophyIds = trophiesResult.trophies.map((t) => String(t.trophy_id).trim());
+  const trophyIds = trophiesResult.trophies
+    .map((t) => String(t.trophy_id).trim())
+    .filter(Boolean)
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+
   const allParticipants = getAllVotingParticipants_();
   const logRows = readAllTrophyPairRows_(TROPHY_LOG_SHEET_NAME);
   const votes = buildVoteCountMap_(logRows, trophyIds);
@@ -1571,38 +1595,58 @@ function calculateTrophyResults_() {
     awards[participantId] = [];
   });
 
+  let fallbackActivated = false;
+
+  // Round 1: group-wide max votes per trophy (ties win together)
   trophyIds.forEach((trophyId) => {
     let maxCount = 0;
     allParticipants.forEach((participantId) => {
-      const count = (votes[participantId] && votes[participantId][trophyId]) || 0;
+      const count = getParticipantTrophyVoteCount_(votes, participantId, trophyId);
       if (count > maxCount) maxCount = count;
     });
 
     if (maxCount <= 0) return;
 
     allParticipants.forEach((participantId) => {
-      const count = (votes[participantId] && votes[participantId][trophyId]) || 0;
+      const count = getParticipantTrophyVoteCount_(votes, participantId, trophyId);
       if (count === maxCount) {
-        awards[participantId].push({ trophy_id: trophyId, award_source: AWARD_ROUND1 });
+        pushTrophyAward_(awards, participantId, trophyId, AWARD_ROUND1, votes);
       }
     });
   });
 
+  // Fallback: personal highest-vote trophy for participants with zero awards
   allParticipants.forEach((participantId) => {
     if (awards[participantId].length > 0) return;
 
+    fallbackActivated = true;
+
     let maxReceived = 0;
     trophyIds.forEach((trophyId) => {
-      const count = (votes[participantId] && votes[participantId][trophyId]) || 0;
+      const count = getParticipantTrophyVoteCount_(votes, participantId, trophyId);
       if (count > maxReceived) maxReceived = count;
     });
 
-    trophyIds.forEach((trophyId) => {
-      const count = (votes[participantId] && votes[participantId][trophyId]) || 0;
-      if (count === maxReceived) {
-        awards[participantId].push({ trophy_id: trophyId, award_source: AWARD_FALLBACK });
-      }
+    let fallbackTrophyIds = trophyIds.filter((trophyId) =>
+      getParticipantTrophyVoteCount_(votes, participantId, trophyId) === maxReceived
+    );
+
+    // If no votes at all, still guarantee one trophy for 人人有獎
+    if (maxReceived === 0 && fallbackTrophyIds.length > 0) {
+      fallbackTrophyIds = [fallbackTrophyIds[0]];
+    }
+
+    fallbackTrophyIds.forEach((trophyId) => {
+      pushTrophyAward_(awards, participantId, trophyId, AWARD_FALLBACK, votes);
     });
+  });
+
+  // Safety net: every participant must have at least one trophy
+  allParticipants.forEach((participantId) => {
+    if (awards[participantId].length === 0 && trophyIds.length > 0) {
+      fallbackActivated = true;
+      pushTrophyAward_(awards, participantId, trophyIds[0], AWARD_FALLBACK, votes);
+    }
   });
 
   const flatResults = [];
@@ -1611,7 +1655,8 @@ function calculateTrophyResults_() {
       flatResults.push({
         participant_id: participantId,
         trophy_id: award.trophy_id,
-        award_source: award.award_source
+        award_source: award.award_source,
+        votes: award.votes
       });
     });
   });
@@ -1620,7 +1665,112 @@ function calculateTrophyResults_() {
     status: "success",
     results: flatResults,
     awards: awards,
-    vote_counts: votes
+    vote_counts: votes,
+    fallback_activated: fallbackActivated
+  };
+}
+
+function buildTrophyResultsPresentation_(storedResults) {
+  const calc = calculateTrophyResults_();
+  if (calc.status !== "success") {
+    return calc;
+  }
+
+  const trophiesResult = listTrophies_();
+  const trophyNameMap = {};
+  if (trophiesResult.status === "success") {
+    trophiesResult.trophies.forEach((t) => {
+      trophyNameMap[String(t.trophy_id)] = t.trophy_name;
+    });
+  }
+
+  const allParticipants = getAllVotingParticipants_();
+  const votes = calc.vote_counts;
+  const hasStoredResults = storedResults && storedResults.length > 0;
+  const sourceResults = hasStoredResults ? storedResults : calc.results;
+
+  const fallbackActivated = hasStoredResults
+    ? storedResults.some((row) => row.award_source === AWARD_FALLBACK)
+    : calc.fallback_activated;
+
+  const enrichedResults = sourceResults.map((row) => {
+    const voteCount = getParticipantTrophyVoteCount_(votes, row.participant_id, row.trophy_id);
+    const awardSource = row.award_source || AWARD_ROUND1;
+    return {
+      participant_id: row.participant_id,
+      trophy_id: row.trophy_id,
+      trophy_name: trophyNameMap[row.trophy_id] || "",
+      award_source: awardSource,
+      votes: voteCount,
+      reason: buildTrophyAwardReason_(awardSource, voteCount)
+    };
+  });
+
+  const profileMap = {};
+  allParticipants.forEach((participantId) => {
+    profileMap[participantId] = {
+      participant_id: participantId,
+      trophies: []
+    };
+  });
+
+  enrichedResults.forEach((row) => {
+    if (!profileMap[row.participant_id]) {
+      profileMap[row.participant_id] = {
+        participant_id: row.participant_id,
+        trophies: []
+      };
+    }
+    profileMap[row.participant_id].trophies.push({
+      trophy_id: row.trophy_id,
+      trophy_name: row.trophy_name,
+      award_source: row.award_source,
+      votes: row.votes,
+      reason: row.reason
+    });
+  });
+
+  const profiles = Object.keys(profileMap)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map((id) => profileMap[id]);
+
+  const summaryMap = {};
+  enrichedResults.forEach((row) => {
+    const trophyId = row.trophy_id;
+    if (!summaryMap[trophyId]) {
+      summaryMap[trophyId] = {
+        trophy_id: trophyId,
+        trophy_name: row.trophy_name,
+        winners: []
+      };
+    }
+    summaryMap[trophyId].winners.push({
+      participant_id: row.participant_id,
+      votes: row.votes,
+      award_source: row.award_source,
+      reason: row.reason
+    });
+  });
+
+  const trophySummary = Object.keys(summaryMap)
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+    .map((id) => {
+      const item = summaryMap[id];
+      item.winners.sort((a, b) =>
+        a.participant_id.localeCompare(b.participant_id, undefined, { numeric: true })
+      );
+      return item;
+    });
+
+  return {
+    status: "success",
+    results: enrichedResults,
+    profiles: profiles,
+    trophy_summary: trophySummary,
+    fallback_activated: fallbackActivated,
+    results_ready: hasStoredResults,
+    participants_with_trophy: countParticipantsWithTrophy_(enrichedResults),
+    total_participants: allParticipants.length
   };
 }
 
@@ -1661,6 +1811,7 @@ function handleAdminCalculateTrophyResults_(data) {
     voting_status: "CALCULATED",
     results_count: calc.results.length,
     participants_with_trophy: countParticipantsWithTrophy_(calc.results),
+    fallback_activated: calc.fallback_activated,
     stats: getVotingCompletionStats_()
   };
 }
@@ -1670,46 +1821,23 @@ function handleAdminTrophyResults_(participantId, phoneNumber, password) {
     return { status: "error", message: "身份驗證失敗" };
   }
 
-  const trophiesResult = listTrophies_();
-  const trophyNameMap = {};
-  if (trophiesResult.status === "success") {
-    trophiesResult.trophies.forEach((t) => {
-      trophyNameMap[String(t.trophy_id)] = t.trophy_name;
-    });
+  const storedResults = readTrophyResults_();
+  const presentation = buildTrophyResultsPresentation_(storedResults);
+  if (presentation.status !== "success") {
+    return presentation;
   }
-
-  const results = readTrophyResults_().map((row) => ({
-    participant_id: row.participant_id,
-    trophy_id: row.trophy_id,
-    trophy_name: trophyNameMap[row.trophy_id] || "",
-    award_source: row.award_source
-  }));
-
-  const profiles = {};
-  results.forEach((row) => {
-    if (!profiles[row.participant_id]) {
-      profiles[row.participant_id] = {
-        participant_id: row.participant_id,
-        trophies: []
-      };
-    }
-    profiles[row.participant_id].trophies.push({
-      trophy_id: row.trophy_id,
-      trophy_name: row.trophy_name,
-      award_source: row.award_source
-    });
-  });
-
-  const profileList = Object.keys(profiles).sort().map((id) => profiles[id]);
 
   return {
     status: "success",
     voting_status: getVotingStatusValue_(),
-    results: results,
-    profiles: profileList,
+    results: presentation.results,
+    profiles: presentation.profiles,
+    trophy_summary: presentation.trophy_summary,
+    fallback_activated: presentation.fallback_activated,
+    results_ready: presentation.results_ready,
     stats: getVotingCompletionStats_(),
-    participants_with_trophy: countParticipantsWithTrophy_(results),
-    total_participants: getAllVotingParticipants_().length
+    participants_with_trophy: presentation.participants_with_trophy,
+    total_participants: presentation.total_participants
   };
 }
 
