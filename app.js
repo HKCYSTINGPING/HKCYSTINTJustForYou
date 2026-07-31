@@ -30,10 +30,11 @@ const PARTICIPANTS_CACHE_TTL = 30 * 60 * 1000;
 const INBOX_CACHE_TTL = 30 * 60 * 1000;
 const PARTICIPANTS_FETCH_TIMEOUT = 20000;
 const LOGIN_FETCH_TIMEOUT = 25000;
+const SEND_FETCH_TIMEOUT = 25000;
 const MONITOR_WATCH_TIMEOUT = 15000;
 const MONITOR_WATCH_INTERVAL = 800;
 const MONITOR_WATCH_RETRY_MS = 2000;
-const ADMIN_DELETED_REASON = "此留言已被管理員刪除（管理員監察）";
+const ADMIN_DELETED_REASON = "此留言已被管理員撤回，未能送達接收者（管理員決定）";
 
 const state = {
   participantId: null,
@@ -471,16 +472,21 @@ async function apiFetchMessages(participantId, phoneNumber, fetchType = "inbox")
 }
 
 async function apiSendMessage(senderId, phoneNumber, receiverId, content) {
-  const response = await fetch(API_URL, {
-    method: "POST",
-    body: JSON.stringify({
-      sender_id: senderId,
-      phone_number: phoneNumber,
-      receiver_id: receiverId,
-      content: content
-    })
-  });
-  return response.json();
+  const response = await fetchWithTimeout(
+    API_URL,
+    {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        sender_id: senderId,
+        phone_number: phoneNumber,
+        receiver_id: receiverId,
+        content: content
+      })
+    },
+    SEND_FETCH_TIMEOUT
+  );
+  return parseJsonResponse(response);
 }
 
 async function apiGetMessagingStatus() {
@@ -979,8 +985,8 @@ async function handleAdminDeleteMessage(messageId, button) {
           showToast("留言已刪除", "success");
           await loadMonitorMessages({ silent: true });
 
-          if (state.participantId && state.sentLoaded) {
-            await handleRefreshSent();
+          if (state.participantId) {
+            await loadSentMessages({ silent: true });
           }
           return;
         }
@@ -1189,6 +1195,7 @@ function selectFromCombobox(combobox, id) {
   combobox.input.value = id;
   closeCombobox(combobox);
   combobox.input.focus();
+  warmUpApi();
   combobox.onSelect(id);
 }
 
@@ -1332,6 +1339,7 @@ function switchTab(tabName) {
 
   if (tabName === "sent") {
     renderSentMessages();
+    loadSentMessages({ silent: true });
   }
 }
 
@@ -1419,7 +1427,7 @@ function renderSentMessages() {
     sentList.innerHTML = `
       <div class="empty-state">
         <span class="empty-emoji">${state.sentLoaded ? "📤" : "🔄"}</span>
-        <p>${state.sentLoaded ? "尚未發送任何留言" : "按 🔄 重整 載入送出的留言"}</p>
+        <p>${state.sentLoaded ? "尚未發送任何留言" : "載入送出的留言中..."}</p>
       </div>`;
     return;
   }
@@ -1433,18 +1441,52 @@ function renderSentMessages() {
     const deletedNotice = msg.deleted_reason || ADMIN_DELETED_REASON;
 
     return `
-    <article class="message-card ${deleted ? "deleted" : ""}">
+    <article class="message-card sent-card ${deleted ? "deleted unsent" : ""}">
       <div class="message-card-header">
-        <span class="message-receiver">🎯 接收對象：${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
-        <span class="message-meta">🕐 ${escapeHtml(msg.created_at)}</span>
+        <div class="sent-card-heading">
+          <span class="message-receiver">🎯 接收對象：${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
+          ${deleted ? '<span class="message-unsent-badge">管理員已撤回</span>' : ""}
+        </div>
+        <span class="message-meta">🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
       </div>
       ${deleted ? `
         <p class="message-deleted-notice">🚫 ${escapeHtml(deletedNotice)}</p>
-        ${msg.deleted_at ? `<p class="message-deleted-time">刪除時間：${escapeHtml(msg.deleted_at)}</p>` : ""}
+        ${msg.deleted_at ? `<p class="message-deleted-time">撤回時間：${escapeHtml(msg.deleted_at)}</p>` : ""}
       ` : ""}
       <p class="message-content ${deleted ? "is-deleted" : ""}">${escapeHtml(msg.content)}</p>
     </article>`;
   }).join("");
+}
+
+async function loadSentMessages(options = {}) {
+  const { silent = true, showToastOnSuccess = false } = options;
+
+  if (!state.participantId || !state.phoneNumber) return false;
+
+  try {
+    const data = await apiFetchMessages(state.participantId, state.phoneNumber, "sent");
+
+    if (data.status === "success") {
+      applySentFromApi(data);
+      renderSentMessages();
+      if (showToastOnSuccess) {
+        showToast("📤 送出的留言已更新！", "success");
+      }
+      return true;
+    }
+
+    if (!silent) {
+      showToast(data.message || "同步失敗", "error");
+    }
+
+    return false;
+  } catch (err) {
+    if (!silent) {
+      showToast("連線失敗，請稍後再試", "error");
+    }
+    console.error("Load sent messages error:", err);
+    return false;
+  }
 }
 
 /* ==========================================
@@ -1530,14 +1572,12 @@ async function handleRefreshSent() {
   try {
     await runWithProgress(
       refreshSentBtn,
-      () => apiFetchMessages(state.participantId, state.phoneNumber, "sent"),
-      (data) => {
-        if (data.status === "success") {
-          applySentFromApi(data);
-          renderSentMessages();
+      () => loadSentMessages({ silent: true, showToastOnSuccess: false }),
+      (success) => {
+        if (success) {
           showToast("📤 送出的留言已更新！", "success");
         } else {
-          showToast(data.message || "同步失敗", "error");
+          showToast("同步失敗", "error");
         }
       },
       "📤 同步送出的留言..."
@@ -1579,21 +1619,19 @@ async function handleSendMessage(e) {
   }
 
   try {
+    await Promise.race([
+      warmUpApi(),
+      new Promise((resolve) => setTimeout(resolve, 200))
+    ]);
+
     await runWithProgress(
       sendBtn,
-      async () => {
-        await loadMessagingStatus({ silent: true });
-        if (!isMessagingOpen()) {
-          return { status: "error", message: "留言功能目前已關閉，暫時無法發送留言" };
-        }
-
-        return apiSendMessage(
-          state.participantId,
-          state.phoneNumber,
-          receiverId,
-          content
-        );
-      },
+      () => apiSendMessage(
+        state.participantId,
+        state.phoneNumber,
+        receiverId,
+        content
+      ),
       async (data) => {
         if (data.status === "success") {
           messageContent.value = "";
@@ -1604,7 +1642,7 @@ async function handleSendMessage(e) {
             message_id: data.message_id || `MSG-${Date.now()}`,
             receiver_id: receiverId,
             content: content,
-            created_at: new Date().toLocaleString("zh-TW", {
+            created_at: data.created_at || new Date().toLocaleString("zh-TW", {
               year: "numeric",
               month: "2-digit",
               day: "2-digit",
@@ -1748,6 +1786,9 @@ refreshInboxBtn.addEventListener("click", handleRefreshInbox);
 refreshSentBtn.addEventListener("click", handleRefreshSent);
 
 messageContent.addEventListener("input", validateMessageInput);
+messageContent.addEventListener("focus", () => {
+  warmUpApi();
+});
 
 setupComboboxEvents(participantCombobox);
 setupComboboxEvents(receiverCombobox);

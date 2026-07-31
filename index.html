@@ -146,20 +146,6 @@
       <button type="button" id="logout-btn" class="btn btn-ghost">🚪 登出</button>
     </header>
 
-    <!-- Tab Navigation -->
-    <nav class="tab-nav" role="tablist">
-      <button type="button" class="tab-btn active" data-tab="send" role="tab" aria-selected="true">
-        ✏️ 發送留言
-      </button>
-      <button type="button" class="tab-btn" data-tab="inbox" role="tab" aria-selected="false">
-        📥 收件箱
-        <span id="inbox-badge" class="tab-badge hidden">0</span>
-      </button>
-      <button type="button" class="tab-btn" data-tab="sent" role="tab" aria-selected="false">
-        📤 送出的留言
-      </button>
-    </nav>
-
     <main class="tab-content">
       <!-- Send Message Tab -->
       <section id="tab-send" class="tab-panel active" role="tabpanel">
@@ -260,7 +246,7 @@
           <div class="panel-header-row">
             <div>
               <h2>📤 送出的留言</h2>
-              <p class="panel-desc">按 🔄 重整 載入您發送過的留言紀錄 📋</p>
+              <p class="panel-desc">包含已送達同被管理員撤回嘅留言；撤回後接收者唔會收到 📋</p>
             </div>
             <button type="button" id="refresh-sent-btn" class="btn btn-secondary btn-progress">
               <span class="btn-text">🔄 重整</span>
@@ -278,6 +264,20 @@
         </div>
       </section>
     </main>
+
+    <!-- Tab Navigation (bottom) -->
+    <nav class="tab-nav tab-nav-bottom" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="send" role="tab" aria-selected="true">
+        ✏️ 發送留言
+      </button>
+      <button type="button" class="tab-btn" data-tab="inbox" role="tab" aria-selected="false">
+        📥 收件箱
+        <span id="inbox-badge" class="tab-badge hidden">0</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="sent" role="tab" aria-selected="false">
+        📤 送出的留言
+      </button>
+    </nav>
   </section>
 
   <!-- Admin Monitor Screen -->

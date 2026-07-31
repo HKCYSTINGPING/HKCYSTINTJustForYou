@@ -6,7 +6,7 @@
  *   - Open: A2 = OPEN or CLOSE
  */
 
-const SCRIPT_VERSION = 7;
+const SCRIPT_VERSION = 8;
 
 const PARTICIPANTS_SHEET_NAME = "Participants";
 const MESSAGES_SHEET_NAME = "Messages";
@@ -197,6 +197,48 @@ function handleBootstrap_() {
   };
 }
 
+function validateSendParticipants_(senderId, phoneNumber, receiverId) {
+  const sheet = getSheetByName_(PARTICIPANTS_SHEET_NAME);
+  if (!sheet) {
+    return { ok: false, message: '找不到 "Participants" 工作表' };
+  }
+
+  const headers = getHeaders_(sheet);
+  const idCol = getColumnIndex_(headers, "participant_id");
+  const phoneCol = getColumnIndex_(headers, "phone_number");
+  if (idCol < 1 || phoneCol < 1) {
+    return { ok: false, message: "Participants 工作表格式不正確" };
+  }
+
+  const rows = getDataRows_(sheet);
+  let senderOk = false;
+  let receiverOk = false;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const id = normalizeId_(row[idCol - 1]);
+    if (id === senderId && normalizePhone_(row[phoneCol - 1]) === phoneNumber) {
+      senderOk = true;
+    }
+    if (id === receiverId) {
+      receiverOk = true;
+    }
+    if (senderOk && receiverOk) {
+      break;
+    }
+  }
+
+  if (!senderOk) {
+    return { ok: false, message: "身份驗證失敗：電話號碼或參加者 ID 不正確" };
+  }
+
+  if (!receiverOk) {
+    return { ok: false, message: "接收對象不存在" };
+  }
+
+  return { ok: true };
+}
+
 function verifyParticipant_(participantId, phoneNumber) {
   const sheet = getSheetByName_(PARTICIPANTS_SHEET_NAME);
   if (!sheet) return false;
@@ -279,7 +321,7 @@ function mapMessageRow_(row, cols, options) {
   }
 
   if (message.status === MESSAGE_STATUS_DELETED) {
-    message.deleted_reason = "此留言已被管理員刪除（管理員監察）";
+    message.deleted_reason = "此留言已被管理員撤回，未能送達接收者（管理員決定）";
   }
 
   return message;
@@ -333,17 +375,11 @@ function handleSendMessage_(data) {
     };
   }
 
-  if (!verifyParticipant_(senderId, phoneNumber)) {
+  const participantCheck = validateSendParticipants_(senderId, phoneNumber, receiverId);
+  if (!participantCheck.ok) {
     return {
       status: "error",
-      message: "身份驗證失敗：電話號碼或參加者 ID 不正確"
-    };
-  }
-
-  if (!participantExists_(receiverId)) {
-    return {
-      status: "error",
-      message: "接收對象不存在"
+      message: participantCheck.message
     };
   }
 
