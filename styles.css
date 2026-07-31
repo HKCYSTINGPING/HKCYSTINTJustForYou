@@ -1,47 +1,47 @@
 /* ==========================================
-   Cute & Playful Design System
+   Cream Theme Design System
    ========================================== */
 :root {
-  /* Macaron palette */
-  --macaron-pink: #FBCFE8;
-  --macaron-pink-deep: #F472B6;
-  --macaron-pink-text: #DB2777;
-  --macaron-purple: #E9D5FF;
-  --macaron-purple-deep: #C4B5FD;
-  --macaron-purple-text: #7C3AED;
-  --macaron-sky: #BAE6FD;
-  --macaron-sky-deep: #7DD3FC;
-  --macaron-emerald: #6EE7B7;
-  --macaron-emerald-glow: rgba(110, 231, 183, 0.6);
-  --macaron-amber: #FDE68A;
-  --macaron-amber-text: #D97706;
-  --macaron-mint-soft: #ECFDF5;
-  --macaron-pink-soft: #FDF2F8;
-  --macaron-lavender-soft: #FAF5FF;
+  /* Cream palette (legacy macaron-* names kept for compatibility) */
+  --macaron-pink: #F0E4D4;
+  --macaron-pink-deep: #C9A87C;
+  --macaron-pink-text: #9A7349;
+  --macaron-purple: #E8DFD0;
+  --macaron-purple-deep: #D4C4A8;
+  --macaron-purple-text: #6B5344;
+  --macaron-sky: #EDE6DA;
+  --macaron-sky-deep: #C4B59A;
+  --macaron-emerald: #A8C5A0;
+  --macaron-emerald-glow: rgba(168, 197, 160, 0.55);
+  --macaron-amber: #F0DFC0;
+  --macaron-amber-text: #A67C52;
+  --macaron-mint-soft: #F2F6EF;
+  --macaron-pink-soft: #FAF6EF;
+  --macaron-lavender-soft: #F7F1E6;
 
-  --primary: #A78BFA;
-  --primary-hover: #8B5CF6;
-  --primary-soft: rgba(167, 139, 250, 0.14);
-  --primary-ring: rgba(167, 139, 250, 0.28);
+  --primary: #C4A574;
+  --primary-hover: #B08D57;
+  --primary-soft: rgba(196, 165, 116, 0.16);
+  --primary-ring: rgba(196, 165, 116, 0.32);
 
-  --background: #FFF5FB;
-  --background-gradient: linear-gradient(160deg, #FFF5FB 0%, #F5F3FF 45%, #EFF6FF 100%);
-  --surface: #FFFFFF;
-  --surface-alt: #FDF4FF;
+  --background: #FAF6EF;
+  --background-gradient: linear-gradient(160deg, #FFFCF7 0%, #FAF6EF 48%, #F5EFE4 100%);
+  --surface: #FFFCF7;
+  --surface-alt: #F7F1E8;
 
-  --text: #4C1D95;
-  --text-secondary: #7C6A9A;
-  --text-muted: #A78BBA;
+  --text: #5C4A38;
+  --text-secondary: #8B7355;
+  --text-muted: #B5A088;
 
-  --border: #F3E8FF;
-  --border-strong: #E9D5FF;
+  --border: #EDE4D4;
+  --border-strong: #DDD2C0;
 
-  --success: #059669;
-  --success-soft: var(--macaron-mint-soft);
-  --danger: #E11D48;
-  --danger-soft: #FFF1F2;
-  --warning: var(--macaron-amber-text);
-  --warning-soft: #FFFBEB;
+  --success: #6B9080;
+  --success-soft: #EFF5F0;
+  --danger: #C17B7B;
+  --danger-soft: #FBF0F0;
+  --warning: #A67C52;
+  --warning-soft: #FBF5E8;
 
   --radius-sm: 12px;
   --radius-md: 16px;
@@ -49,10 +49,10 @@
   --radius-xl: 24px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 2px 8px rgba(167, 139, 250, 0.08);
-  --shadow-md: 0 6px 20px rgba(167, 139, 250, 0.12);
-  --shadow-lg: 0 12px 32px rgba(167, 139, 250, 0.16);
-  --shadow-glow-pink: 0 0 16px rgba(251, 207, 232, 0.7);
+  --shadow-sm: 0 2px 8px rgba(92, 74, 56, 0.06);
+  --shadow-md: 0 6px 20px rgba(92, 74, 56, 0.08);
+  --shadow-lg: 0 12px 32px rgba(92, 74, 56, 0.1);
+  --shadow-glow-pink: 0 0 16px rgba(201, 168, 124, 0.35);
   --shadow-glow-mint: 0 0 8px var(--macaron-emerald-glow);
 
   --space-1: 4px;
@@ -66,7 +66,7 @@
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 
   --primary-dark: var(--primary-hover);
-  --primary-light: #C4B5FD;
+  --primary-light: #D4BC94;
   --text-muted-legacy: var(--text-secondary);
   --radius: var(--radius-md);
   --shadow: var(--shadow-md);
@@ -130,7 +130,7 @@ body.modal-open {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(76, 29, 149, 0.18);
+  background: rgba(92, 74, 56, 0.14);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -153,7 +153,7 @@ body.modal-open {
   height: 56px;
   border-radius: 50%;
   margin: 0 auto var(--space-4);
-  background: linear-gradient(135deg, var(--macaron-pink) 0%, var(--macaron-purple) 50%, var(--macaron-sky) 100%);
+  background: linear-gradient(135deg, var(--macaron-pink) 0%, var(--macaron-purple) 50%, var(--macaron-amber) 100%);
   background-size: 200% 200%;
   animation: shimmerPulse 1.6s ease-in-out infinite;
   box-shadow: var(--shadow-glow-pink);
@@ -288,7 +288,7 @@ body.modal-open {
 
 .status-dot--notice {
   background: var(--macaron-pink-deep);
-  box-shadow: 0 0 8px rgba(244, 114, 182, 0.5);
+  box-shadow: 0 0 8px rgba(201, 168, 124, 0.45);
 }
 
 @keyframes dotBounce {
@@ -338,9 +338,9 @@ body.modal-open {
 }
 
 .pill-badge--sky {
-  background: #F0F9FF;
-  color: #0284C7;
-  border-color: var(--macaron-sky);
+  background: var(--macaron-lavender-soft);
+  color: var(--macaron-purple-text);
+  border-color: var(--macaron-purple);
 }
 
 .pill-badge-star {
@@ -509,7 +509,7 @@ body.admin-active .admin-screen {
   padding: var(--space-4);
   padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
   padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 252, 247, 0.92);
   backdrop-filter: blur(10px);
   border-bottom: 2px solid var(--border);
   flex-shrink: 0;
@@ -544,7 +544,7 @@ body.admin-active .admin-screen {
 .tab-nav {
   display: flex;
   gap: var(--space-1);
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 252, 247, 0.82);
   border: 2px solid var(--border);
   border-radius: var(--radius-xl);
   padding: var(--space-1);
@@ -584,7 +584,7 @@ body.admin-active .admin-screen {
 
 .tab-btn:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 252, 247, 0.65);
 }
 
 .tab-btn.active {
@@ -596,7 +596,7 @@ body.admin-active .admin-screen {
 
 .tab-badge {
   background: linear-gradient(135deg, var(--macaron-pink-deep), var(--primary));
-  color: #fff;
+  color: #FFFCF7;
   font-size: 0.6875rem;
   padding: 2px 7px;
   border-radius: var(--radius-pill);
@@ -758,7 +758,7 @@ body.admin-active .admin-screen {
 .form-group input.error,
 .form-group textarea.error {
   border-color: var(--danger);
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  box-shadow: 0 0 0 3px rgba(193, 123, 123, 0.15);
 }
 
 .form-group textarea {
@@ -976,16 +976,16 @@ body.admin-active .admin-screen {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--macaron-pink-deep) 0%, var(--primary) 55%, var(--macaron-purple-deep) 100%);
-  color: #fff;
+  background: linear-gradient(135deg, #D4BC94 0%, var(--primary) 55%, #A8845C 100%);
+  color: #FFFCF7;
   width: 100%;
   min-height: 48px;
   box-shadow: var(--shadow-md), var(--shadow-glow-pink);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 252, 247, 0.4);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #EC4899 0%, var(--primary-hover) 55%, #8B5CF6 100%);
+  background: linear-gradient(135deg, #C9A87C 0%, var(--primary-hover) 55%, #967048 100%);
   box-shadow: var(--shadow-lg), var(--shadow-glow-pink);
 }
 
@@ -1041,7 +1041,7 @@ body.admin-active .admin-screen {
 
 .btn-ghost:hover:not(:disabled) {
   background: var(--macaron-purple);
-  color: #fff;
+  color: #FFFCF7;
   border-color: var(--macaron-purple-deep);
 }
 .btn-progress .btn-text,
@@ -1301,7 +1301,7 @@ body.admin-active .admin-screen {
 .monitor-filter-nav {
   display: flex;
   gap: var(--space-1);
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 252, 247, 0.82);
   border: 2px solid var(--border);
   border-radius: var(--radius-xl);
   padding: var(--space-1);
@@ -1325,7 +1325,7 @@ body.admin-active .admin-screen {
 
 .monitor-filter-btn:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 252, 247, 0.75);
 }
 
 .monitor-filter-btn.active {
