@@ -1,7 +1,7 @@
 /* ==========================================
    Configuration
    ========================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycby3AOQ9zsZFozwTqgxvIWLArBzsiEA_PYt5Gz8k-OkpdsH27OEzG-AXuC-_pRTgrSgy-A/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyuXjz93rfQgwRegranli192KiMzIOEonVw9kdxFo-6qvw_koYr8bY5MozwGs_fflMn7Q/exec";
 
 const MAX_CHARS = 300;
 
@@ -37,9 +37,12 @@ const ADMIN_PARTICIPANT_ID = "ADMIN";
 const ADMIN_PHONE = "23082026";
 const ADMIN_DELETED_REASON = "此留言已被管理員撤回，未能送達接收者（管理員決定）";
 
+const REQUIRED_TROPHY_API_VERSION = 13;
+
 const state = {
   participantId: null,
   phoneNumber: null,
+  apiVersion: null,
   participants: [],
   participantsLoaded: false,
   inboxMessages: [],
@@ -49,7 +52,25 @@ const state = {
   messagingStatusLoaded: false,
   isAdmin: false,
   monitorMessages: [],
-  monitorViewFilter: "all"
+  monitorViewFilter: "all",
+  trophy: {
+    loaded: false,
+    votingStatus: "DRAFT",
+    allowResubmit: false,
+    submissionStatus: null,
+    submittedAt: "",
+    trophies: [],
+    teammates: [],
+    groupId: "",
+    assignments: {},
+    readonly: false
+  },
+  adminTrophy: {
+    overview: null,
+    auditVotes: [],
+    profiles: [],
+    view: "audit"
+  }
 };
 
 /* ==========================================
@@ -125,6 +146,34 @@ const monitorMessageCount = document.getElementById("monitor-message-count");
 const monitorMessagingStatus = document.getElementById("monitor-messaging-status");
 const monitorEnableBtn = document.getElementById("monitor-enable-btn");
 const monitorDisableBtn = document.getElementById("monitor-disable-btn");
+
+const trophyStatusBanner = document.getElementById("trophy-status-banner");
+const trophyProgress = document.getElementById("trophy-progress");
+const trophyProgressFill = document.getElementById("trophy-progress-fill");
+const trophyProgressText = document.getElementById("trophy-progress-text");
+const trophyIncompleteWarning = document.getElementById("trophy-incomplete-warning");
+const trophyMatchingList = document.getElementById("trophy-matching-list");
+const trophyActions = document.getElementById("trophy-actions");
+const trophySaveDraftBtn = document.getElementById("trophy-save-draft-btn");
+const trophySubmitBtn = document.getElementById("trophy-submit-btn");
+
+const adminTrophyPanel = document.getElementById("admin-trophy-panel");
+const adminMessagesPanel = document.getElementById("admin-messages-panel");
+const trophyAdminVotingStatus = document.getElementById("trophy-admin-voting-status");
+const trophyStatCompleted = document.getElementById("trophy-stat-completed");
+const trophyStatVotes = document.getElementById("trophy-stat-votes");
+const trophyStatTrophyCount = document.getElementById("trophy-stat-trophy-count");
+const trophyStatWithTrophy = document.getElementById("trophy-stat-with-trophy");
+const trophyPendingList = document.getElementById("trophy-pending-list");
+const trophyOpenVotingBtn = document.getElementById("trophy-open-voting-btn");
+const trophyCloseVotingBtn = document.getElementById("trophy-close-voting-btn");
+const trophyCalculateBtn = document.getElementById("trophy-calculate-btn");
+const trophyPublishBtn = document.getElementById("trophy-publish-btn");
+const trophyAuditSearch = document.getElementById("trophy-audit-search");
+const trophyAuditFilterTrophy = document.getElementById("trophy-audit-filter-trophy");
+const trophyAuditTableWrap = document.getElementById("trophy-audit-table-wrap");
+const trophyProfilesList = document.getElementById("trophy-profiles-list");
+const trophyCelebrationGrid = document.getElementById("trophy-celebration-grid");
 
 let monitorWatchActive = false;
 let monitorWatchController = null;
@@ -927,9 +976,10 @@ function getMonitorMessagesForView() {
 }
 
 function setMonitorViewFilter(filter) {
+  if (!filter) return;
   state.monitorViewFilter = filter;
 
-  document.querySelectorAll(".monitor-filter-btn").forEach((btn) => {
+  document.querySelectorAll(".monitor-filter-btn[data-monitor-filter]").forEach((btn) => {
     const isActive = btn.dataset.monitorFilter === filter;
     btn.classList.toggle("active", isActive);
     btn.setAttribute("aria-selected", isActive ? "true" : "false");
@@ -1169,6 +1219,7 @@ function showAdminDashboard() {
   document.body.classList.remove("participant-active");
   loadMessagingStatus({ silent: true });
   startMonitorWatch();
+  loadAdminTrophyData({ silent: true });
 }
 
 function getFilteredParticipants(filterText = "", excludeId = null) {
@@ -1361,6 +1412,12 @@ async function loadBootstrap() {
       applyMessagingStatus(data.messaging_status);
     }
 
+    if (typeof data.api_version === "number") {
+      state.apiVersion = data.api_version;
+    } else if (typeof data.version === "number") {
+      state.apiVersion = data.version;
+    }
+
     return true;
   } catch (err) {
     console.warn("Bootstrap load failed:", err);
@@ -1439,6 +1496,10 @@ function switchTab(tabName) {
   if (tabName === "sent") {
     renderSentMessages();
     loadSentMessages({ silent: true });
+  }
+
+  if (tabName === "trophy") {
+    loadTrophyBootstrap();
   }
 }
 
@@ -1831,6 +1892,18 @@ function handleLogout() {
   state.sentMessages = [];
   state.sentLoaded = false;
   state.messagingStatusLoaded = false;
+  state.trophy = {
+    loaded: false,
+    votingStatus: "DRAFT",
+    allowResubmit: false,
+    submissionStatus: null,
+    submittedAt: "",
+    trophies: [],
+    teammates: [],
+    groupId: "",
+    assignments: {},
+    readonly: false
+  };
   clearSession();
   clearInboxCache(previousParticipantId);
   closeAllComboboxes();
@@ -1887,7 +1960,7 @@ document.addEventListener("keydown", (e) => {
 
 monitorEnableBtn.addEventListener("click", () => handleAdminSetMessagingStatus("OPEN"));
 monitorDisableBtn.addEventListener("click", () => handleAdminSetMessagingStatus("CLOSE"));
-document.querySelectorAll(".monitor-filter-btn").forEach((btn) => {
+document.querySelectorAll(".monitor-filter-btn[data-monitor-filter]").forEach((btn) => {
   btn.addEventListener("click", () => setMonitorViewFilter(btn.dataset.monitorFilter));
 });
 
@@ -1910,6 +1983,589 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 
 window.addEventListener("orientationchange", () => {
   closeAllComboboxes();
+});
+
+/* ==========================================
+   Trophy Voting
+   ========================================== */
+function pairingsToAssignments(pairings) {
+  const assignments = {};
+  (pairings || []).forEach((p) => {
+    const receiverId = normalizeParticipantId(p.receiver_id);
+    const trophyId = String(p.trophy_id || "").trim();
+    if (!receiverId || !trophyId) return;
+    if (!assignments[receiverId]) assignments[receiverId] = [];
+    if (!assignments[receiverId].includes(trophyId)) {
+      assignments[receiverId].push(trophyId);
+    }
+  });
+  return assignments;
+}
+
+function assignmentsToPairings(assignments) {
+  const pairings = [];
+  Object.keys(assignments || {}).forEach((receiverId) => {
+    (assignments[receiverId] || []).forEach((trophyId) => {
+      pairings.push({ receiver_id: receiverId, trophy_id: trophyId });
+    });
+  });
+  return pairings;
+}
+
+function getTrophyName(trophyId) {
+  const trophy = state.trophy.trophies.find((t) => String(t.trophy_id) === String(trophyId));
+  return trophy ? trophy.trophy_name || `Trophy ${trophyId}` : `Trophy ${trophyId}`;
+}
+
+function getIncompleteTrophyReceivers() {
+  return state.trophy.teammates.filter(
+    (id) => !(state.trophy.assignments[id] && state.trophy.assignments[id].length > 0)
+  );
+}
+
+function isTrophyReadonly() {
+  if (state.trophy.submissionStatus === "submitted" && !state.trophy.allowResubmit) {
+    return true;
+  }
+  if (state.trophy.votingStatus !== "VOTING_OPEN") {
+    return true;
+  }
+  return state.trophy.readonly;
+}
+
+async function apiTrophyBootstrap() {
+  const params = new URLSearchParams({
+    action: "trophy_bootstrap",
+    participant_id: normalizeParticipantId(state.participantId),
+    phone_number: normalizePhone(state.phoneNumber)
+  });
+  const response = await fetchWithTimeout(`${API_URL}?${params.toString()}`, {}, LOGIN_FETCH_TIMEOUT);
+  return parseJsonResponse(response);
+}
+
+async function apiTrophyPost(action, pairings) {
+  const response = await fetchWithTimeout(
+    API_URL,
+    {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action,
+        participant_id: state.participantId,
+        phone_number: state.phoneNumber,
+        pairings
+      })
+    },
+    SEND_FETCH_TIMEOUT
+  );
+  return parseJsonResponse(response);
+}
+
+async function apiAdminTrophyGet(action, extra = {}) {
+  const params = buildAdminApiParams({ action, ...extra });
+  const response = await fetchWithTimeout(
+    `${API_URL}?${new URLSearchParams(params).toString()}`,
+    {},
+    LOGIN_FETCH_TIMEOUT
+  );
+  return parseJsonResponse(response);
+}
+
+async function apiAdminTrophyPost(action, extra = {}) {
+  return apiAdminTrophyGet(action, extra);
+}
+
+function applyTrophyBootstrap(data) {
+  state.trophy.loaded = true;
+  state.trophy.votingStatus = data.voting_status || "DRAFT";
+  state.trophy.allowResubmit = Boolean(data.allow_resubmit);
+  state.trophy.submissionStatus = data.submission_status || null;
+  state.trophy.submittedAt = data.submitted_at || "";
+  state.trophy.trophies = data.trophies || [];
+  state.trophy.teammates = data.teammates || [];
+  state.trophy.groupId = data.group_id || "";
+  state.trophy.assignments = pairingsToAssignments(data.pairings || []);
+  state.trophy.readonly = isTrophyReadonly();
+}
+
+async function loadTrophyBootstrap() {
+  if (!state.participantId || !state.phoneNumber || state.isAdmin) return;
+
+  try {
+    const data = await apiTrophyBootstrap();
+    if (data.status === "success") {
+      applyTrophyBootstrap(data);
+      renderTrophyUI();
+      return;
+    }
+    showToast(data.message || "無法載入 Trophy 配對", "error");
+  } catch (err) {
+    showToast("無法載入 Trophy 配對", "error");
+    console.error("Trophy bootstrap error:", err);
+  }
+}
+
+function renderTrophyUI() {
+  const votingStatus = state.trophy.votingStatus;
+  const submitted = state.trophy.submissionStatus === "submitted";
+  const readonly = isTrophyReadonly();
+  const incomplete = getIncompleteTrophyReceivers();
+
+  trophyStatusBanner.classList.remove("hidden", "is-open", "is-closed", "is-done");
+  if (submitted && !state.trophy.allowResubmit) {
+    trophyStatusBanner.textContent = "您已完成 Trophy 配對";
+    trophyStatusBanner.classList.add("is-done");
+  } else if (votingStatus === "VOTING_OPEN") {
+    trophyStatusBanner.textContent = "投票進行中 — 請為每位組員配對 Trophy";
+    trophyStatusBanner.classList.add("is-open");
+  } else if (votingStatus === "VOTING_CLOSED" || votingStatus === "CALCULATED" || votingStatus === "PUBLISHED") {
+    trophyStatusBanner.textContent = "投票已結束";
+    trophyStatusBanner.classList.add("is-closed");
+  } else {
+    trophyStatusBanner.textContent = "投票尚未開放";
+    trophyStatusBanner.classList.add("is-closed");
+  }
+
+  const total = state.trophy.teammates.length;
+  const completed = total - incomplete.length;
+  trophyProgress.classList.toggle("hidden", total === 0);
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  trophyProgressFill.style.width = `${pct}%`;
+  trophyProgressText.textContent = total > 0
+    ? `已完成 ${completed} / ${total} 位組員`
+    : "沒有同組成員";
+
+  if (incomplete.length > 0 && !readonly) {
+    trophyIncompleteWarning.classList.remove("hidden");
+    trophyIncompleteWarning.textContent = `尚有成員未完成 Trophy 配對：${incomplete.join("、")}`;
+  } else {
+    trophyIncompleteWarning.classList.add("hidden");
+  }
+
+  if (state.trophy.teammates.length === 0) {
+    trophyMatchingList.innerHTML = renderEmptyState("沒有同組成員", "請確認 Participants 工作表 group 設定", "search");
+    trophyActions.classList.add("hidden");
+    return;
+  }
+
+  trophyMatchingList.innerHTML = state.trophy.teammates.map((teammateId) => {
+    const assigned = state.trophy.assignments[teammateId] || [];
+    const isIncomplete = assigned.length === 0;
+    const chips = assigned.map((trophyId) => `
+      <span class="trophy-chip">
+        ${escapeHtml(getTrophyName(trophyId))}
+        ${readonly ? "" : `<button type="button" class="trophy-chip-remove" data-receiver="${escapeHtml(teammateId)}" data-trophy="${escapeHtml(trophyId)}" aria-label="移除">×</button>`}
+      </span>`).join("");
+
+    const options = state.trophy.trophies.map((t) => `
+      <option value="${escapeHtml(String(t.trophy_id))}">${escapeHtml(t.trophy_name || `Trophy ${t.trophy_id}`)}</option>`).join("");
+
+    return `
+      <article class="trophy-teammate-card ${isIncomplete && !readonly ? "is-incomplete" : ""}" data-receiver="${escapeHtml(teammateId)}">
+        <div class="trophy-teammate-header">
+          <span class="trophy-teammate-name">${escapeHtml(formatParticipantLabel(teammateId))}</span>
+          ${isIncomplete ? '<span class="pill-badge pill-badge--sky">待配對</span>' : ""}
+        </div>
+        <div class="trophy-chip-list">${chips || '<span class="panel-desc">尚未配對</span>'}</div>
+        ${readonly ? "" : `
+        <div class="trophy-add-row">
+          <select class="trophy-add-select" data-receiver="${escapeHtml(teammateId)}" aria-label="選擇 Trophy">
+            <option value="">選擇 Trophy…</option>
+            ${options}
+          </select>
+          <button type="button" class="trophy-add-btn" data-receiver="${escapeHtml(teammateId)}">新增 Trophy</button>
+        </div>`}
+      </article>`;
+  }).join("");
+
+  trophyActions.classList.toggle("hidden", readonly);
+  trophySubmitBtn.disabled = incomplete.length > 0;
+}
+
+trophyMatchingList.addEventListener("click", (e) => {
+  const addBtn = e.target.closest(".trophy-add-btn");
+  if (addBtn) {
+    const row = addBtn.closest(".trophy-teammate-card");
+    const select = row ? row.querySelector(".trophy-add-select") : null;
+    if (!select || !select.value) {
+      showToast("請先選擇 Trophy", "warning");
+      return;
+    }
+    addTrophyAssignment(addBtn.dataset.receiver, select.value);
+    select.value = "";
+    return;
+  }
+
+  const removeBtn = e.target.closest(".trophy-chip-remove");
+  if (removeBtn) {
+    removeTrophyAssignment(removeBtn.dataset.receiver, removeBtn.dataset.trophy);
+  }
+});
+
+function addTrophyAssignment(receiverId, trophyId) {
+  const rid = normalizeParticipantId(receiverId);
+  const tid = String(trophyId).trim();
+  if (!state.trophy.assignments[rid]) state.trophy.assignments[rid] = [];
+  if (state.trophy.assignments[rid].includes(tid)) {
+    showToast("此 Trophy 已配對", "warning");
+    return;
+  }
+  state.trophy.assignments[rid].push(tid);
+  renderTrophyUI();
+}
+
+function removeTrophyAssignment(receiverId, trophyId) {
+  const rid = normalizeParticipantId(receiverId);
+  const tid = String(trophyId).trim();
+  state.trophy.assignments[rid] = (state.trophy.assignments[rid] || []).filter((id) => id !== tid);
+  renderTrophyUI();
+}
+
+async function handleTrophySaveDraft() {
+  const pairings = assignmentsToPairings(state.trophy.assignments);
+  try {
+    await runWithProgress(
+      trophySaveDraftBtn,
+      () => apiTrophyPost("trophy_save_draft", pairings),
+      (data) => {
+        if (data.status === "success") {
+          state.trophy.submissionStatus = "draft";
+          showToast("草稿已儲存", "success");
+          return;
+        }
+        if (data.incomplete_receivers && data.incomplete_receivers.length) {
+          showToast(`${data.message}：${data.incomplete_receivers.join("、")}`, "warning");
+        } else {
+          showToast(data.message || "儲存失敗", "error");
+        }
+      },
+      "正在儲存草稿…",
+      { buttonLoadingText: "儲存中…", useGlobalOverlay: false }
+    );
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+  }
+}
+
+async function handleTrophySubmit() {
+  const incomplete = getIncompleteTrophyReceivers();
+  if (incomplete.length > 0) {
+    showToast(`尚有成員未完成 Trophy 配對：${incomplete.join("、")}`, "warning");
+    return;
+  }
+
+  const pairings = assignmentsToPairings(state.trophy.assignments);
+  try {
+    await runWithProgress(
+      trophySubmitBtn,
+      () => apiTrophyPost("trophy_submit", pairings),
+      (data) => {
+        if (data.status === "success") {
+          state.trophy.submissionStatus = "submitted";
+          state.trophy.readonly = isTrophyReadonly();
+          renderTrophyUI();
+          showToast("Trophy 配對已提交", "success");
+          return;
+        }
+        if (data.incomplete_receivers && data.incomplete_receivers.length) {
+          showToast(`${data.message}：${data.incomplete_receivers.join("、")}`, "warning");
+        } else {
+          showToast(data.message || "提交失敗", "error");
+        }
+      },
+      "正在提交配對…",
+      { buttonLoadingText: "提交中…", useGlobalOverlay: false }
+    );
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+  }
+}
+
+function setAdminMode(mode) {
+  document.querySelectorAll(".admin-mode-btn").forEach((btn) => {
+    const active = btn.dataset.adminMode === mode;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  adminMessagesPanel.classList.toggle("hidden", mode !== "messages");
+  adminMessagesPanel.classList.toggle("active", mode === "messages");
+  adminTrophyPanel.classList.toggle("hidden", mode !== "trophy");
+  if (mode === "trophy") {
+    loadAdminTrophyData();
+  }
+}
+
+function setTrophyAdminView(view) {
+  state.adminTrophy.view = view;
+  document.querySelectorAll("[data-trophy-view]").forEach((btn) => {
+    const active = btn.dataset.trophyView === view;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.getElementById("trophy-admin-audit").classList.toggle("active", view === "audit");
+  document.getElementById("trophy-admin-audit").classList.toggle("hidden", view !== "audit");
+  document.getElementById("trophy-admin-profiles").classList.toggle("active", view === "profiles");
+  document.getElementById("trophy-admin-profiles").classList.toggle("hidden", view !== "profiles");
+  document.getElementById("trophy-admin-celebration").classList.toggle("active", view === "celebration");
+  document.getElementById("trophy-admin-celebration").classList.toggle("hidden", view !== "celebration");
+}
+
+function renderAdminTrophySummary(overview) {
+  if (!overview) return;
+  const stats = overview.stats || {};
+  const statusLabels = {
+    DRAFT: "草稿",
+    VOTING_OPEN: "投票進行中",
+    VOTING_CLOSED: "投票已關閉",
+    CALCULATED: "已計算",
+    PUBLISHED: "已發布"
+  };
+  const status = overview.voting_status || "DRAFT";
+  trophyAdminVotingStatus.innerHTML = `${statusDot(status === "VOTING_OPEN" ? "success" : "generating")}目前狀態：${statusLabels[status] || status}`;
+  trophyStatCompleted.textContent = `${stats.completed_count || 0} / ${stats.total_participants || 0}`;
+  trophyStatVotes.textContent = String(stats.total_votes || 0);
+  trophyStatTrophyCount.textContent = String(stats.trophy_count || 0);
+
+  const withTrophy = overview.participants_with_trophy;
+  const total = stats.total_participants || 0;
+  if (overview.results_ready && typeof withTrophy === "number") {
+    trophyStatWithTrophy.textContent = `${withTrophy} / ${total}`;
+  } else {
+    trophyStatWithTrophy.textContent = "—";
+  }
+
+  const pending = stats.pending_participants || [];
+  if (pending.length > 0) {
+    trophyPendingList.classList.remove("hidden");
+    trophyPendingList.innerHTML = `<strong>尚未完成：</strong> ${pending.map(escapeHtml).join("、")}`;
+  } else {
+    trophyPendingList.classList.add("hidden");
+    trophyPendingList.innerHTML = "";
+  }
+}
+
+function renderTrophyAuditTable(votes) {
+  const search = (trophyAuditSearch.value || "").trim().toUpperCase();
+  const trophyFilter = trophyAuditFilterTrophy.value;
+
+  let filtered = votes || [];
+  if (search) {
+    filtered = filtered.filter(
+      (v) => v.sender_id.includes(search) || v.receiver_id.includes(search)
+    );
+  }
+  if (trophyFilter) {
+    filtered = filtered.filter((v) => String(v.trophy_id) === trophyFilter);
+  }
+
+  if (filtered.length === 0) {
+    trophyAuditTableWrap.innerHTML = renderEmptyState("沒有投票記錄", "", "search");
+    return;
+  }
+
+  trophyAuditTableWrap.innerHTML = `
+    <table class="trophy-table">
+      <thead><tr><th>Sender</th><th>Receiver</th><th>Trophy</th></tr></thead>
+      <tbody>
+        ${filtered.map((v) => `
+          <tr>
+            <td>${escapeHtml(v.sender_id)}</td>
+            <td>${escapeHtml(v.receiver_id)}</td>
+            <td>${escapeHtml(v.trophy_name || v.trophy_id)}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function renderTrophyProfiles(profiles) {
+  if (!profiles || profiles.length === 0) {
+    trophyProfilesList.innerHTML = renderEmptyState("尚未計算結果", "請先完成投票並計算結果", "search");
+    return;
+  }
+
+  trophyProfilesList.innerHTML = profiles.map((profile) => `
+    <article class="trophy-profile-card">
+      <p class="trophy-profile-name">${escapeHtml(formatParticipantLabel(profile.participant_id))}</p>
+      ${(profile.trophies || []).map((t) => `
+        <p class="trophy-profile-trophy">Trophy ${escapeHtml(String(t.trophy_id))} — ${escapeHtml(t.trophy_name || "")}
+          <span class="pill-badge pill-badge--lavender">${t.award_source === "fallback" ? "fallback" : "round1"}</span>
+        </p>`).join("")}
+    </article>`).join("");
+}
+
+function renderTrophyCelebration(profiles) {
+  if (!profiles || profiles.length === 0) {
+    trophyCelebrationGrid.innerHTML = renderEmptyState("尚未計算結果", "", "search");
+    return;
+  }
+
+  trophyCelebrationGrid.innerHTML = profiles.map((profile) => `
+    <article class="trophy-celebration-card">
+      <p class="trophy-celebration-name">${escapeHtml(profile.participant_id)}</p>
+      ${(profile.trophies || []).map((t) => `
+        <p class="trophy-celebration-item">Trophy ${escapeHtml(String(t.trophy_id))}<br>${escapeHtml(t.trophy_name || "")}</p>`).join("")}
+    </article>`).join("");
+}
+
+function populateTrophyAuditFilter(trophies) {
+  const current = trophyAuditFilterTrophy.value;
+  trophyAuditFilterTrophy.innerHTML = '<option value="">全部 Trophy</option>' +
+    (trophies || []).map((t) => `
+      <option value="${escapeHtml(String(t.trophy_id))}">${escapeHtml(t.trophy_name || `Trophy ${t.trophy_id}`)}</option>`).join("");
+  if (current) trophyAuditFilterTrophy.value = current;
+}
+
+async function loadAdminTrophyData(options = {}) {
+  if (!state.isAdmin) return;
+  const { silent = false } = options;
+
+  if (trophyAdminVotingStatus) {
+    trophyAdminVotingStatus.innerHTML = `${statusDot("generating")}載入中…`;
+  }
+
+  try {
+    const overview = await apiAdminTrophyGet("admin_trophy_overview");
+
+    if (overview.status !== "success") {
+      let msg = overview.message || "無法載入投票概覽";
+      if (state.apiVersion !== null && state.apiVersion < REQUIRED_TROPHY_API_VERSION) {
+        msg = `後端版本過舊（v${state.apiVersion}），請在 Google Apps Script 重新部署 Code.gs v${REQUIRED_TROPHY_API_VERSION}`;
+      } else if (msg === "管理員身份驗證失敗") {
+        msg = `後端尚未支援 Trophy 管理 API，請重新部署 Code.gs v${REQUIRED_TROPHY_API_VERSION}`;
+      }
+      if (trophyAdminVotingStatus) {
+        trophyAdminVotingStatus.innerHTML = `${statusDot("notice")}${escapeHtml(msg)}`;
+      }
+      if (!silent) showToast(msg, "error");
+      return;
+    }
+
+    state.adminTrophy.overview = overview;
+    renderAdminTrophySummary(overview);
+
+    const [audit, results] = await Promise.all([
+      apiAdminTrophyGet("admin_trophy_audit"),
+      apiAdminTrophyGet("admin_trophy_results")
+    ]);
+
+    if (audit.status === "success") {
+      state.adminTrophy.auditVotes = audit.votes || [];
+      const trophySet = new Map();
+      (audit.votes || []).forEach((v) => {
+        if (v.trophy_id) {
+          trophySet.set(String(v.trophy_id), v.trophy_name || `Trophy ${v.trophy_id}`);
+        }
+      });
+      populateTrophyAuditFilter(
+        Array.from(trophySet.entries()).map(([id, name]) => ({ trophy_id: id, trophy_name: name }))
+      );
+      renderTrophyAuditTable(state.adminTrophy.auditVotes);
+    } else if (!silent) {
+      showToast(audit.message || "無法載入投票清單", "warning");
+    }
+
+    if (results.status === "success") {
+      state.adminTrophy.profiles = results.profiles || [];
+      renderTrophyProfiles(state.adminTrophy.profiles);
+      renderTrophyCelebration(state.adminTrophy.profiles);
+      if (typeof results.participants_with_trophy === "number" && trophyStatWithTrophy) {
+        const total = results.total_participants || overview.stats?.total_participants || 0;
+        trophyStatWithTrophy.textContent = `${results.participants_with_trophy} / ${total}`;
+      }
+    } else if (!silent) {
+      showToast(results.message || "尚未有計算結果", "info");
+    }
+  } catch (err) {
+    const msg = err.message || "無法載入 Trophy 管理資料";
+    if (trophyAdminVotingStatus) {
+      trophyAdminVotingStatus.innerHTML = `${statusDot("notice")}連線失敗，請確認後端已部署 v13`;
+    }
+    if (!silent) showToast(msg, "error");
+    console.error("Admin trophy load error:", err);
+  }
+}
+
+async function handleAdminSetVotingStatus(votingStatus) {
+  const buttonMap = {
+    VOTING_OPEN: trophyOpenVotingBtn,
+    VOTING_CLOSED: trophyCloseVotingBtn,
+    PUBLISHED: trophyPublishBtn
+  };
+  const button = buttonMap[votingStatus] || null;
+
+  try {
+    const data = button
+      ? await runWithProgress(
+          button,
+          () => apiAdminTrophyGet("admin_set_voting_status", { voting_status: votingStatus }),
+          null,
+          "正在更新…",
+          { buttonLoadingText: "處理中…", useGlobalOverlay: false }
+        )
+      : await apiAdminTrophyGet("admin_set_voting_status", { voting_status: votingStatus });
+
+    if (data.status === "success") {
+      showToast(data.message || "狀態已更新", "success");
+      loadAdminTrophyData();
+      return;
+    }
+    if (data.pending_participants) {
+      showToast(`${data.message}：${data.pending_participants.join("、")}`, "warning");
+    } else {
+      showToast(data.message || "設定失敗", "error");
+    }
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+  }
+}
+
+async function handleAdminCalculateTrophy() {
+  try {
+    const data = await runWithProgress(
+      trophyCalculateBtn,
+      () => apiAdminTrophyGet("admin_calculate_trophy_results"),
+      null,
+      "正在計算…",
+      { buttonLoadingText: "計算中…", useGlobalOverlay: false }
+    );
+
+    if (data.status === "success") {
+      showToast("Trophy 結果已計算", "success");
+      loadAdminTrophyData();
+      setTrophyAdminView("celebration");
+      return;
+    }
+    if (data.pending_participants && data.pending_participants.length) {
+      showToast(`投票未完成：${data.pending_participants.join("、")}`, "warning");
+    } else {
+      showToast(data.message || "計算失敗", "error");
+    }
+  } catch (err) {
+    showToast("連線失敗，請稍後再試", "error");
+  }
+}
+
+trophySaveDraftBtn.addEventListener("click", handleTrophySaveDraft);
+trophySubmitBtn.addEventListener("click", handleTrophySubmit);
+
+document.querySelectorAll(".admin-mode-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setAdminMode(btn.dataset.adminMode));
+});
+
+document.querySelectorAll("[data-trophy-view]").forEach((btn) => {
+  btn.addEventListener("click", () => setTrophyAdminView(btn.dataset.trophyView));
+});
+
+trophyOpenVotingBtn.addEventListener("click", () => handleAdminSetVotingStatus("VOTING_OPEN"));
+trophyCloseVotingBtn.addEventListener("click", () => handleAdminSetVotingStatus("VOTING_CLOSED"));
+trophyCalculateBtn.addEventListener("click", handleAdminCalculateTrophy);
+trophyPublishBtn.addEventListener("click", () => handleAdminSetVotingStatus("PUBLISHED"));
+
+trophyAuditSearch.addEventListener("input", () => {
+  renderTrophyAuditTable(state.adminTrophy.auditVotes);
+});
+trophyAuditFilterTrophy.addEventListener("change", () => {
+  renderTrophyAuditTable(state.adminTrophy.auditVotes);
 });
 
 /* ==========================================
