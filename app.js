@@ -132,14 +132,39 @@ let monitorLoading = false;
 
 let loadingCount = 0;
 
+const ICON_PATHS = {
+  mail: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/>',
+  sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>'
+};
+
+function svgIcon(name, size = 22) {
+  const path = ICON_PATHS[name] || ICON_PATHS.sparkles;
+  return `<svg class="icon icon-${name}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
+
+function statusDot(type = "generating") {
+  return `<span class="status-dot status-dot--${type}" aria-hidden="true"></span>`;
+}
+
+const TOAST_DOT = {
+  success: "success",
+  error: "notice",
+  warning: "notice",
+  info: "generating"
+};
+
 /* ==========================================
    Utility Functions
    ========================================== */
 function showToast(message, type = "info") {
-  const icons = { success: "✅", error: "❌", warning: "⚠️", info: "ℹ️" };
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.textContent = `${icons[type] || "ℹ️"} ${message}`;
+  toast.innerHTML = `${statusDot(TOAST_DOT[type] || "generating")}<span>${escapeHtml(message)}</span>`;
   toastContainer.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
 }
@@ -166,26 +191,23 @@ function setGlobalLoading(active, percent) {
 function updateProgressUI(button, percent) {
   if (button) {
     const bar = button.querySelector(".btn-progress-bar");
-    const label = button.querySelector(".btn-progress-label");
     if (bar) bar.style.width = `${percent}%`;
-    if (label) {
-      label.style.display = "inline";
-      label.textContent = `${Math.round(percent)}%`;
-    }
   }
-  loadingOverlayPercent.textContent = `${Math.round(percent)}%`;
+  if (loadingOverlayPercent) {
+    loadingOverlayPercent.textContent = `${Math.round(percent)}%`;
+  }
 }
 
 function resetProgressUI(button, useGlobalOverlay = true) {
   if (button) {
     const bar = button.querySelector(".btn-progress-bar");
-    const label = button.querySelector(".btn-progress-label");
+    const textEl = button.querySelector(".btn-text");
     button.classList.remove("loading");
     button.disabled = false;
     if (bar) bar.style.width = "0%";
-    if (label) {
-      label.style.display = "none";
-      label.textContent = "0%";
+    if (textEl && button.dataset.originalText) {
+      textEl.textContent = button.dataset.originalText;
+      delete button.dataset.originalText;
     }
   }
   if (useGlobalOverlay) {
@@ -193,20 +215,32 @@ function resetProgressUI(button, useGlobalOverlay = true) {
   }
 }
 
+function setButtonLoadingText(button, text) {
+  if (!button) return;
+  const textEl = button.querySelector(".btn-text");
+  if (!textEl) return;
+  if (!button.dataset.originalText) {
+    button.dataset.originalText = textEl.textContent;
+  }
+  textEl.textContent = text;
+}
+
 /**
  * Runs an async task with progress synced to the actual request.
  * Progress eases to 90% while waiting, hits 100% when done,
  * runs onComplete immediately at 100%, then cleans up.
  */
-async function runWithProgress(button, taskFn, onComplete, loadingText = "⏳ 載入中...", options = {}) {
+async function runWithProgress(button, taskFn, onComplete, loadingText = "正在處理…", options = {}) {
   const useGlobalOverlay = options.useGlobalOverlay !== false;
+  const buttonLoadingText = options.buttonLoadingText || loadingText;
 
-  if (useGlobalOverlay) {
+  if (useGlobalOverlay && loadingOverlayText) {
     loadingOverlayText.textContent = loadingText;
   }
   if (button) {
     button.classList.add("loading");
     button.disabled = true;
+    setButtonLoadingText(button, buttonLoadingText);
   }
   if (useGlobalOverlay) {
     setGlobalLoading(true, 0);
@@ -218,17 +252,7 @@ async function runWithProgress(button, taskFn, onComplete, loadingText = "⏳ �
     if (finished) return;
     const increment = Math.max(0.4, (90 - progress) * 0.07);
     progress = Math.min(progress + increment, 90);
-    if (useGlobalOverlay) {
-      updateProgressUI(button, progress);
-    } else if (button) {
-      const bar = button.querySelector(".btn-progress-bar");
-      const label = button.querySelector(".btn-progress-label");
-      if (bar) bar.style.width = `${progress}%`;
-      if (label) {
-        label.style.display = "inline";
-        label.textContent = `${Math.round(progress)}%`;
-      }
-    }
+    updateProgressUI(button, progress);
   }, 40);
 
   try {
@@ -237,17 +261,7 @@ async function runWithProgress(button, taskFn, onComplete, loadingText = "⏳ �
     clearInterval(timer);
 
     progress = 100;
-    if (useGlobalOverlay) {
-      updateProgressUI(button, 100);
-    } else if (button) {
-      const bar = button.querySelector(".btn-progress-bar");
-      const label = button.querySelector(".btn-progress-label");
-      if (bar) bar.style.width = "100%";
-      if (label) {
-        label.style.display = "inline";
-        label.textContent = "100%";
-      }
-    }
+    updateProgressUI(button, 100);
 
     if (onComplete) {
       await onComplete(result);
@@ -329,6 +343,23 @@ function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+}
+
+function renderEmptyState(title, desc = "", iconName = "mail") {
+  return `
+    <div class="empty-state">
+      <div class="empty-icon-wrap" aria-hidden="true">${svgIcon(iconName, 26)}</div>
+      <p class="empty-title">${escapeHtml(title)}</p>
+      ${desc ? `<p class="empty-desc">${escapeHtml(desc)}</p>` : ""}
+    </div>`;
+}
+
+function renderLoadingState(title = "載入中…") {
+  return `
+    <div class="empty-state list-loading">
+      <div class="loading-shimmer inline-shimmer" aria-hidden="true"></div>
+      <p class="empty-title">${escapeHtml(title)}</p>
+    </div>`;
 }
 
 /* ==========================================
@@ -474,6 +505,19 @@ async function apiFetchMessages(participantId, phoneNumber, fetchType = "inbox")
 function isAdminLogin(participantId, phoneNumber) {
   return isSameParticipantId(participantId, ADMIN_PARTICIPANT_ID) &&
     normalizePhone(phoneNumber) === ADMIN_PHONE;
+}
+
+function isAdminParticipantInput(value) {
+  return isSameParticipantId(value, ADMIN_PARTICIPANT_ID);
+}
+
+function updateParticipantAdminPickerUI() {
+  const isAdmin = isAdminParticipantInput(participantSelect.value);
+  participantToggle.classList.toggle("hidden", isAdmin);
+  participantCombobox.root.classList.toggle("is-admin-input", isAdmin);
+  if (isAdmin) {
+    closeCombobox(participantCombobox);
+  }
 }
 
 function buildAdminApiParams(extra = {}) {
@@ -672,7 +716,9 @@ function updateMessagingUI() {
   }
 
   if (monitorMessagingStatus) {
-    monitorMessagingStatus.textContent = open ? "目前狀態：✅ 開通留言" : "目前狀態：🚫 關閉留言";
+    monitorMessagingStatus.innerHTML = open
+      ? `${statusDot("success")}目前狀態：開通留言`
+      : `${statusDot("notice")}目前狀態：關閉留言`;
     monitorMessagingStatus.classList.toggle("is-open", open);
     monitorMessagingStatus.classList.toggle("is-closed", !open);
   }
@@ -724,7 +770,7 @@ async function handleAdminSetMessagingStatus(targetStatus) {
   }
 
   const button = targetStatus === "OPEN" ? monitorEnableBtn : monitorDisableBtn;
-  const loadingText = targetStatus === "OPEN" ? "✅ 開通留言中..." : "🚫 關閉留言中...";
+  const loadingText = targetStatus === "OPEN" ? "正在開通留言…" : "正在關閉留言…";
 
   try {
     await runWithProgress(
@@ -742,7 +788,11 @@ async function handleAdminSetMessagingStatus(targetStatus) {
 
         showToast(data.message || "設定失敗", "error");
       },
-      loadingText
+      loadingText,
+      {
+        useGlobalOverlay: false,
+        buttonLoadingText: targetStatus === "OPEN" ? "開通中…" : "關閉中…"
+      }
     );
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
@@ -756,11 +806,7 @@ function resetAdminState() {
   state.monitorMessages = [];
   state.monitorViewFilter = "all";
   setMonitorViewFilter("all");
-  monitorList.innerHTML = `
-    <div class="empty-state">
-      <span class="empty-emoji">👁️</span>
-      <p>目前沒有留言</p>
-    </div>`;
+  monitorList.innerHTML = renderEmptyState("目前沒有留言", "留言會即時顯示在這裡", "eye");
   monitorMessageCount.textContent = "0";
   monitorLastUpdated.textContent = "—";
 }
@@ -918,11 +964,7 @@ function renderMonitorList(newMessageIds = new Set()) {
   const visibleMessages = getMonitorMessagesForView();
 
   if (state.monitorMessages.length === 0) {
-    monitorList.innerHTML = `
-      <div class="empty-state">
-        <span class="empty-emoji">👁️</span>
-        <p>目前沒有留言</p>
-      </div>`;
+    monitorList.innerHTML = renderEmptyState("目前沒有留言", "留言會即時顯示在這裡", "eye");
     return;
   }
 
@@ -933,11 +975,7 @@ function renderMonitorList(newMessageIds = new Set()) {
       all: "目前沒有留言"
     }[state.monitorViewFilter] || "目前沒有留言";
 
-    monitorList.innerHTML = `
-      <div class="empty-state">
-        <span class="empty-emoji">🔍</span>
-        <p>${emptyText}</p>
-      </div>`;
+    monitorList.innerHTML = renderEmptyState(emptyText, "", state.monitorViewFilter === "deleted" ? "search" : "eye");
     return;
   }
 
@@ -949,8 +987,8 @@ function renderMonitorList(newMessageIds = new Set()) {
     <article class="message-card monitor-card ${deleted ? "deleted unsent" : ""} ${newMessageIds.has(msg.message_id) ? "monitor-card-new" : ""}" data-message-id="${escapeHtml(msg.message_id)}">
       <div class="message-card-header">
         <div class="monitor-meta">
-          <span class="monitor-route">📤 ${escapeHtml(formatParticipantLabel(msg.sender_id))} → 🎯 ${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
-          <span class="message-meta">🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
+          <span class="monitor-route">${escapeHtml(formatParticipantLabel(msg.sender_id))} → ${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
+          <span class="message-meta">${escapeHtml(msg.created_at || "未知時間")}</span>
           ${deleted ? '<span class="message-unsent-badge">已撤回</span>' : ""}
         </div>
         ${deleted ? "" : `
@@ -958,10 +996,10 @@ function renderMonitorList(newMessageIds = new Set()) {
           type="button"
           class="btn btn-secondary monitor-delete-btn btn-progress"
           data-message-id="${escapeHtml(msg.message_id)}"
-        ><span class="btn-text">🗑️ 刪除留言</span><span class="btn-progress-bar" aria-hidden="true"></span><span class="btn-progress-label" aria-hidden="true">0%</span></button>`}
+        ><span class="btn-text">刪除留言</span><span class="btn-progress-bar" aria-hidden="true"></span><span class="btn-progress-label" aria-hidden="true">0%</span></button>`}
       </div>
       ${deleted ? `
-        <p class="message-deleted-notice">🚫 ${escapeHtml(deletedNotice)}</p>
+        <p class="message-deleted-notice">${escapeHtml(deletedNotice)}</p>
         ${msg.deleted_at ? `<p class="message-deleted-time">撤回時間：${escapeHtml(msg.deleted_at)}</p>` : ""}
       ` : ""}
       <p class="message-content ${deleted ? "is-deleted" : ""}">${escapeHtml(msg.content)}</p>
@@ -1014,8 +1052,8 @@ async function handleAdminDeleteMessage(messageId, button) {
 
         showToast(data.message || "刪除失敗", "error");
       },
-      "🗑️ 刪除留言中...",
-      { useGlobalOverlay: false }
+      "刪除中…",
+      { useGlobalOverlay: false, buttonLoadingText: "刪除中…" }
     );
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
@@ -1114,7 +1152,7 @@ function showDashboard() {
   adminScreen.classList.add("hidden");
   document.body.classList.add("participant-active");
   document.body.classList.remove("admin-active");
-  userBadge.textContent = `🎫 目前身分：${formatParticipantLabel(state.participantId)}`;
+  userBadge.innerHTML = `<span class="pill-badge pill-badge--purple">${svgIcon("smile", 14)} ${escapeHtml(formatParticipantLabel(state.participantId))}</span>`;
   renderComboboxPicker(receiverCombobox);
   renderSentMessages();
   updateInboxBadge();
@@ -1151,6 +1189,12 @@ function getFilteredParticipants(filterText = "", excludeId = null) {
 }
 
 function renderComboboxPicker(combobox, filterText = combobox.input.value) {
+  if (combobox === participantCombobox && isAdminParticipantInput(filterText)) {
+    combobox.list.innerHTML = "";
+    combobox.count.textContent = "";
+    return;
+  }
+
   const filtered = getFilteredParticipants(filterText, combobox.getExcludeId());
   const currentId = normalizeParticipantId(combobox.input.value);
 
@@ -1195,6 +1239,7 @@ function setComboboxOpen(combobox, isOpen) {
 
 function openCombobox(combobox) {
   if (combobox.input.disabled) return;
+  if (combobox === participantCombobox && isAdminParticipantInput(combobox.input.value)) return;
   closeAllComboboxes(combobox);
   setComboboxOpen(combobox, true);
 }
@@ -1212,6 +1257,7 @@ function closeAllComboboxes(except = null) {
 }
 
 function toggleCombobox(combobox) {
+  if (combobox === participantCombobox && isAdminParticipantInput(combobox.input.value)) return;
   if (combobox.picker.classList.contains("hidden")) {
     openCombobox(combobox);
   } else {
@@ -1229,6 +1275,9 @@ function clearComboboxInput(combobox) {
   combobox.input.value = "";
   closeCombobox(combobox);
   updateComboboxClearButton(combobox);
+  if (combobox === participantCombobox) {
+    updateParticipantAdminPickerUI();
+  }
   combobox.onSelect();
   combobox.input.focus();
 }
@@ -1244,6 +1293,9 @@ function selectFromCombobox(combobox, id) {
 
 function setupComboboxEvents(combobox) {
   combobox.input.addEventListener("input", () => {
+    if (combobox === participantCombobox) {
+      updateParticipantAdminPickerUI();
+    }
     if (!combobox.picker.classList.contains("hidden")) {
       renderComboboxPicker(combobox);
     }
@@ -1253,6 +1305,9 @@ function setupComboboxEvents(combobox) {
 
   combobox.input.addEventListener("focus", () => {
     warmUpApi();
+    if (combobox === participantCombobox && isAdminParticipantInput(combobox.input.value)) {
+      return;
+    }
     if (!combobox.input.disabled && (state.participants.length > 0 || !state.participantsLoaded)) {
       openCombobox(combobox);
     }
@@ -1279,6 +1334,7 @@ function setParticipantInputReady(placeholder, hintText = "", hintWarning = fals
   participantHint.classList.toggle("hidden", !hintText);
   participantHint.classList.toggle("warning", hintWarning);
   updateComboboxClearButton(participantCombobox);
+  updateParticipantAdminPickerUI();
 }
 
 async function loadBootstrap() {
@@ -1293,7 +1349,7 @@ async function loadBootstrap() {
         markParticipantsLoaded();
         setParticipantInputReady(
           "請手動輸入編號 (如 1A)",
-          "⚠️ Participants 工作表沒有 participant_id 資料",
+          "Participants 工作表沒有 participant_id 資料",
           true
         );
       }
@@ -1323,7 +1379,7 @@ async function loadParticipants() {
 
   setParticipantInputReady(
     "請選擇或輸入編號 (如 1A, 3C...)",
-    "⏳ 名單載入中，可先手動輸入編號"
+    "名單載入中，可先手動輸入編號"
   );
   closeAllComboboxes();
 
@@ -1339,7 +1395,7 @@ async function loadParticipants() {
       markParticipantsLoaded();
       setParticipantInputReady(
         "請手動輸入編號 (如 1A)",
-        "⚠️ Participants 工作表沒有 participant_id 資料",
+        "Participants 工作表沒有 participant_id 資料",
         true
       );
       return;
@@ -1348,7 +1404,7 @@ async function loadParticipants() {
     markParticipantsLoaded();
     setParticipantInputReady(
       "請手動輸入編號 (如 1A)",
-      "⚠️ 無法從 Sheet 載入名單，請手動輸入",
+      "無法從 Sheet 載入名單，請手動輸入",
       true
     );
     showToast(data.message || "無法載入參加者名單", "warning");
@@ -1357,7 +1413,7 @@ async function loadParticipants() {
     const isTimeout = err.name === "AbortError";
     setParticipantInputReady(
       "請手動輸入編號 (如 1A)",
-      isTimeout ? "⚠️ 載入逾時，請手動輸入或重新整理" : "⚠️ 連線失敗，請手動輸入編號",
+      isTimeout ? "載入逾時，請手動輸入或重新整理" : "連線失敗，請手動輸入編號",
       true
     );
     showToast(isTimeout ? "載入名單逾時，可先手動輸入編號" : "無法載入參加者名單，請手動輸入", "warning");
@@ -1423,7 +1479,7 @@ function validateMessageInput() {
   if (hasBadWords) {
     messageContent.classList.add("error");
     badWordWarning.classList.remove("hidden");
-    badWordWarning.textContent = `⚠️ 偵測到不當用語，請修正後再發送`;
+    badWordWarning.textContent = "偵測到不當用語，請修正後再發送";
   } else {
     messageContent.classList.remove("error");
     badWordWarning.classList.add("hidden");
@@ -1440,11 +1496,7 @@ function renderInbox() {
   const readIds = getReadMessageIds();
 
   if (state.inboxMessages.length === 0) {
-    inboxList.innerHTML = `
-      <div class="empty-state">
-        <span class="empty-emoji">📭</span>
-        <p>目前沒有留言</p>
-      </div>`;
+    inboxList.innerHTML = renderEmptyState("目前沒有留言", "有新留言時會顯示在這裡", "inbox");
     return;
   }
 
@@ -1457,8 +1509,8 @@ function renderInbox() {
     return `
       <article class="message-card inbox-card ${isUnread ? "unread" : ""}">
         <div class="message-meta inbox-meta">
-          <span>🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
-          ${isUnread ? '<span class="message-badge">NEW</span>' : ""}
+          <span>${escapeHtml(msg.created_at || "未知時間")}</span>
+          ${isUnread ? '<span class="message-badge pill-badge--new"><span class="pill-badge-star" aria-hidden="true">✧</span> 新留言</span>' : ""}
         </div>
         <p class="message-content">${escapeHtml(msg.content)}</p>
       </article>`;
@@ -1467,11 +1519,9 @@ function renderInbox() {
 
 function renderSentMessages() {
   if (state.sentMessages.length === 0) {
-    sentList.innerHTML = `
-      <div class="empty-state">
-        <span class="empty-emoji">${state.sentLoaded ? "📤" : "🔄"}</span>
-        <p>${state.sentLoaded ? "尚未發送任何留言" : "載入送出的留言中..."}</p>
-      </div>`;
+    sentList.innerHTML = state.sentLoaded
+      ? renderEmptyState("尚未發送任何留言", "您送出的留言會顯示在這裡", "send")
+      : renderLoadingState("載入送出的留言中…");
     return;
   }
 
@@ -1487,13 +1537,13 @@ function renderSentMessages() {
     <article class="message-card sent-card ${deleted ? "deleted unsent" : ""}">
       <div class="message-card-header">
         <div class="sent-card-heading">
-          <span class="message-receiver">🎯 接收對象：${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
+          <span class="message-receiver">接收對象：${escapeHtml(formatParticipantLabel(msg.receiver_id))}</span>
           ${deleted ? '<span class="message-unsent-badge">管理員已撤回</span>' : ""}
         </div>
-        <span class="message-meta">🕐 ${escapeHtml(msg.created_at || "未知時間")}</span>
+        <span class="message-meta">${escapeHtml(msg.created_at || "未知時間")}</span>
       </div>
       ${deleted ? `
-        <p class="message-deleted-notice">🚫 ${escapeHtml(deletedNotice)}</p>
+        <p class="message-deleted-notice">${escapeHtml(deletedNotice)}</p>
         ${msg.deleted_at ? `<p class="message-deleted-time">撤回時間：${escapeHtml(msg.deleted_at)}</p>` : ""}
       ` : ""}
       <p class="message-content ${deleted ? "is-deleted" : ""}">${escapeHtml(msg.content)}</p>
@@ -1513,7 +1563,7 @@ async function loadSentMessages(options = {}) {
       applySentFromApi(data);
       renderSentMessages();
       if (showToastOnSuccess) {
-        showToast("📤 送出的留言已更新！", "success");
+        showToast("送出的留言已更新", "success");
       }
       return true;
     }
@@ -1571,15 +1621,16 @@ async function handleLogin(e) {
               applyMessagingStatus(data.messaging_status);
             }
             showAdminDashboard();
-            showToast("🛡️ 歡迎，管理員！", "success");
+            showToast("歡迎，管理員", "success");
           } else {
             showToast(data.message || "管理員身份驗證失敗", "error");
           }
         },
-        "🔐 驗證管理員中..."
+        "正在驗證管理員…",
+        { buttonLoadingText: "驗證中…" }
       );
     } catch (err) {
-      showToast("連線失敗，請稍後再試 🌐", "error");
+      showToast("連線失敗，請稍後再試", "error");
       console.error("Admin login error:", err);
     }
     return;
@@ -1606,15 +1657,16 @@ async function handleLogin(e) {
           saveSession();
           showDashboard();
           renderInbox();
-          showToast(`🎉 歡迎，${formatParticipantLabel(participantId)}！`, "success");
+          showToast(`歡迎，${formatParticipantLabel(participantId)}`, "success");
         } else {
           showToast(data.message || "身份驗證失敗", "error");
         }
       },
-      "🔐 驗證身分中..."
+      "正在驗證身分…",
+      { buttonLoadingText: "驗證中…" }
     );
   } catch (err) {
-    showToast("連線失敗，請稍後再試 🌐", "error");
+    showToast("連線失敗，請稍後再試", "error");
     console.error("Login error:", err);
   }
 }
@@ -1633,12 +1685,13 @@ async function handleRefreshInbox() {
           renderInbox();
           updateInboxBadge();
           saveInboxCache(state.participantId, state.inboxMessages);
-          showToast("📥 收件箱已更新！", "success");
+          showToast("收件箱已更新", "success");
         } else {
           showToast(data.message || "同步失敗", "error");
         }
       },
-      "📥 同步收件箱..."
+      "正在同步收件箱…",
+      { buttonLoadingText: "同步中…", useGlobalOverlay: false }
     );
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
@@ -1653,12 +1706,13 @@ async function handleRefreshSent() {
       () => loadSentMessages({ silent: true, showToastOnSuccess: false }),
       (success) => {
         if (success) {
-          showToast("📤 送出的留言已更新！", "success");
+          showToast("送出的留言已更新", "success");
         } else {
           showToast("同步失敗", "error");
         }
       },
-      "📤 同步送出的留言..."
+      "正在同步已發送…",
+      { buttonLoadingText: "同步中…", useGlobalOverlay: false }
     );
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
@@ -1692,7 +1746,7 @@ async function handleSendMessage(e) {
 
   const badWords = checkBadWords(content);
   if (badWords.length > 0) {
-    showToast("留言包含不當用語，請修正 🚫", "error");
+    showToast("留言包含不當用語，請修正", "error");
     return;
   }
 
@@ -1735,7 +1789,7 @@ async function handleSendMessage(e) {
 
           renderSentMessages();
           switchTab("sent");
-          showToast("📨 留言已成功發送！", "success");
+          showToast("留言已成功發送", "success");
         } else {
           if (data.messaging_status === "CLOSE" || (data.message && data.message.includes("關閉"))) {
             applyMessagingStatus("CLOSE");
@@ -1743,7 +1797,8 @@ async function handleSendMessage(e) {
           showToast(data.message || "發送失敗", "error");
         }
       },
-      "📨 發送留言中..."
+      "正在發送留言…",
+      { buttonLoadingText: "發送中…", useGlobalOverlay: false }
     );
   } catch (err) {
     showToast("連線失敗，請稍後再試", "error");
@@ -1762,8 +1817,9 @@ function handleLogout() {
     state.participantId = null;
     state.phoneNumber = null;
     loginForm.reset();
+    updateParticipantAdminPickerUI();
     showLogin();
-    showToast("👋 管理員已登出", "info");
+    showToast("管理員已登出", "info");
     return;
   }
 
@@ -1782,9 +1838,10 @@ function handleLogout() {
   sendForm.reset();
   updateComboboxClearButton(participantCombobox);
   updateComboboxClearButton(receiverCombobox);
+  updateParticipantAdminPickerUI();
   validateMessageInput();
   showLogin();
-  showToast("👋 已成功登出", "info");
+  showToast("已成功登出", "info");
 }
 
 /* ==========================================

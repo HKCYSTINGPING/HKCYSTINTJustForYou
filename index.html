@@ -3,39 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#667eea">
+  <meta name="theme-color" content="#F0ABFC">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>💬 匿名留言系統</title>
+  <title>匿名留言</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Global Loading Overlay -->
   <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true" aria-live="polite">
     <div class="loading-overlay-content">
-      <div class="loading-spinner"></div>
-      <p id="loading-overlay-text">⏳ 載入中...</p>
-      <p id="loading-overlay-percent" class="loading-percent">0%</p>
+      <div class="loading-shimmer" aria-hidden="true"></div>
+      <p id="loading-overlay-text">正在處理…</p>
+      <p id="loading-overlay-percent" class="loading-percent" aria-hidden="true">0%</p>
     </div>
   </div>
 
-  <!-- Toast Container -->
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <!-- Login Screen -->
   <section id="login-screen" class="screen login-screen">
     <div class="login-card">
       <div class="login-header">
-        <span class="login-emoji">🔐</span>
-        <h1>匿名留言系統</h1>
-        <p class="subtitle">Anonymous Messaging System</p>
-        <p class="desc">請選擇您的編號並輸入電話號碼以驗證身分 ✨</p>
+        <div class="login-icon-wrap" aria-hidden="true">
+          <svg class="icon icon-sparkles" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+        </div>
+        <p class="login-brand pill-badge pill-badge--lavender">Anonymous Messaging</p>
+        <h1>匿名留言</h1>
+        <p class="desc">請選擇參加者並完成身份驗證</p>
       </div>
 
       <form id="login-form" class="login-form" novalidate>
         <div class="form-group">
-          <label for="participant-id">👤 參加者編號</label>
+          <label for="participant-id">參加者編號</label>
           <div class="combobox" id="participant-combobox">
             <input
               type="text"
@@ -56,7 +56,7 @@
               aria-label="清除參加者編號"
               tabindex="-1"
             >
-              ✕
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             </button>
             <button
               type="button"
@@ -73,7 +73,7 @@
             </button>
             <div id="participant-picker" class="participant-picker hidden" role="listbox" aria-label="參加者名單">
               <div class="participant-picker-header">
-                <span>👥 選擇參加者</span>
+                <span>選擇參加者</span>
                 <span id="participant-picker-count" class="participant-picker-count"></span>
               </div>
               <div id="participant-picker-list" class="participant-picker-list"></div>
@@ -83,7 +83,7 @@
         </div>
 
         <div class="form-group">
-          <label for="phone-number">📱 電話號碼</label>
+          <label for="phone-number">電話號碼</label>
           <input
             type="tel"
             id="phone-number"
@@ -97,13 +97,16 @@
         </div>
 
         <button type="submit" id="login-btn" class="btn btn-primary btn-progress">
-          <span class="btn-text">🚀 登入驗證</span>
+          <span class="btn-text">登入</span>
           <span class="btn-progress-bar" aria-hidden="true"></span>
           <span class="btn-progress-label" aria-hidden="true">0%</span>
         </button>
       </form>
 
-      <p class="login-footer">🛡️ 您的身分將受到保護，留言完全匿名</p>
+      <p class="login-footer">
+        <svg class="icon icon-heart inline-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>
+        您的身分將受到保護，留言完全匿名
+      </p>
     </div>
   </section>
 
@@ -111,39 +114,43 @@
   <section id="dashboard-screen" class="screen dashboard-screen hidden">
     <header class="dashboard-header">
       <div class="header-info">
-        <h1>💬 匿名留言控制台</h1>
+        <h1>匿名留言</h1>
         <p id="user-badge" class="user-badge"></p>
       </div>
-      <button type="button" id="logout-btn" class="btn btn-ghost">🚪 登出</button>
+      <button type="button" id="logout-btn" class="btn btn-ghost">登出</button>
     </header>
 
     <nav class="tab-nav" role="tablist">
       <button type="button" class="tab-btn active" data-tab="send" role="tab" aria-selected="true">
-        <span class="tab-label-long">✏️ 發送留言</span>
-        <span class="tab-label-short">✏️ 發送</span>
+        <span class="tab-label-long">發送留言</span>
+        <span class="tab-label-short">發送</span>
       </button>
       <button type="button" class="tab-btn" data-tab="inbox" role="tab" aria-selected="false">
-        <span class="tab-label-long">📥 收件箱</span>
-        <span class="tab-label-short">📥 收件</span>
+        <span class="tab-label-long">收件</span>
+        <span class="tab-label-short">收件</span>
         <span id="inbox-badge" class="tab-badge hidden">0</span>
       </button>
       <button type="button" class="tab-btn" data-tab="sent" role="tab" aria-selected="false">
-        <span class="tab-label-long">📤 送出的留言</span>
-        <span class="tab-label-short">📤 送出</span>
+        <span class="tab-label-long">已發送</span>
+        <span class="tab-label-short">已發送</span>
       </button>
     </nav>
 
     <main class="tab-content">
-      <!-- Send Message Tab -->
       <section id="tab-send" class="tab-panel active" role="tabpanel">
         <div class="panel-card">
-          <h2>✏️ 發送匿名留言</h2>
-          <p class="panel-desc">選擇接收對象，寫下您想說的話 💌</p>
-          <p id="messaging-closed-banner" class="messaging-closed-banner hidden">🚫 留言功能目前已關閉，暫時無法發送留言</p>
+          <div class="panel-title-row">
+            <svg class="icon panel-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 15 6 6"/><path d="m15 9 6-6"/><path d="M21 16v5h-5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="m3 21 6-6"/><path d="M3 8V3h5"/><path d="M9 9 3 3"/></svg>
+            <div>
+              <h2>發送留言</h2>
+              <p class="panel-desc">選擇接收對象並撰寫匿名留言</p>
+            </div>
+          </div>
+          <p id="messaging-closed-banner" class="messaging-closed-banner hidden"><span class="status-dot status-dot--notice" aria-hidden="true"></span>留言功能目前已關閉，暫時無法發送留言</p>
 
           <form id="send-form" class="send-form" novalidate>
             <div class="form-group">
-              <label for="receiver-id">🎯 接收對象</label>
+              <label for="receiver-id">接收對象</label>
               <div class="combobox" id="receiver-combobox">
                 <input
                   type="text"
@@ -163,7 +170,7 @@
                   aria-label="清除接收對象"
                   tabindex="-1"
                 >
-                  ✕
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 </button>
                 <button
                   type="button"
@@ -179,7 +186,7 @@
                 </button>
                 <div id="receiver-picker" class="participant-picker hidden" role="listbox" aria-label="接收對象名單">
                   <div class="participant-picker-header">
-                    <span>🎯 選擇接收對象</span>
+                    <span>選擇接收對象</span>
                     <span id="receiver-picker-count" class="participant-picker-count"></span>
                   </div>
                   <div id="receiver-picker-list" class="participant-picker-list"></div>
@@ -189,7 +196,7 @@
 
             <div class="form-group">
               <label for="message-content">
-                💬 留言內容
+                留言內容
                 <span id="char-count" class="char-count">0 / 300</span>
               </label>
               <textarea
@@ -197,14 +204,14 @@
                 name="content"
                 rows="6"
                 maxlength="300"
-                placeholder="在這裡輸入您的匿名留言..."
+                placeholder="在此輸入您的匿名留言…"
                 required
               ></textarea>
-              <p id="bad-word-warning" class="bad-word-warning hidden">⚠️ 偵測到不當用語，請修正後再發送</p>
+              <p id="bad-word-warning" class="bad-word-warning hidden">偵測到不當用語，請修正後再發送</p>
             </div>
 
             <button type="submit" id="send-btn" class="btn btn-primary btn-progress" disabled>
-              <span class="btn-text">📨 發送留言</span>
+              <span class="btn-text">發送留言</span>
               <span class="btn-progress-bar" aria-hidden="true"></span>
               <span class="btn-progress-label" aria-hidden="true">0%</span>
             </button>
@@ -212,16 +219,15 @@
         </div>
       </section>
 
-      <!-- Inbox Tab -->
       <section id="tab-inbox" class="tab-panel" role="tabpanel">
         <div class="panel-card">
           <div class="panel-header-row">
             <div>
-              <h2>📥 收件箱</h2>
-              <p class="panel-desc">收到的留言完全匿名，不顯示發件者 🕵️</p>
+              <h2>收件箱</h2>
+              <p class="panel-desc">收到的留言完全匿名，不顯示發件者</p>
             </div>
             <button type="button" id="refresh-inbox-btn" class="btn btn-secondary btn-progress">
-              <span class="btn-text">🔄 重整</span>
+              <span class="btn-text">重新整理</span>
               <span class="btn-progress-bar" aria-hidden="true"></span>
               <span class="btn-progress-label" aria-hidden="true">0%</span>
             </button>
@@ -229,23 +235,25 @@
 
           <div id="inbox-list" class="message-list">
             <div class="empty-state">
-              <span class="empty-emoji">📭</span>
-              <p>目前沒有留言</p>
+              <div class="empty-icon-wrap" aria-hidden="true">
+                <svg class="icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+              </div>
+              <p class="empty-title">目前沒有留言</p>
+              <p class="empty-desc">有新留言時會顯示在這裡</p>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Sent Messages Tab -->
       <section id="tab-sent" class="tab-panel" role="tabpanel">
         <div class="panel-card">
           <div class="panel-header-row">
             <div>
-              <h2>📤 送出的留言</h2>
-              <p class="panel-desc">包含已送達同被管理員撤回嘅留言；撤回後接收者唔會收到 📋</p>
+              <h2>已發送</h2>
+              <p class="panel-desc">包含已送達及被管理員撤回的留言</p>
             </div>
             <button type="button" id="refresh-sent-btn" class="btn btn-secondary btn-progress">
-              <span class="btn-text">🔄 重整</span>
+              <span class="btn-text">重新整理</span>
               <span class="btn-progress-bar" aria-hidden="true"></span>
               <span class="btn-progress-label" aria-hidden="true">0%</span>
             </button>
@@ -253,8 +261,11 @@
 
           <div id="sent-list" class="message-list">
             <div class="empty-state">
-              <span class="empty-emoji">📤</span>
-              <p>尚未發送任何留言</p>
+              <div class="empty-icon-wrap" aria-hidden="true">
+                <svg class="icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+              </div>
+              <p class="empty-title">尚未發送任何留言</p>
+              <p class="empty-desc">您送出的留言會顯示在這裡</p>
             </div>
           </div>
         </div>
@@ -266,22 +277,22 @@
   <section id="admin-screen" class="screen admin-screen hidden">
     <header class="dashboard-header admin-header">
       <div class="header-info">
-        <h1>🛡️ 管理員控制台</h1>
+        <h1>管理員控制台</h1>
         <p id="admin-status-text" class="user-badge">
-          <span class="monitor-live-badge inline">
-            <span class="live-dot" aria-hidden="true"></span>
+          <span class="monitor-live-badge pill-badge pill-badge--mint">
+            <span class="status-dot status-dot--success live-dot" aria-hidden="true"></span>
             即時監察留言
           </span>
         </p>
       </div>
-      <button type="button" id="admin-logout-btn" class="btn btn-ghost">🚪 登出</button>
+      <button type="button" id="admin-logout-btn" class="btn btn-ghost">登出</button>
     </header>
 
     <main class="admin-content">
       <div class="panel-card">
         <div class="panel-header-row">
           <div>
-            <h2>📋 全部留言</h2>
+            <h2>全部留言</h2>
             <p class="panel-desc">
               上次同步 <span id="monitor-last-updated">—</span>
               · 共 <span id="monitor-message-count">0</span> 則
@@ -289,15 +300,15 @@
           </div>
         </div>
         <div class="monitor-messaging-controls">
-          <p id="monitor-messaging-status" class="settings-status">目前狀態：載入中...</p>
+          <p id="monitor-messaging-status" class="settings-status"><span class="status-dot status-dot--generating" aria-hidden="true"></span>目前狀態：載入中…</p>
           <div class="monitor-messaging-actions settings-actions">
             <button type="button" id="monitor-enable-btn" class="btn btn-primary btn-progress">
-              <span class="btn-text">✅ 開通留言</span>
+              <span class="btn-text">開通留言</span>
               <span class="btn-progress-bar" aria-hidden="true"></span>
               <span class="btn-progress-label" aria-hidden="true">0%</span>
             </button>
             <button type="button" id="monitor-disable-btn" class="btn btn-secondary settings-disable-btn btn-progress">
-              <span class="btn-text">🚫 關閉留言</span>
+              <span class="btn-text">關閉留言</span>
               <span class="btn-progress-bar" aria-hidden="true"></span>
               <span class="btn-progress-label" aria-hidden="true">0%</span>
             </button>
@@ -310,8 +321,11 @@
         </div>
         <div id="monitor-list" class="message-list monitor-list">
           <div class="empty-state">
-            <span class="empty-emoji">👁️</span>
-            <p>目前沒有留言</p>
+            <div class="empty-icon-wrap" aria-hidden="true">
+              <svg class="icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <p class="empty-title">目前沒有留言</p>
+            <p class="empty-desc">留言會即時顯示在這裡</p>
           </div>
         </div>
       </div>
