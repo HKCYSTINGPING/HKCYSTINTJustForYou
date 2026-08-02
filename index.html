@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF6EF">
+  <title>HKCYS TINT — Just For You</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Global Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true" role="status">
+    <div class="loading-shimmer"></div>
+    <p class="loading-text">載入中…</p>
+    <span id="loading-percent" class="loading-percent hidden"></span>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- ═══ LOGIN SCREEN ═══ -->
+  <section id="screen-login" class="screen" aria-label="登入">
+    <div class="screen-inner login-inner">
+      <header class="login-header">
+        <div class="app-logo" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <h1 class="app-title">HKCYS TINT</h1>
+        <p class="app-subtitle">Just For You — 匿名留言</p>
+      </header>
+
+      <form id="login-form" class="login-form" novalidate>
+        <div class="form-group">
+          <label for="login-participant">參加者編號</label>
+          <div class="combobox-wrapper" id="login-combobox">
+            <input
+              type="text"
+              id="login-participant"
+              class="combobox-input"
+              autocomplete="off"
+              autocapitalize="characters"
+              placeholder="輸入或選擇編號"
+              aria-autocomplete="list"
+              aria-controls="login-dropdown"
+              aria-expanded="false"
+              role="combobox"
+            >
+            <button type="button" id="login-combobox-toggle" class="combobox-toggle" aria-label="展開選單">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <ul id="login-dropdown" class="combobox-dropdown hidden" role="listbox"></ul>
+          </div>
+          <p id="login-no-match" class="form-hint hidden">找不到匹配的參加者</p>
+        </div>
+
+        <div class="form-group">
+          <label for="login-phone">電話號碼</label>
+          <input
+            type="tel"
+            id="login-phone"
+            inputmode="numeric"
+            autocomplete="tel"
+            placeholder="請輸入電話號碼"
+            aria-describedby="phone-hint"
+          >
+          <p id="phone-hint" class="form-hint">僅用於身份驗證</p>
+        </div>
+
+        <div id="login-status-banner" class="status-banner hidden" role="status"></div>
+
+        <button type="submit" id="login-submit" class="btn btn-primary btn-progress">
+          <span class="btn-label">登入</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <footer class="login-footer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span>您的身份受到保護，留言完全匿名</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- ═══ PARTICIPANT DASHBOARD ═══ -->
+  <section id="screen-participant" class="screen hidden" aria-label="參加者主頁">
+    <header class="dash-header">
+      <div class="dash-header-left">
+        <h1 class="dash-title">Just For You</h1>
+        <span id="participant-badge" class="badge badge-pill"></span>
+      </div>
+      <button type="button" id="participant-logout" class="btn btn-ghost btn-icon" aria-label="登出">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </header>
+
+    <nav class="tab-nav" role="tablist" aria-label="主要功能">
+      <button type="button" class="tab-btn active" data-tab="send" role="tab" aria-selected="true" aria-controls="tab-send">
+        <span class="tab-label-full">發送留言</span>
+        <span class="tab-label-short">發送</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="inbox" role="tab" aria-selected="false" aria-controls="tab-inbox">
+        <span class="tab-label-full">收件箱</span>
+        <span class="tab-label-short">收件</span>
+        <span id="inbox-badge" class="tab-badge hidden">0</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="sent" role="tab" aria-selected="false" aria-controls="tab-sent">
+        <span class="tab-label-full">已發送</span>
+        <span class="tab-label-short">已發</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="trophy" role="tab" aria-selected="false" aria-controls="tab-trophy">
+        <span class="tab-label-full">Trophy 配對</span>
+        <span class="tab-label-short">Trophy</span>
+      </button>
+    </nav>
+
+    <div class="tab-panels">
+      <!-- Tab: Send -->
+      <div id="tab-send" class="tab-panel active" role="tabpanel">
+        <div id="send-closed-banner" class="status-banner status-banner-warning hidden" role="alert">
+          留言功能目前已關閉，請稍後再試
+        </div>
+        <form id="send-form" class="send-form">
+          <div class="form-group">
+            <label for="send-receiver">接收者</label>
+            <div class="combobox-wrapper" id="send-combobox">
+              <input type="text" id="send-receiver" class="combobox-input" autocomplete="off" autocapitalize="characters"
+                placeholder="選擇接收者" aria-autocomplete="list" aria-controls="send-dropdown" aria-expanded="false" role="combobox">
+              <button type="button" id="send-combobox-toggle" class="combobox-toggle" aria-label="展開選單">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <ul id="send-dropdown" class="combobox-dropdown hidden" role="listbox"></ul>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="send-content">留言內容 <span id="char-counter" class="char-counter">0/300</span></label>
+            <textarea id="send-content" maxlength="300" rows="5" placeholder="寫下你想說的話…"></textarea>
+            <p id="bad-words-warning" class="form-hint form-hint-danger hidden">內容包含不適當用語，請修改後再發送</p>
+          </div>
+          <button type="submit" id="send-submit" class="btn btn-primary btn-progress">
+            <span class="btn-label">發送留言</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Tab: Inbox -->
+      <div id="tab-inbox" class="tab-panel hidden" role="tabpanel">
+        <div class="panel-toolbar">
+          <h2 class="panel-title">收件箱</h2>
+          <button type="button" id="inbox-refresh" class="btn btn-ghost btn-sm btn-progress" aria-label="重新整理">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>
+            </svg>
+            <span class="btn-label">重新整理</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="inbox-list" class="message-list"></div>
+        <div id="inbox-empty" class="empty-state hidden">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+          </svg>
+          <h3>收件箱是空的</h3>
+          <p>當有人給你留言時，會在這裡顯示</p>
+        </div>
+      </div>
+
+      <!-- Tab: Sent -->
+      <div id="tab-sent" class="tab-panel hidden" role="tabpanel">
+        <div class="panel-toolbar">
+          <h2 class="panel-title">已發送</h2>
+          <button type="button" id="sent-refresh" class="btn btn-ghost btn-sm btn-progress" aria-label="重新整理">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>
+            </svg>
+            <span class="btn-label">重新整理</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="sent-list" class="message-list"></div>
+        <div id="sent-empty" class="empty-state hidden">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+          <h3>尚未發送任何留言</h3>
+          <p>前往「發送留言」開始寫給隊友</p>
+        </div>
+      </div>
+
+      <!-- Tab: Trophy -->
+      <div id="tab-trophy" class="tab-panel hidden" role="tabpanel">
+        <div id="trophy-status-banner" class="status-banner hidden" role="status"></div>
+        <div class="trophy-progress-wrap">
+          <div class="trophy-progress-label">
+            <span>配對進度</span>
+            <span id="trophy-progress-text">0/0</span>
+          </div>
+          <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="trophy-progress-fill" class="progress-bar-fill" style="width:0%"></div>
+          </div>
+        </div>
+        <div id="trophy-teammates" class="trophy-teammates"></div>
+        <div id="trophy-empty" class="empty-state hidden">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+            <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+          </svg>
+          <h3>暫無隊友資料</h3>
+          <p>請聯絡管理員確認分組設定</p>
+        </div>
+        <div id="trophy-actions" class="trophy-actions hidden">
+          <button type="button" id="trophy-save-draft" class="btn btn-secondary btn-progress">
+            <span class="btn-label">儲存草稿</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+          <button type="button" id="trophy-submit-all" class="btn btn-primary btn-progress">
+            <span class="btn-label">提交全部</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ ADMIN DASHBOARD ═══ -->
+  <section id="screen-admin" class="screen hidden" aria-label="管理員控制台">
+    <header class="dash-header">
+      <div class="dash-header-left">
+        <h1 class="dash-title">管理員控制台</h1>
+        <span id="admin-live-badge" class="badge badge-pill badge-live">
+          <span class="live-dot"></span> 即時監控
+        </span>
+      </div>
+      <button type="button" id="admin-logout" class="btn btn-ghost btn-icon" aria-label="登出">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </header>
+
+    <nav class="tab-nav admin-mode-nav" role="tablist" aria-label="管理員模式">
+      <button type="button" class="tab-btn active" data-admin-tab="messages" role="tab" aria-selected="true">留言監控</button>
+      <button type="button" class="tab-btn" data-admin-tab="trophy" role="tab" aria-selected="false">Trophy 投票</button>
+    </nav>
+
+    <!-- Admin Mode A: Messages -->
+    <div id="admin-messages-panel" class="admin-panel active">
+      <div class="admin-controls">
+        <div class="admin-meta">
+          <span id="admin-sync-time">上次同步：—</span>
+          <span id="admin-msg-count">共 0 則</span>
+        </div>
+        <div class="admin-control-row">
+          <div class="filter-group" role="group" aria-label="篩選">
+            <button type="button" class="filter-btn active" data-filter="all">全部</button>
+            <button type="button" class="filter-btn" data-filter="active">有效</button>
+            <button type="button" class="filter-btn" data-filter="deleted">已撤回</button>
+          </div>
+          <div class="admin-toggle-row">
+            <button type="button" id="admin-enable-msg" class="btn btn-success btn-sm btn-progress">
+              <span class="btn-label">開啟留言</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+            <button type="button" id="admin-disable-msg" class="btn btn-danger btn-sm btn-progress">
+              <span class="btn-label">關閉留言</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="admin-message-list" class="admin-message-list"></div>
+      <div id="admin-msg-empty" class="empty-state hidden">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <h3>暫無留言</h3>
+        <p>參加者發送留言後會即時顯示</p>
+      </div>
+    </div>
+
+    <!-- Admin Mode B: Trophy -->
+    <div id="admin-trophy-panel" class="admin-panel hidden">
+      <div id="admin-trophy-stats" class="admin-stats-grid"></div>
+      <div class="admin-trophy-controls">
+        <button type="button" id="admin-open-voting" class="btn btn-success btn-sm btn-progress">
+          <span class="btn-label">開放投票</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="admin-close-voting" class="btn btn-secondary btn-sm btn-progress">
+          <span class="btn-label">關閉投票</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="admin-calculate" class="btn btn-primary btn-sm btn-progress">
+          <span class="btn-label">計算結果</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="admin-publish" class="btn btn-primary btn-sm btn-progress">
+          <span class="btn-label">公布結果</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div id="admin-pending-voters" class="admin-pending"></div>
+      <div id="admin-fallback-banner" class="status-banner hidden" role="status"></div>
+
+      <nav class="sub-tab-nav" role="tablist" aria-label="結果檢視">
+        <button type="button" class="sub-tab-btn active" data-result-tab="audit">投票審計</button>
+        <button type="button" class="sub-tab-btn" data-result-tab="profiles">個人檔案</button>
+        <button type="button" class="sub-tab-btn" data-result-tab="summary">Trophy 摘要</button>
+      </nav>
+
+      <div id="result-audit" class="result-panel active">
+        <div class="audit-filters">
+          <input type="search" id="audit-search" placeholder="搜尋參加者…" aria-label="搜尋參加者">
+          <select id="audit-trophy-filter" aria-label="篩選 Trophy">
+            <option value="">全部 Trophy</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="audit-table" class="data-table">
+            <thead>
+              <tr><th>投票者</th><th>接收者</th><th>Trophy</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="result-profiles" class="result-panel hidden">
+        <div id="profiles-list" class="profiles-grid"></div>
+      </div>
+
+      <div id="result-summary" class="result-panel hidden">
+        <div id="summary-list" class="summary-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
