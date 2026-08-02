@@ -281,20 +281,50 @@ function participantExists(participantId) {
   return getParticipantsList().some(function (p) { return p.participant_id === pid; });
 }
 
+function deriveGroupIdFromParticipantId(participantId) {
+  const pid = normalizeParticipantId(participantId);
+  const m = pid.match(/^(\d)[A-F]$/);
+  if (m) return 'GROUP_' + m[1];
+  return 'GROUP_STAFF';
+}
+
+function resolveEffectiveGroupId(participant) {
+  const groupId = String(participant.group_id || '').trim();
+  const phone = normalizePhone(participant.phone_number);
+  const derived = deriveGroupIdFromParticipantId(participant.participant_id);
+
+  if (!groupId || groupId === phone || normalizePhone(groupId) === phone) {
+    return derived;
+  }
+
+  const all = getParticipantsList();
+  const othersInGroup = all.filter(function (p) {
+    return p.participant_id !== participant.participant_id &&
+      String(p.group_id || '').trim() === groupId;
+  });
+  if (othersInGroup.length === 0) {
+    return derived;
+  }
+
+  return groupId;
+}
+
 function getParticipantGroup(participantId) {
   const pid = normalizeParticipantId(participantId);
   const p = getParticipantsList().find(function (x) { return x.participant_id === pid; });
-  return p ? (p.group_id || '') : '';
+  if (!p) return '';
+  return resolveEffectiveGroupId(p);
 }
 
 function getTeammates(participantId) {
   const pid = normalizeParticipantId(participantId);
   const groupId = getParticipantGroup(pid);
+  const all = getParticipantsList();
   if (!groupId) {
-    return getParticipantsList().filter(function (p) { return p.participant_id !== pid; });
+    return all.filter(function (p) { return p.participant_id !== pid; });
   }
-  return getParticipantsList().filter(function (p) {
-    return p.group_id === groupId && p.participant_id !== pid;
+  return all.filter(function (p) {
+    return resolveEffectiveGroupId(p) === groupId && p.participant_id !== pid;
   });
 }
 

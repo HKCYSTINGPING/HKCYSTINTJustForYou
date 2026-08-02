@@ -17,6 +17,32 @@ THIN_BORDER = Border(
     bottom=Side(style="thin", color="E8DFD0"),
 )
 
+def build_participants():
+    rows = []
+    phones = {
+        "1A": "98765432", "2A": "98765433", "3A": "98765434", "4A": "98765435",
+        "5A": "98765436", "6A": "98765437", "1B": "98765438", "2B": "98765439",
+        "3B": "98765440", "4B": "98765441", "5B": "98765442", "6B": "98765443",
+        "1C": "98765444", "2C": "98765445", "3C": "98765446", "4C": "98765447",
+        "5C": "98765448", "6C": "98765449", "1D": "98765450", "2D": "98765451",
+        "3D": "98765452", "4D": "98765453", "5D": "98765454", "6D": "98765455",
+        "1E": "98765456", "2E": "98765457", "3E": "98765458", "4E": "98765459",
+        "5E": "98765460", "6E": "98765461", "1F": "98765462", "2F": "98765463",
+        "3F": "98765464", "4F": "98765465", "5F": "98765466",
+        "WILL": "11111111", "PHOEBE": "22222222", "RIGHT": "33333333",
+        "RENAE": "44444444", "CHUNJAI": "55555555", "IRENE": "66666666",
+        "KAKA": "77777777", "KAYI": "88888888", "WINGLAM": "99999999",
+        "CHERYL": "00000000", "QQ": "12121212", "KELLY": "13131313", "BRO": "14141414",
+    }
+    for n in range(1, 7):
+        for letter in "ABCDEF":
+            pid = f"{n}{letter}"
+            rows.append([pid, phones.get(pid, ""), f"GROUP_{n}"])
+    for pid in ["WILL", "PHOEBE", "RIGHT", "RENAE", "CHUNJAI", "IRENE",
+                "KAKA", "KAYI", "WINGLAM", "CHERYL", "QQ", "KELLY", "BRO"]:
+        rows.append([pid, phones.get(pid, ""), "GROUP_STAFF"])
+    return rows
+
 
 def style_header(ws, headers, row=1):
     for col, h in enumerate(headers, 1):
@@ -43,18 +69,11 @@ def build_workbook():
     ws = wb.create_sheet("Participants")
     headers = ["participant_id", "phone_number", "group_id"]
     style_header(ws, headers)
-    samples = [
-        ["1A", "91234567", "GROUP1"],
-        ["1B", "91234568", "GROUP1"],
-        ["2A", "91234569", "GROUP2"],
-        ["2B", "91234570", "GROUP2"],
-        ["3A", "91234571", "GROUP3"],
-        ["3B", "91234572", "GROUP3"],
-    ]
+    samples = build_participants()
     for r, row in enumerate(samples, 2):
         for c, val in enumerate(row, 1):
             ws.cell(row=r, column=c, value=val).border = THIN_BORDER
-    add_note(ws, 10, "說明：participant_id 為大寫（如 1A）。phone_number 僅數字。group_id 用於 Trophy 隊友分組。")
+    add_note(ws, 52, "說明：group_id 必須相同才能成為 Trophy 隊友。1A-1F 用 GROUP_1，2A-2F 用 GROUP_2… 工作人員用 GROUP_STAFF。勿將電話號碼填入 group_id！")
 
     # ── Messages ──
     ws = wb.create_sheet("Messages")
