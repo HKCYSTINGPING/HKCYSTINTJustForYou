@@ -587,8 +587,11 @@ function bootstrap() {
 
 function getVotingConfig() {
   const sheet = getSheet('Voting');
+  const rawStatus = String(sheet.getRange('A2').getValue() || 'DRAFT').trim().toUpperCase();
+  const valid = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
+  const votingStatus = valid.indexOf(rawStatus) >= 0 ? rawStatus : 'DRAFT';
   return {
-    voting_status: String(sheet.getRange('A2').getValue() || 'DRAFT').trim().toUpperCase(),
+    voting_status: votingStatus,
     allow_resubmit: String(sheet.getRange('B2').getValue() || 'FALSE').trim().toUpperCase() === 'TRUE',
     calculated_at: String(sheet.getRange('C2').getValue() || ''),
     published_at: String(sheet.getRange('D2').getValue() || '')
@@ -622,7 +625,10 @@ function getTrophies() {
   const sheet = getSheet('Trophy');
   const rows = getSheetData(sheet);
   return rows
-    .filter(function (r) { return r.Trophy_id; })
+    .filter(function (r) {
+      const id = String(r.Trophy_id || '').trim();
+      return id && !id.match(/說明/) && id.length <= 20;
+    })
     .map(function (r) {
       return {
         trophy_id: String(r.Trophy_id),
@@ -766,8 +772,7 @@ function trophyBootstrap(params) {
   }).length;
 
   const readonly = submission.submission_status === 'submitted' &&
-    !config.allow_resubmit &&
-    config.voting_status !== 'DRAFT';
+    !config.allow_resubmit;
 
   const editable = config.voting_status === 'VOTING_OPEN' && !readonly;
 
@@ -1005,16 +1010,51 @@ function adminSetVotingStatus(params) {
   if (valid.indexOf(newStatus) === -1) {
     return errorResponse('無效的投票狀態');
   }
+
+  const current = getVotingConfig();
   const updates = { voting_status: newStatus };
+
   if (params.allow_resubmit !== undefined) {
-    updates.allow_resubmit = params.allow_resubmit === true || String(params.allow_resubmit).toUpperCase() === 'TRUE';
+    updates.allow_resubmit = params.allow_resubmit === true ||
+      String(params.allow_resubmit).toUpperCase() === 'TRUE';
   }
+
+  if (newStatus === 'VOTING_OPEN') {
+    updates.published_at = '';
+    if (current.voting_status === 'PUBLISHED' ||
+        current.voting_status === 'CALCULATED' ||
+        current.voting_status === 'VOTING_CLOSED') {
+      updates.calculated_at = '';
+      if (params.allow_resubmit === undefined) {
+        updates.allow_resubmit = true;
+      }
+    }
+  }
+
+  if (newStatus === 'DRAFT') {
+    updates.published_at = '';
+    updates.calculated_at = '';
+    if (params.allow_resubmit === undefined) {
+      updates.allow_resubmit = false;
+    }
+  }
+
+  if (newStatus === 'VOTING_CLOSED') {
+    updates.published_at = '';
+  }
+
   if (newStatus === 'CALCULATED') {
     updates.calculated_at = nowIso();
+    updates.published_at = '';
   }
+
   if (newStatus === 'PUBLISHED') {
+    if (current.voting_status !== 'CALCULATED' && current.voting_status !== 'PUBLISHED') {
+      return errorResponse('請先按「計算結果」再公布');
+    }
     updates.published_at = nowIso();
   }
+
   const config = setVotingConfig(updates);
   return successResponse(config);
 }

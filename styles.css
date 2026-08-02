@@ -840,6 +840,11 @@ body.is-loading { overflow: hidden; }
   margin-bottom: 16px;
 }
 
+.admin-trophy-controls .btn-active-state {
+  box-shadow: 0 0 0 2px var(--primary-dark);
+  opacity: 1;
+}
+
 .admin-pending {
   background: var(--warning-bg);
   border-radius: var(--radius-sm);

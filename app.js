@@ -55,8 +55,9 @@ const state = {
   monitorRevision: '',
   monitorViewFilter: 'all',
   knownMessageIds: new Set(),
-  trophy: {
+    trophy: {
     loaded: false,
+    loading: false,
     votingStatus: 'DRAFT',
     trophies: [],
     teammates: [],
@@ -1171,8 +1172,13 @@ function updateTrophyStatusBanner() {
   const label = VOTING_STATUS_LABELS[status] || status;
   DOM.trophyStatusBanner.textContent = label;
   DOM.trophyStatusBanner.className = 'status-banner';
-  if (status === 'VOTING_OPEN') DOM.trophyStatusBanner.classList.add('status-banner-success');
-  else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') DOM.trophyStatusBanner.classList.add('status-banner-warning');
+  if (status === 'VOTING_OPEN') {
+    DOM.trophyStatusBanner.classList.add('status-banner-success');
+  } else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') {
+    DOM.trophyStatusBanner.classList.add('status-banner-warning');
+  } else if (status === 'PUBLISHED') {
+    DOM.trophyStatusBanner.classList.add('status-banner-success');
+  }
   DOM.trophyStatusBanner.classList.remove('hidden');
 }
 
@@ -1247,9 +1253,11 @@ function renderTrophyTeammates() {
   });
 }
 
-async function loadTrophyData() {
+async function loadTrophyData(force) {
+  if (state.trophy.loading) return;
   try {
-    showLoading(true);
+    state.trophy.loading = true;
+    if (force || !state.trophy.loaded) showLoading(true);
     const data = checkApiResponse(await apiTrophyBootstrap());
     state.trophy.loaded = true;
     state.trophy.votingStatus = data.voting_status;
@@ -1267,6 +1275,7 @@ async function loadTrophyData() {
   } catch (err) {
     showToast('載入 Trophy 資料失敗：' + err.message, 'error');
   } finally {
+    state.trophy.loading = false;
     showLoading(false);
   }
 }
@@ -1330,6 +1339,7 @@ async function loadAdminTrophyData() {
     renderProfiles();
     renderTrophySummary();
     populateAuditTrophyFilter();
+    updateAdminVotingButtons();
   } catch (err) {
     showToast('載入 Trophy 管理資料失敗：' + err.message, 'error');
   }
@@ -1441,11 +1451,35 @@ function renderTrophySummary() {
   }).join('');
 }
 
+function updateAdminVotingButtons() {
+  const status = state.adminTrophy.overview?.voting_status || 'DRAFT';
+  const buttons = [
+    { el: DOM.adminOpenVoting, active: status === 'VOTING_OPEN' },
+    { el: DOM.adminCloseVoting, active: status === 'VOTING_CLOSED' },
+    { el: DOM.adminCalculate, active: status === 'CALCULATED' },
+    { el: DOM.adminPublish, active: status === 'PUBLISHED' }
+  ];
+  buttons.forEach(({ el, active }) => {
+    if (!el) return;
+    el.classList.toggle('btn-active-state', active);
+    el.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
 async function handleAdminVotingAction(status, btn) {
+  const confirmMessages = {
+    VOTING_OPEN: '確定要開放投票嗎？若先前已公布結果，將清除公布狀態並允許重新提交。',
+    VOTING_CLOSED: '確定要關閉投票嗎？參加者將無法再提交。',
+    PUBLISHED: '確定要公布結果嗎？'
+  };
+  if (confirmMessages[status] && !window.confirm(confirmMessages[status])) return;
+
   await runProgressButton(btn, (async () => {
     try {
-      checkApiResponse(await apiAdminSetVotingStatus(status));
-      showToast('投票狀態已更新', 'success');
+      const data = checkApiResponse(await apiAdminSetVotingStatus(status));
+      state.adminTrophy.overview = Object.assign({}, state.adminTrophy.overview, data);
+      const label = VOTING_STATUS_LABELS[data.voting_status] || data.voting_status;
+      showToast('投票狀態已更新：' + label, 'success');
       await loadAdminTrophyData();
     } catch (err) {
       showToast(err.message, 'error');
@@ -1480,8 +1514,8 @@ function switchParticipantTab(tabName) {
 
   if (tabName === 'inbox') {
     markAllInboxRead();
-  } else if (tabName === 'trophy' && !state.trophy.loaded) {
-    loadTrophyData();
+  } else if (tabName === 'trophy') {
+    loadTrophyData(true);
   }
 }
 
