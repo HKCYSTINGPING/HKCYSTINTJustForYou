@@ -23,7 +23,8 @@ const CONFIG = {
   SENT_WATCH_INTERVAL: 1500,
   SENT_WATCH_INTERVAL_HIDDEN: 4000,
   SENT_BACKUP_SYNC: 15000,
-  TOAST_DURATION: 3000
+  TOAST_DURATION: 3000,
+  API_TIMEOUT_MS: 25000
 };
 
 const BAD_WORDS = [
@@ -71,6 +72,7 @@ const state = {
     resultsModalShown: false
   },
   adminTrophy: {
+    loading: false,
     overview: null,
     auditVotes: [],
     profiles: [],
@@ -319,21 +321,53 @@ async function apiGet(params, options = {}) {
   Object.entries(params).forEach(([k, v]) => {
     if (v !== undefined && v !== null) url.searchParams.set(k, v);
   });
-  const fetchOpts = { method: 'GET' };
-  if (options.signal) fetchOpts.signal = options.signal;
-  const res = await fetch(url.toString(), fetchOpts);
-  if (!res.ok) throw new Error('網路錯誤：' + res.status);
-  return res.json();
+
+  const controller = new AbortController();
+  const timeoutMs = options.timeout || CONFIG.API_TIMEOUT_MS;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (options.signal) {
+    options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  const fetchOpts = { method: 'GET', signal: controller.signal };
+
+  try {
+    const res = await fetch(url.toString(), fetchOpts);
+    if (!res.ok) throw new Error('網路錯誤：' + res.status);
+    return res.json();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('連線逾時，請稍後再試');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
-async function apiPost(body) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error('網路錯誤：' + res.status);
-  return res.json();
+async function apiPost(body, options = {}) {
+  const controller = new AbortController();
+  const timeoutMs = options.timeout || CONFIG.API_TIMEOUT_MS;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error('網路錯誤：' + res.status);
+    return res.json();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('連線逾時，請稍後再試');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function apiBootstrap() {
@@ -794,7 +828,7 @@ async function enterAdminDashboard() {
     state.knownMessageIds = new Set(state.monitorMessages.map(m => m.message_id));
     renderAdminMessages();
     startAdminWatch();
-    await loadAdminTrophyData();
+    // Trophy 資料延遲載入，切換至 Trophy 分頁時才載入（避免登入卡住）
   } catch (err) {
     showToast('載入管理員資料失敗：' + err.message, 'error');
   } finally {
@@ -1402,7 +1436,10 @@ async function handleTrophySubmitAll() {
 // ─── Trophy (Admin) ───────────────────────────────────────────────────────────
 
 async function loadAdminTrophyData() {
+  if (state.adminTrophy.loading) return;
   try {
+    state.adminTrophy.loading = true;
+    showLoading(true);
     const [overview, audit, results] = await Promise.all([
       checkApiResponse(await apiAdminTrophyOverview()),
       checkApiResponse(await apiAdminTrophyAudit()),
@@ -1425,6 +1462,9 @@ async function loadAdminTrophyData() {
     updateAdminVotingButtons();
   } catch (err) {
     showToast('載入 Trophy 管理資料失敗：' + err.message, 'error');
+  } finally {
+    state.adminTrophy.loading = false;
+    showLoading(false);
   }
 }
 

@@ -369,7 +369,9 @@ function setMessagingStatus(params) {
 function getAllMessages() {
   const sheet = getSheet('Messages');
   const rows = getSheetData(sheet);
-  return rows.map(formatMessageRow).filter(function (m) { return m.message_id; });
+  return rows.map(formatMessageRow).filter(function (m) {
+    return m.message_id && m.message_id.indexOf('MSG-') === 0;
+  });
 }
 
 function formatMessageRow(r) {
@@ -1027,6 +1029,13 @@ function adminTrophyResults(params) {
   const trophyMap = {};
   trophies.forEach(function (t) { trophyMap[t.trophy_id] = t.trophy_name; });
 
+  const allLogs = getTrophyLogs();
+  const voteCountMap = {};
+  allLogs.forEach(function (v) {
+    const key = normalizeParticipantId(v.receiver_id) + '|' + String(v.Trophy_id);
+    voteCountMap[key] = (voteCountMap[key] || 0) + 1;
+  });
+
   let fallbackActivated = false;
   const profileMap = {};
   participants.forEach(function (p) {
@@ -1041,10 +1050,7 @@ function adminTrophyResults(params) {
     if (!profileMap[pid]) {
       profileMap[pid] = { participant_id: pid, trophies: [] };
     }
-    const allLogs = getTrophyLogs();
-    const voteCount = allLogs.filter(function (v) {
-      return normalizeParticipantId(v.receiver_id) === pid && String(v.Trophy_id) === tid;
-    }).length;
+    const voteCount = voteCountMap[pid + '|' + tid] || 0;
     profileMap[pid].trophies.push({
       trophy_id: tid,
       trophy_name: trophyMap[tid] || tid,
