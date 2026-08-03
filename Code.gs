@@ -627,12 +627,79 @@ function getTrophies() {
   return rows
     .filter(function (r) {
       const id = String(r.Trophy_id || '').trim();
-      return id && !id.match(/說明/) && id.length <= 20;
+      return id && /^T\d+$/i.test(id);
     })
     .map(function (r) {
       return {
-        trophy_id: String(r.Trophy_id),
-        trophy_name: String(r.Trophy_name || r.Trophy_id)
+        trophy_id: String(r.Trophy_id).trim(),
+        trophy_name: String(r.Trophy_name || r.Trophy_id).trim()
+      };
+    });
+}
+
+function formatGroupLabel(groupId) {
+  if (groupId === 'GROUP_STAFF') return '工作人員組';
+  const m = String(groupId).match(/^GROUP_(\d+)$/);
+  if (m) return '第 ' + m[1] + ' 組';
+  return groupId;
+}
+
+function sortGroupIds(a, b) {
+  if (a === 'GROUP_STAFF') return 1;
+  if (b === 'GROUP_STAFF') return -1;
+  const ma = String(a).match(/^GROUP_(\d+)$/);
+  const mb = String(b).match(/^GROUP_(\d+)$/);
+  if (ma && mb) return parseInt(ma[1], 10) - parseInt(mb[1], 10);
+  return String(a).localeCompare(String(b));
+}
+
+function buildGroupVotingStatus(participants, submittedIds) {
+  const submittedSet = {};
+  submittedIds.forEach(function (id) { submittedSet[id] = true; });
+
+  const groupMap = {};
+  participants.forEach(function (p) {
+    const gid = resolveEffectiveGroupId(p);
+    if (!groupMap[gid]) {
+      groupMap[gid] = {
+        group_id: gid,
+        group_label: formatGroupLabel(gid),
+        members: []
+      };
+    }
+    groupMap[gid].members.push({
+      participant_id: p.participant_id,
+      voted: !!submittedSet[p.participant_id]
+    });
+  });
+
+  Object.keys(groupMap).forEach(function (gid) {
+    groupMap[gid].members.sort(function (a, b) {
+      return a.participant_id.localeCompare(b.participant_id);
+    });
+  });
+
+  return Object.keys(groupMap).sort(sortGroupIds).map(function (gid) {
+    return groupMap[gid];
+  });
+}
+
+function getParticipantAwards(participantId) {
+  const sheet = getSheet('Trophy_results');
+  const rows = getSheetData(sheet);
+  const pid = normalizeParticipantId(participantId);
+  const trophies = getTrophies();
+  const trophyMap = {};
+  trophies.forEach(function (t) { trophyMap[t.trophy_id] = t.trophy_name; });
+
+  return rows
+    .filter(function (r) { return normalizeParticipantId(r.participant_id) === pid; })
+    .map(function (r) {
+      const tid = String(r.Trophy_id);
+      return {
+        trophy_id: tid,
+        trophy_name: trophyMap[tid] || tid,
+        award_source: String(r.award_source || 'round1')
       };
     });
 }
@@ -775,6 +842,8 @@ function trophyBootstrap(params) {
     !config.allow_resubmit;
 
   const editable = config.voting_status === 'VOTING_OPEN' && !readonly;
+  const showResults = config.voting_status === 'PUBLISHED' || config.voting_status === 'CALCULATED';
+  const myAwards = showResults ? getParticipantAwards(pid) : [];
 
   return successResponse({
     trophies: trophies,
@@ -798,6 +867,8 @@ function trophyBootstrap(params) {
     },
     readonly: readonly,
     editable: editable,
+    show_results: showResults,
+    my_awards: myAwards,
     messaging_status: getMessagingStatus()
   });
 }
@@ -902,6 +973,8 @@ function adminTrophyOverview(params) {
     .filter(function (p) { return submittedIds.indexOf(p.participant_id) === -1; })
     .map(function (p) { return p.participant_id; });
 
+  const groupVotingStatus = buildGroupVotingStatus(participants, submittedIds);
+
   const receiversWithTrophy = {};
   allLogs.forEach(function (r) {
     receiversWithTrophy[normalizeParticipantId(r.receiver_id)] = true;
@@ -916,6 +989,7 @@ function adminTrophyOverview(params) {
       participants_with_trophy: Object.keys(receiversWithTrophy).length
     },
     pending_participants: pending,
+    group_voting_status: groupVotingStatus,
     voting_status: config.voting_status,
     allow_resubmit: config.allow_resubmit,
     calculated_at: config.calculated_at,

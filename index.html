@@ -196,38 +196,68 @@
       <!-- Tab: Trophy -->
       <div id="tab-trophy" class="tab-panel hidden" role="tabpanel">
         <div id="trophy-status-banner" class="status-banner hidden" role="status"></div>
-        <div class="trophy-progress-wrap">
-          <div class="trophy-progress-label">
-            <span>配對進度</span>
-            <span id="trophy-progress-text">0/0</span>
+
+        <div id="trophy-results-panel" class="trophy-results-panel hidden" aria-live="polite">
+          <div class="trophy-results-header">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+              <path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+            </svg>
+            <h3 id="trophy-results-title">你的 Trophy 結果</h3>
           </div>
-          <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div id="trophy-progress-fill" class="progress-bar-fill" style="width:0%"></div>
+          <div id="trophy-results-list" class="trophy-results-list"></div>
+        </div>
+
+        <div id="trophy-voting-section">
+          <div class="trophy-progress-wrap">
+            <div class="trophy-progress-label">
+              <span>配對進度</span>
+              <span id="trophy-progress-text">0/0</span>
+            </div>
+            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="trophy-progress-fill" class="progress-bar-fill" style="width:0%"></div>
+            </div>
           </div>
-        </div>
-        <div id="trophy-teammates" class="trophy-teammates"></div>
-        <div id="trophy-empty" class="empty-state hidden">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-            <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-          </svg>
-          <h3>暫無隊友資料</h3>
-          <p>請聯絡管理員確認分組設定</p>
-        </div>
-        <div id="trophy-actions" class="trophy-actions hidden">
-          <button type="button" id="trophy-save-draft" class="btn btn-secondary btn-progress">
-            <span class="btn-label">儲存草稿</span>
-            <span class="btn-progress-bar" aria-hidden="true"></span>
-          </button>
-          <button type="button" id="trophy-submit-all" class="btn btn-primary btn-progress">
-            <span class="btn-label">提交全部</span>
-            <span class="btn-progress-bar" aria-hidden="true"></span>
-          </button>
+          <div id="trophy-teammates" class="trophy-teammates"></div>
+          <div id="trophy-empty" class="empty-state hidden">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+              <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+              <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+            </svg>
+            <h3>暫無隊友資料</h3>
+            <p>請聯絡管理員確認分組設定</p>
+          </div>
+          <div id="trophy-actions" class="trophy-actions hidden">
+            <button type="button" id="trophy-save-draft" class="btn btn-secondary btn-progress">
+              <span class="btn-label">儲存草稿</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+            <button type="button" id="trophy-submit-all" class="btn btn-primary btn-progress">
+              <span class="btn-label">提交全部</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- Trophy Results Modal (Participant) -->
+  <div id="trophy-results-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="trophy-results-modal-title">
+    <div class="modal-card trophy-modal-card">
+      <div class="trophy-modal-icon" aria-hidden="true">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+          <path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+        </svg>
+      </div>
+      <h2 id="trophy-results-modal-title">恭喜你獲得 Trophy！</h2>
+      <p class="trophy-modal-subtitle">結果已公布，以下是你的專屬稱號</p>
+      <div id="trophy-results-modal-list" class="trophy-results-list"></div>
+      <button type="button" id="trophy-results-modal-close" class="btn btn-primary">太棒了！</button>
+    </div>
+  </div>
 
   <!-- ═══ ADMIN DASHBOARD ═══ -->
   <section id="screen-admin" class="screen hidden" aria-label="管理員控制台">

@@ -55,7 +55,7 @@ const state = {
   monitorRevision: '',
   monitorViewFilter: 'all',
   knownMessageIds: new Set(),
-    trophy: {
+  trophy: {
     loaded: false,
     loading: false,
     votingStatus: 'DRAFT',
@@ -65,7 +65,10 @@ const state = {
     readonly: false,
     editable: false,
     submissionStatus: 'draft',
-    progress: { assigned: 0, total: 0 }
+    progress: { assigned: 0, total: 0 },
+    myAwards: [],
+    showResults: false,
+    resultsModalShown: false
   },
   adminTrophy: {
     overview: null,
@@ -128,6 +131,13 @@ function cacheDOM() {
   DOM.sentRefresh = document.getElementById('sent-refresh');
 
   DOM.trophyStatusBanner = document.getElementById('trophy-status-banner');
+  DOM.trophyResultsPanel = document.getElementById('trophy-results-panel');
+  DOM.trophyResultsList = document.getElementById('trophy-results-list');
+  DOM.trophyResultsTitle = document.getElementById('trophy-results-title');
+  DOM.trophyVotingSection = document.getElementById('trophy-voting-section');
+  DOM.trophyResultsModal = document.getElementById('trophy-results-modal');
+  DOM.trophyResultsModalList = document.getElementById('trophy-results-modal-list');
+  DOM.trophyResultsModalClose = document.getElementById('trophy-results-modal-close');
   DOM.trophyProgressText = document.getElementById('trophy-progress-text');
   DOM.trophyProgressFill = document.getElementById('trophy-progress-fill');
   DOM.trophyTeammates = document.getElementById('trophy-teammates');
@@ -803,7 +813,22 @@ function handleLogout() {
   state.sentRevision = '';
   state.monitorMessages = [];
   state.monitorRevision = '';
-  state.trophy.loaded = false;
+  hideTrophyResultsModal();
+  state.trophy = {
+    loaded: false,
+    loading: false,
+    votingStatus: 'DRAFT',
+    trophies: [],
+    teammates: [],
+    assignments: {},
+    readonly: false,
+    editable: false,
+    submissionStatus: 'draft',
+    progress: { assigned: 0, total: 0 },
+    myAwards: [],
+    showResults: false,
+    resultsModalShown: false
+  };
   DOM.loginParticipant.value = '';
   DOM.loginPhone.value = '';
   showScreen('login');
@@ -1167,6 +1192,60 @@ const VOTING_STATUS_LABELS = {
   PUBLISHED: '結果已公布'
 };
 
+function filterValidTrophies(trophies) {
+  return (trophies || []).filter(t => /^T\d+$/i.test(String(t.trophy_id || '').trim()));
+}
+
+function renderAwardSourceBadge(source) {
+  const isFallback = source === 'fallback';
+  return `<span class="badge ${isFallback ? 'badge-source-fallback' : 'badge-source-round1'}">${isFallback ? '保底配對' : '全組最高票'}</span>`;
+}
+
+function buildAwardsHtml(awards) {
+  if (!awards || awards.length === 0) {
+    return '<p class="trophy-results-empty">暫未獲得 Trophy，請稍後再查看</p>';
+  }
+  return awards.map(a => `
+    <div class="trophy-result-item">
+      <div class="trophy-result-name">${escapeHtml(a.trophy_name)}</div>
+      ${renderAwardSourceBadge(a.award_source)}
+    </div>
+  `).join('');
+}
+
+function showTrophyResultsModal(awards) {
+  if (!DOM.trophyResultsModal || state.trophy.resultsModalShown) return;
+  DOM.trophyResultsModalList.innerHTML = buildAwardsHtml(awards);
+  DOM.trophyResultsModal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  state.trophy.resultsModalShown = true;
+}
+
+function hideTrophyResultsModal() {
+  if (!DOM.trophyResultsModal) return;
+  DOM.trophyResultsModal.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+}
+
+function renderParticipantTrophyResults() {
+  const { votingStatus, myAwards, showResults } = state.trophy;
+  const isPublished = votingStatus === 'PUBLISHED';
+  const shouldShow = showResults && (isPublished || (myAwards && myAwards.length > 0));
+
+  DOM.trophyResultsPanel.classList.toggle('hidden', !shouldShow);
+  if (shouldShow) {
+    DOM.trophyResultsTitle.textContent = isPublished ? '你的 Trophy 結果（已公布）' : '你的 Trophy 結果（預覽）';
+    DOM.trophyResultsList.innerHTML = buildAwardsHtml(myAwards);
+  }
+
+  const hideVoting = isPublished;
+  DOM.trophyVotingSection.classList.toggle('hidden', hideVoting);
+
+  if (isPublished && !state.trophy.resultsModalShown) {
+    showTrophyResultsModal(myAwards);
+  }
+}
+
 function updateTrophyStatusBanner() {
   const status = state.trophy.votingStatus;
   const label = VOTING_STATUS_LABELS[status] || status;
@@ -1218,9 +1297,10 @@ function toggleTrophyAssignment(teammateId, trophyId) {
 }
 
 function renderTrophyTeammates() {
-  const { teammates, trophies, assignments, editable, readonly } = state.trophy;
+  const { teammates, trophies, assignments, editable } = state.trophy;
+  const validTrophies = filterValidTrophies(trophies);
   DOM.trophyEmpty.classList.toggle('hidden', teammates.length > 0);
-  DOM.trophyActions.classList.toggle('hidden', teammates.length === 0 || readonly || !state.trophy.editable);
+  DOM.trophyActions.classList.toggle('hidden', teammates.length === 0 || !state.trophy.editable);
   DOM.trophyTeammates.innerHTML = '';
 
   teammates.forEach(teammate => {
@@ -1229,7 +1309,7 @@ function renderTrophyTeammates() {
     const card = document.createElement('div');
     card.className = 'trophy-card';
 
-    const chips = trophies.map(trophy => {
+    const chips = validTrophies.map(trophy => {
       const isSelected = selected.includes(trophy.trophy_id);
       return `<button type="button" class="trophy-chip${isSelected ? ' selected' : ''}"
         data-teammate="${escapeHtml(tid)}" data-trophy="${escapeHtml(trophy.trophy_id)}"
@@ -1261,15 +1341,18 @@ async function loadTrophyData(force) {
     const data = checkApiResponse(await apiTrophyBootstrap());
     state.trophy.loaded = true;
     state.trophy.votingStatus = data.voting_status;
-    state.trophy.trophies = data.trophies || [];
+    state.trophy.trophies = filterValidTrophies(data.trophies || []);
     state.trophy.teammates = data.teammates || [];
     state.trophy.assignments = data.assignments || {};
     state.trophy.readonly = data.readonly;
     state.trophy.editable = data.editable;
     state.trophy.submissionStatus = data.submission_status;
     state.trophy.progress = data.progress || { assigned: 0, total: 0 };
+    state.trophy.myAwards = data.my_awards || [];
+    state.trophy.showResults = !!data.show_results;
 
     updateTrophyStatusBanner();
+    renderParticipantTrophyResults();
     updateTrophyProgress();
     renderTrophyTeammates();
   } catch (err) {
@@ -1357,14 +1440,41 @@ function renderAdminTrophyStats() {
 }
 
 function renderAdminPendingVoters() {
+  const groups = state.adminTrophy.overview?.group_voting_status || [];
   const pending = state.adminTrophy.overview?.pending_participants || [];
-  if (pending.length === 0) {
-    DOM.adminPendingVoters.innerHTML = '<p>所有參加者均已完成投票 🎉</p>';
+
+  if (groups.length === 0) {
+    DOM.adminPendingVoters.innerHTML = pending.length === 0
+      ? '<p>所有參加者均已完成投票</p>'
+      : `<h4>尚未完成投票（${pending.length} 人）</h4><ul>${pending.map(p => '<li>' + escapeHtml(p) + '</li>').join('')}</ul>`;
     return;
   }
+
+  const totalPending = pending.length;
+  const cards = groups.map(group => {
+    const votedCount = group.members.filter(m => m.voted).length;
+    const membersHtml = group.members.map(m => `
+      <div class="voter-member ${m.voted ? 'voter-done' : 'voter-pending'}">
+        <span class="voter-check" aria-hidden="true">${m.voted ? '✓' : '○'}</span>
+        <span class="voter-id">${escapeHtml(m.participant_id)}</span>
+        <span class="voter-status-label">${m.voted ? '已投票' : '未投票'}</span>
+      </div>
+    `).join('');
+
+    return `
+      <div class="group-voter-card">
+        <div class="group-voter-header">
+          <h4>${escapeHtml(group.group_label)}</h4>
+          <span class="group-voter-count">${votedCount}/${group.members.length}</span>
+        </div>
+        <div class="group-voter-members">${membersHtml}</div>
+      </div>
+    `;
+  }).join('');
+
   DOM.adminPendingVoters.innerHTML = `
-    <h4>尚未完成投票（${pending.length} 人）</h4>
-    <ul>${pending.map(p => '<li>' + escapeHtml(p) + '</li>').join('')}</ul>
+    <h4 class="admin-pending-title">投票進度（按組別）${totalPending > 0 ? ` · 尚餘 ${totalPending} 人` : ''}</h4>
+    <div class="group-voter-grid">${cards}</div>
   `;
 }
 
@@ -1573,6 +1683,10 @@ function bindEvents() {
 
   DOM.trophySaveDraft.addEventListener('click', handleTrophySaveDraft);
   DOM.trophySubmitAll.addEventListener('click', handleTrophySubmitAll);
+  DOM.trophyResultsModalClose.addEventListener('click', hideTrophyResultsModal);
+  DOM.trophyResultsModal.addEventListener('click', (e) => {
+    if (e.target === DOM.trophyResultsModal) hideTrophyResultsModal();
+  });
 
   document.querySelectorAll('#screen-participant .tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchParticipantTab(btn.dataset.tab));
