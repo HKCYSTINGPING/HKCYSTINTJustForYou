@@ -947,6 +947,22 @@ body.is-loading { overflow: hidden; }
   box-shadow: var(--shadow-md);
 }
 
+.trophy-results-panel.trophy-results-live {
+  animation: highlight-new 1.5s ease-out;
+}
+
+.tab-badge-results {
+  background: var(--primary);
+  color: white;
+  font-size: 0.65rem;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  margin-left: 4px;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
 .trophy-results-header {
   display: flex;
   align-items: center;

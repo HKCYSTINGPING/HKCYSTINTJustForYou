@@ -48,6 +48,8 @@ function doGet(e) {
         return jsonResponse(setMessagingStatus(params));
       case 'trophy_bootstrap':
         return jsonResponse(trophyBootstrap(params));
+      case 'watch_trophy_status':
+        return jsonResponse(watchTrophyStatus(params));
       case 'admin_trophy_overview':
         return jsonResponse(adminTrophyOverview(params));
       case 'admin_trophy_audit':
@@ -846,6 +848,7 @@ function trophyBootstrap(params) {
   const editable = config.voting_status === 'VOTING_OPEN' && !readonly;
   const showResults = config.voting_status === 'PUBLISHED' || config.voting_status === 'CALCULATED';
   const myAwards = showResults ? getParticipantAwards(pid) : [];
+  const revision = buildTrophyWatchRevision(config.voting_status, myAwards, config.published_at);
 
   return successResponse({
     trophies: trophies,
@@ -871,7 +874,36 @@ function trophyBootstrap(params) {
     editable: editable,
     show_results: showResults,
     my_awards: myAwards,
+    revision: revision,
+    published_at: config.published_at,
     messaging_status: getMessagingStatus()
+  });
+}
+
+function buildTrophyWatchRevision(votingStatus, myAwards, publishedAt) {
+  const awardsKey = (myAwards || []).map(function (a) {
+    return a.trophy_id + ':' + a.award_source;
+  }).sort().join('|');
+  return votingStatus + '\u0001' + awardsKey + '\u0001' + String(publishedAt || '');
+}
+
+function watchTrophyStatus(params) {
+  const auth = requireAuth(params);
+  const pid = auth.participant_id;
+  const config = getVotingConfig();
+  const clientRevision = String(params.revision || '');
+  const showResults = config.voting_status === 'PUBLISHED' || config.voting_status === 'CALCULATED';
+  const myAwards = showResults ? getParticipantAwards(pid) : [];
+  const revision = buildTrophyWatchRevision(config.voting_status, myAwards, config.published_at);
+  const changed = revision !== clientRevision;
+
+  return successResponse({
+    changed: changed,
+    revision: revision,
+    voting_status: config.voting_status,
+    show_results: showResults,
+    my_awards: changed ? myAwards : [],
+    published_at: config.published_at
   });
 }
 

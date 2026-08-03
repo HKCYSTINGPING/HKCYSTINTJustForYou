@@ -23,6 +23,8 @@ const CONFIG = {
   SENT_WATCH_INTERVAL: 1500,
   SENT_WATCH_INTERVAL_HIDDEN: 4000,
   SENT_BACKUP_SYNC: 15000,
+  TROPHY_WATCH_INTERVAL: 2000,
+  TROPHY_WATCH_INTERVAL_HIDDEN: 5000,
   TOAST_DURATION: 3000,
   API_TIMEOUT_MS: 25000
 };
@@ -69,7 +71,8 @@ const state = {
     progress: { assigned: 0, total: 0 },
     myAwards: [],
     showResults: false,
-    resultsModalShown: false
+    trophyRevision: '',
+    resultsModalRevision: ''
   },
   adminTrophy: {
     loading: false,
@@ -83,8 +86,10 @@ const state = {
 
 let sentWatchAbort = null;
 let adminWatchAbort = null;
+let trophyWatchAbort = null;
 let sentWatchTimer = null;
 let adminWatchTimer = null;
+let trophyWatchTimer = null;
 let sentBackupTimer = null;
 let adminBackupTimer = null;
 
@@ -453,6 +458,15 @@ async function apiSetMessagingStatus(status) {
   }
 }
 
+async function apiWatchTrophyStatus(revision, options = {}) {
+  return apiGet({
+    action: 'watch_trophy_status',
+    participant_id: state.participantId,
+    phone_number: state.phoneNumber,
+    revision: revision
+  }, options);
+}
+
 async function apiTrophyBootstrap() {
   return apiGet({
     action: 'trophy_bootstrap',
@@ -808,6 +822,7 @@ async function enterParticipantDashboard() {
     renderInbox();
     renderSent();
     startSentWatch();
+    loadTrophyData(false).finally(() => startTrophyWatch());
   } catch (err) {
     showToast('載入資料失敗：' + err.message, 'error');
   } finally {
@@ -817,6 +832,7 @@ async function enterParticipantDashboard() {
 
 async function enterAdminDashboard() {
   stopSentWatch();
+  stopTrophyWatch();
   showScreen('admin');
 
   try {
@@ -839,6 +855,7 @@ async function enterAdminDashboard() {
 function handleLogout() {
   stopSentWatch();
   stopAdminWatch();
+  stopTrophyWatch();
   state.participantId = null;
   state.phoneNumber = null;
   state.isAdmin = false;
@@ -861,7 +878,8 @@ function handleLogout() {
     progress: { assigned: 0, total: 0 },
     myAwards: [],
     showResults: false,
-    resultsModalShown: false
+    trophyRevision: '',
+    resultsModalRevision: ''
   };
   DOM.loginParticipant.value = '';
   DOM.loginPhone.value = '';
@@ -1077,6 +1095,44 @@ function startSentWatch() {
   }, CONFIG.SENT_BACKUP_SYNC);
 }
 
+// ─── Trophy Watch (Participant — real-time results) ───────────────────────────
+
+function stopTrophyWatch() {
+  if (trophyWatchAbort) { trophyWatchAbort.abort(); trophyWatchAbort = null; }
+  if (trophyWatchTimer) { clearTimeout(trophyWatchTimer); trophyWatchTimer = null; }
+}
+
+async function runTrophyWatchLoop() {
+  if (!state.participantId || state.isAdmin) return;
+
+  trophyWatchAbort = new AbortController();
+
+  try {
+    const data = checkApiResponse(
+      await apiWatchTrophyStatus(state.trophy.trophyRevision, { signal: trophyWatchAbort.signal })
+    );
+    if (data.changed) {
+      applyTrophyWatchData(data, true);
+      if (data.voting_status === 'PUBLISHED' && !state.trophy.loaded) {
+        loadTrophyData(false);
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      console.warn('Trophy watch error:', err.message);
+    }
+  }
+
+  const interval = getWatchInterval(CONFIG.TROPHY_WATCH_INTERVAL, CONFIG.TROPHY_WATCH_INTERVAL_HIDDEN);
+  trophyWatchTimer = setTimeout(runTrophyWatchLoop, interval);
+}
+
+function startTrophyWatch() {
+  stopTrophyWatch();
+  if (!state.participantId || state.isAdmin) return;
+  runTrophyWatchLoop();
+}
+
 // ─── Admin Monitor ────────────────────────────────────────────────────────────
 
 function stopAdminWatch() {
@@ -1248,11 +1304,11 @@ function buildAwardsHtml(awards) {
 }
 
 function showTrophyResultsModal(awards) {
-  if (!DOM.trophyResultsModal || state.trophy.resultsModalShown) return;
+  if (!DOM.trophyResultsModal) return;
   DOM.trophyResultsModalList.innerHTML = buildAwardsHtml(awards);
   DOM.trophyResultsModal.classList.remove('hidden');
   document.body.classList.add('modal-open');
-  state.trophy.resultsModalShown = true;
+  state.trophy.resultsModalRevision = state.trophy.trophyRevision;
 }
 
 function hideTrophyResultsModal() {
@@ -1261,23 +1317,72 @@ function hideTrophyResultsModal() {
   document.body.classList.remove('modal-open');
 }
 
+function maybeShowPublishedModal(isNewPublish) {
+  if (state.trophy.votingStatus !== 'PUBLISHED') return;
+  if (state.trophy.resultsModalRevision === state.trophy.trophyRevision) return;
+  showTrophyResultsModal(state.trophy.myAwards);
+  if (isNewPublish) {
+    showToast('Trophy 結果已公布！', 'success');
+    updateTrophyTabBadge(true);
+  }
+}
+
+function updateTrophyTabBadge(show) {
+  const trophyTab = document.querySelector('#screen-participant .tab-btn[data-tab="trophy"]');
+  if (!trophyTab) return;
+  let badge = trophyTab.querySelector('.tab-badge-results');
+  if (show && state.trophy.votingStatus === 'PUBLISHED') {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'tab-badge tab-badge-results';
+      badge.textContent = '!';
+      badge.title = '結果已公布';
+      trophyTab.appendChild(badge);
+    }
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+function applyTrophyWatchData(data, isNewPublish) {
+  const prevStatus = state.trophy.votingStatus;
+  state.trophy.votingStatus = data.voting_status;
+  state.trophy.showResults = !!data.show_results;
+  state.trophy.trophyRevision = data.revision || '';
+
+  if (data.my_awards && data.my_awards.length > 0) {
+    state.trophy.myAwards = data.my_awards;
+  } else if (data.changed && data.voting_status === 'PUBLISHED') {
+    state.trophy.myAwards = data.my_awards || [];
+  }
+
+  const justPublished = isNewPublish || (prevStatus !== 'PUBLISHED' && data.voting_status === 'PUBLISHED');
+
+  updateTrophyStatusBanner();
+  renderParticipantTrophyResults();
+  maybeShowPublishedModal(justPublished);
+
+  if (justPublished && state.trophy.loaded) {
+    state.trophy.editable = false;
+    state.trophy.readonly = true;
+  }
+}
+
 function renderParticipantTrophyResults() {
   const { votingStatus, myAwards, showResults } = state.trophy;
   const isPublished = votingStatus === 'PUBLISHED';
-  const shouldShow = showResults && (isPublished || (myAwards && myAwards.length > 0));
 
-  DOM.trophyResultsPanel.classList.toggle('hidden', !shouldShow);
-  if (shouldShow) {
-    DOM.trophyResultsTitle.textContent = isPublished ? '你的 Trophy 結果（已公布）' : '你的 Trophy 結果（預覽）';
+  DOM.trophyResultsPanel.classList.toggle('hidden', !isPublished);
+  if (isPublished) {
+    DOM.trophyResultsTitle.textContent = '你的 Trophy 結果';
     DOM.trophyResultsList.innerHTML = buildAwardsHtml(myAwards);
+    DOM.trophyResultsPanel.classList.add('trophy-results-live');
+  } else {
+    DOM.trophyResultsPanel.classList.remove('trophy-results-live');
   }
 
-  const hideVoting = isPublished;
-  DOM.trophyVotingSection.classList.toggle('hidden', hideVoting);
-
-  if (isPublished && !state.trophy.resultsModalShown) {
-    showTrophyResultsModal(myAwards);
-  }
+  DOM.trophyVotingSection.classList.toggle('hidden', isPublished);
+  updateTrophyTabBadge(isPublished);
 }
 
 function updateTrophyStatusBanner() {
@@ -1384,9 +1489,11 @@ async function loadTrophyData(force) {
     state.trophy.progress = data.progress || { assigned: 0, total: 0 };
     state.trophy.myAwards = data.my_awards || [];
     state.trophy.showResults = !!data.show_results;
+    state.trophy.trophyRevision = data.revision || '';
 
     updateTrophyStatusBanner();
     renderParticipantTrophyResults();
+    maybeShowPublishedModal(state.trophy.votingStatus === 'PUBLISHED');
     updateTrophyProgress();
     renderTrophyTeammates();
   } catch (err) {
@@ -1776,6 +1883,7 @@ function bindEvents() {
         }
       }).catch(() => {});
       startSentWatch();
+      startTrophyWatch();
     }
   });
 }
