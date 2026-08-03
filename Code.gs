@@ -62,6 +62,12 @@ function doGet(e) {
         return jsonResponse(adminCalculateTrophyResults(params));
       case 'admin_reset_participant_vote':
         return jsonResponse(adminResetParticipantVote(params));
+      case 'admin_participant_detail':
+        return jsonResponse(adminParticipantDetail(params));
+      case 'admin_update_participant':
+        return jsonResponse(adminUpdateParticipant(params));
+      case 'admin_delete_participant_records':
+        return jsonResponse(adminDeleteParticipantRecords(params));
       default:
         return jsonResponse({ status: 'error', message: '未知的操作：' + action });
     }
@@ -90,6 +96,10 @@ function doPost(e) {
         return jsonResponse(adminCalculateTrophyResults(body));
       case 'admin_reset_participant_vote':
         return jsonResponse(adminResetParticipantVote(body));
+      case 'admin_update_participant':
+        return jsonResponse(adminUpdateParticipant(body));
+      case 'admin_delete_participant_records':
+        return jsonResponse(adminDeleteParticipantRecords(body));
       default:
         if (!action && body.sender_id && body.receiver_id && body.content !== undefined) {
           return jsonResponse(sendMessage(body));
@@ -1175,7 +1185,12 @@ function adminResetParticipantVote(params) {
   requireAdmin(params);
   const pid = normalizeParticipantId(params.target_participant_id || params.participant_id);
   if (!pid || pid === ADMIN_ID) return errorResponse('無效的參加者');
+  resetParticipantTrophyData(pid);
+  return successResponse({ reset: true, participant_id: pid });
+}
 
+function resetParticipantTrophyData(participantId) {
+  const pid = normalizeParticipantId(participantId);
   clearTrophyLogs(pid);
   clearTrophyDrafts(pid);
   const sheet = getSheet('Trophy_submissions');
@@ -1185,7 +1200,156 @@ function adminResetParticipantVote(params) {
       sheet.deleteRow(i + 2);
     }
   }
-  return successResponse({ reset: true, participant_id: pid });
+}
+
+function clearTrophyResultsForParticipant(participantId) {
+  const pid = normalizeParticipantId(participantId);
+  const sheet = getSheet('Trophy_results');
+  const rows = getSheetData(sheet);
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (normalizeParticipantId(rows[i].participant_id) === pid) {
+      sheet.deleteRow(i + 2);
+    }
+  }
+}
+
+function deleteParticipantSentMessages(participantId) {
+  const pid = normalizeParticipantId(participantId);
+  const sheet = getSheet('Messages');
+  const rows = getSheetData(sheet);
+  let count = 0;
+  const now = nowIso();
+  for (let i = 0; i < rows.length; i++) {
+    if (normalizeParticipantId(rows[i].sender_id) === pid &&
+        String(rows[i].status || 'active').toLowerCase() !== 'deleted') {
+      sheet.getRange(i + 2, 6).setValue('deleted');
+      sheet.getRange(i + 2, 7).setValue(now);
+      count++;
+    }
+  }
+  return count;
+}
+
+function updateParticipantRecord(participantId, updates) {
+  const pid = normalizeParticipantId(participantId);
+  const sheet = getSheet('Participants');
+  const rows = getSheetData(sheet);
+  for (let i = 0; i < rows.length; i++) {
+    if (normalizeParticipantId(rows[i].participant_id) === pid) {
+      const rowNum = i + 2;
+      if (updates.phone_number !== undefined) {
+        sheet.getRange(rowNum, 2).setValue(normalizePhone(updates.phone_number));
+      }
+      if (updates.group_id !== undefined) {
+        sheet.getRange(rowNum, 3).setValue(String(updates.group_id).trim());
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+function adminParticipantDetail(params) {
+  requireAdmin(params);
+  const pid = normalizeParticipantId(params.target_participant_id || params.participant_id);
+  if (!pid || pid === ADMIN_ID) return errorResponse('無效的參加者');
+
+  const participants = getParticipantsList();
+  const participant = participants.find(function (p) { return p.participant_id === pid; });
+  if (!participant) return errorResponse('找不到該參加者');
+
+  const messages = getAllMessages();
+  const sentAll = messages.filter(function (m) { return m.sender_id === pid; });
+  const sentActive = sentAll.filter(function (m) { return m.status === 'active'; });
+  const receivedActive = messages.filter(function (m) {
+    return m.receiver_id === pid && m.status === 'active';
+  });
+  const trophyVotes = getTrophyLogs().filter(function (r) {
+    return normalizeParticipantId(r.sender_id) === pid;
+  }).length;
+  const submission = getSubmissionStatus(pid);
+  const awards = getParticipantAwards(pid);
+
+  return successResponse({
+    participant: {
+      participant_id: participant.participant_id,
+      phone_number: participant.phone_number,
+      group_id: resolveEffectiveGroupId(participant)
+    },
+    stats: {
+      sent_total: sentAll.length,
+      sent_active: sentActive.length,
+      sent_deleted: sentAll.length - sentActive.length,
+      received_active: receivedActive.length,
+      trophy_votes: trophyVotes,
+      submission_status: submission.submission_status,
+      trophy_awards: awards.length
+    }
+  });
+}
+
+function adminUpdateParticipant(params) {
+  requireAdmin(params);
+  const pid = normalizeParticipantId(params.target_participant_id || params.participant_id);
+  if (!pid || pid === ADMIN_ID) return errorResponse('無效的參加者');
+
+  const phone = params.new_phone_number !== undefined
+    ? normalizePhone(params.new_phone_number) : undefined;
+  const groupId = params.group_id !== undefined ? String(params.group_id).trim() : undefined;
+
+  if (phone === undefined && groupId === undefined) {
+    return errorResponse('請提供要更新的欄位');
+  }
+  if (phone !== undefined && !phone) {
+    return errorResponse('電話號碼不能為空');
+  }
+
+  const updates = {};
+  if (phone !== undefined) updates.phone_number = phone;
+  if (groupId !== undefined) updates.group_id = groupId;
+
+  if (!updateParticipantRecord(pid, updates)) {
+    return errorResponse('找不到該參加者');
+  }
+
+  const updated = getParticipantsList().find(function (p) { return p.participant_id === pid; });
+  return successResponse({
+    participant: {
+      participant_id: pid,
+      phone_number: updated ? updated.phone_number : phone,
+      group_id: updated ? resolveEffectiveGroupId(updated) : groupId
+    }
+  });
+}
+
+function adminDeleteParticipantRecords(params) {
+  requireAdmin(params);
+  const pid = normalizeParticipantId(params.target_participant_id || params.participant_id);
+  if (!pid || pid === ADMIN_ID) return errorResponse('無效的參加者');
+
+  if (!participantExists(pid)) return errorResponse('找不到該參加者');
+
+  const deleteMessages = params.delete_messages !== false && String(params.delete_messages).toUpperCase() !== 'FALSE';
+  const deleteTrophy = params.delete_trophy !== false && String(params.delete_trophy).toUpperCase() !== 'FALSE';
+  const deleteResults = params.delete_results !== false && String(params.delete_results).toUpperCase() !== 'FALSE';
+
+  let messagesDeleted = 0;
+  if (deleteMessages) {
+    messagesDeleted = deleteParticipantSentMessages(pid);
+  }
+  if (deleteTrophy) {
+    resetParticipantTrophyData(pid);
+  }
+  if (deleteResults) {
+    clearTrophyResultsForParticipant(pid);
+  }
+
+  return successResponse({
+    participant_id: pid,
+    messages_deleted: messagesDeleted,
+    trophy_reset: deleteTrophy,
+    results_cleared: deleteResults
+  });
 }
 
 // ─── Trophy Calculation ───────────────────────────────────────────────────────

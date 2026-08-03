@@ -81,8 +81,14 @@ const state = {
     profiles: [],
     trophySummary: [],
     fallbackActivated: false
+  },
+  adminParticipant: {
+    selectedId: null,
+    detail: null
   }
 };
+
+let adminParticipantCombobox = null;
 
 let sentWatchAbort = null;
 let adminWatchAbort = null;
@@ -176,6 +182,19 @@ function cacheDOM() {
   DOM.auditTableBody = document.querySelector('#audit-table tbody');
   DOM.profilesList = document.getElementById('profiles-list');
   DOM.summaryList = document.getElementById('summary-list');
+
+  DOM.adminParticipantsPanel = document.getElementById('admin-participants-panel');
+  DOM.adminParticipantSelect = document.getElementById('admin-participant-select');
+  DOM.adminParticipantDropdown = document.getElementById('admin-participant-dropdown');
+  DOM.adminParticipantToggle = document.getElementById('admin-participant-toggle');
+  DOM.adminParticipantDetail = document.getElementById('admin-participant-detail');
+  DOM.adminParticipantStats = document.getElementById('admin-participant-stats');
+  DOM.adminEditPhone = document.getElementById('admin-edit-phone');
+  DOM.adminEditGroup = document.getElementById('admin-edit-group');
+  DOM.adminSaveParticipant = document.getElementById('admin-save-participant');
+  DOM.adminDeleteMessages = document.getElementById('admin-delete-messages');
+  DOM.adminResetTrophy = document.getElementById('admin-reset-trophy');
+  DOM.adminDeleteAllRecords = document.getElementById('admin-delete-all-records');
 }
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
@@ -465,6 +484,47 @@ async function apiWatchTrophyStatus(revision, options = {}) {
     phone_number: state.phoneNumber,
     revision: revision
   }, options);
+}
+
+async function apiAdminParticipantDetail(participantId) {
+  return apiGet({
+    action: 'admin_participant_detail',
+    participant_id: CONFIG.ADMIN_ID,
+    phone_number: CONFIG.ADMIN_PHONE,
+    target_participant_id: participantId
+  });
+}
+
+async function apiAdminUpdateParticipant(participantId, phone, groupId) {
+  return apiPost({
+    action: 'admin_update_participant',
+    participant_id: CONFIG.ADMIN_ID,
+    phone_number: CONFIG.ADMIN_PHONE,
+    target_participant_id: participantId,
+    new_phone_number: phone,
+    group_id: groupId
+  });
+}
+
+async function apiAdminDeleteParticipantRecords(participantId, options = {}) {
+  return apiPost({
+    action: 'admin_delete_participant_records',
+    participant_id: CONFIG.ADMIN_ID,
+    phone_number: CONFIG.ADMIN_PHONE,
+    target_participant_id: participantId,
+    delete_messages: options.deleteMessages !== false,
+    delete_trophy: options.deleteTrophy !== false,
+    delete_results: options.deleteResults !== false
+  });
+}
+
+async function apiAdminResetParticipantVote(participantId) {
+  return apiGet({
+    action: 'admin_reset_participant_vote',
+    participant_id: CONFIG.ADMIN_ID,
+    phone_number: CONFIG.ADMIN_PHONE,
+    target_participant_id: participantId
+  });
 }
 
 async function apiTrophyBootstrap() {
@@ -1756,6 +1816,157 @@ async function handleAdminCalculate(btn) {
   })());
 }
 
+// ─── Admin Participant Management ─────────────────────────────────────────────
+
+function initAdminParticipantCombobox() {
+  if (adminParticipantCombobox) {
+    adminParticipantCombobox.setItems(state.participants);
+    return;
+  }
+  adminParticipantCombobox = createCombobox({
+    input: DOM.adminParticipantSelect,
+    dropdown: DOM.adminParticipantDropdown,
+    toggle: DOM.adminParticipantToggle,
+    items: state.participants,
+    getLabel: (item) => item.participant_id,
+    onSelect: (item) => {
+      selectAdminParticipant(item.participant_id);
+    }
+  });
+}
+
+async function selectAdminParticipant(participantId) {
+  state.adminParticipant.selectedId = participantId;
+  DOM.adminParticipantSelect.value = participantId;
+  DOM.adminParticipantDetail.classList.remove('hidden');
+
+  try {
+    showLoading(true);
+    const data = checkApiResponse(await apiAdminParticipantDetail(participantId));
+    state.adminParticipant.detail = data;
+    renderAdminParticipantDetail(data);
+  } catch (err) {
+    showToast('載入參加者資料失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function renderAdminParticipantDetail(data) {
+  const p = data.participant || {};
+  const stats = data.stats || {};
+
+  DOM.adminEditPhone.value = p.phone_number || '';
+  DOM.adminEditGroup.value = p.group_id || '';
+
+  DOM.adminParticipantStats.innerHTML = `
+    <div class="stat-card"><div class="stat-value">${stats.sent_active || 0}</div><div class="stat-label">有效已發留言</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.sent_deleted || 0}</div><div class="stat-label">已撤回留言</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.received_active || 0}</div><div class="stat-label">收件箱留言</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.trophy_votes || 0}</div><div class="stat-label">Trophy 投票數</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.submission_status === 'submitted' ? '已提交' : '草稿'}</div><div class="stat-label">投票狀態</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.trophy_awards || 0}</div><div class="stat-label">獲得 Trophy</div></div>
+  `;
+}
+
+async function refreshAdminParticipantDetail() {
+  if (!state.adminParticipant.selectedId) return;
+  await selectAdminParticipant(state.adminParticipant.selectedId);
+}
+
+async function handleAdminSaveParticipant() {
+  const pid = state.adminParticipant.selectedId;
+  if (!pid) { showToast('請先選擇參加者', 'error'); return; }
+
+  const phone = normalizePhone(DOM.adminEditPhone.value);
+  const groupId = DOM.adminEditGroup.value.trim();
+
+  if (!phone) { showToast('電話號碼不能為空', 'error'); return; }
+
+  await runProgressButton(DOM.adminSaveParticipant, (async () => {
+    try {
+      checkApiResponse(await apiAdminUpdateParticipant(pid, phone, groupId));
+      showToast('參加者資料已更新', 'success');
+      const idx = state.participants.findIndex(p => p.participant_id === pid);
+      if (idx >= 0) {
+        state.participants[idx].phone_number = phone;
+        state.participants[idx].group_id = groupId;
+      }
+      setParticipantsCache(state.participants);
+      await refreshAdminParticipantDetail();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleAdminDeleteMessages() {
+  const pid = state.adminParticipant.selectedId;
+  if (!pid) return;
+  if (!window.confirm('確定要撤回 ' + pid + ' 的所有已發留言嗎？')) return;
+
+  await runProgressButton(DOM.adminDeleteMessages, (async () => {
+    try {
+      const data = checkApiResponse(await apiAdminDeleteParticipantRecords(pid, {
+        deleteMessages: true,
+        deleteTrophy: false,
+        deleteResults: false
+      }));
+      showToast('已撤回 ' + (data.messages_deleted || 0) + ' 則留言', 'success');
+      const full = checkApiResponse(await apiAdminFetch());
+      applyAdminMessages(full.messages || [], full.revision || '');
+      await refreshAdminParticipantDetail();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleAdminResetTrophy() {
+  const pid = state.adminParticipant.selectedId;
+  if (!pid) return;
+  if (!window.confirm('確定要重置 ' + pid + ' 的 Trophy 投票嗎？')) return;
+
+  await runProgressButton(DOM.adminResetTrophy, (async () => {
+    try {
+      checkApiResponse(await apiAdminResetParticipantVote(pid));
+      showToast('Trophy 投票已重置', 'success');
+      await refreshAdminParticipantDetail();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleAdminDeleteAllRecords() {
+  const pid = state.adminParticipant.selectedId;
+  if (!pid) return;
+  if (!window.confirm('確定要刪除 ' + pid + ' 的所有紀錄嗎？\n包括：已發留言、Trophy 投票、結果。\n此操作無法復原！')) return;
+
+  await runProgressButton(DOM.adminDeleteAllRecords, (async () => {
+    try {
+      const data = checkApiResponse(await apiAdminDeleteParticipantRecords(pid, {
+        deleteMessages: true,
+        deleteTrophy: true,
+        deleteResults: true
+      }));
+      showToast('已刪除全部紀錄（留言 ' + (data.messages_deleted || 0) + ' 則）', 'success');
+      const full = checkApiResponse(await apiAdminFetch());
+      applyAdminMessages(full.messages || [], full.revision || '');
+      await refreshAdminParticipantDetail();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+function initAdminParticipantsPanel() {
+  initAdminParticipantCombobox();
+  if (state.adminParticipant.selectedId) {
+    refreshAdminParticipantDetail();
+  }
+}
+
 // ─── Tab Navigation ───────────────────────────────────────────────────────────
 
 function switchParticipantTab(tabName) {
@@ -1786,6 +1997,8 @@ function switchAdminTab(tabName) {
   DOM.adminMessagesPanel.classList.toggle('hidden', tabName !== 'messages');
   DOM.adminTrophyPanel.classList.toggle('active', tabName === 'trophy');
   DOM.adminTrophyPanel.classList.toggle('hidden', tabName !== 'trophy');
+  DOM.adminParticipantsPanel.classList.toggle('active', tabName === 'participants');
+  DOM.adminParticipantsPanel.classList.toggle('hidden', tabName !== 'participants');
 
   if (tabName === 'messages') {
     apiAdminFetch().then(data => {
@@ -1795,7 +2008,17 @@ function switchAdminTab(tabName) {
     }).catch(() => {});
     startAdminWatch();
   } else if (tabName === 'trophy') {
+    stopAdminWatch();
     loadAdminTrophyData();
+  } else if (tabName === 'participants') {
+    stopAdminWatch();
+    apiBootstrap().then(data => {
+      if (data.status === 'success') {
+        state.participants = data.participants || [];
+        setParticipantsCache(state.participants);
+      }
+      initAdminParticipantsPanel();
+    }).catch(() => initAdminParticipantsPanel());
   }
 }
 
@@ -1863,6 +2086,14 @@ function bindEvents() {
   DOM.adminCloseVoting.addEventListener('click', () => handleAdminVotingAction('VOTING_CLOSED', DOM.adminCloseVoting));
   DOM.adminCalculate.addEventListener('click', () => handleAdminCalculate(DOM.adminCalculate));
   DOM.adminPublish.addEventListener('click', () => handleAdminVotingAction('PUBLISHED', DOM.adminPublish));
+
+  DOM.adminSaveParticipant.addEventListener('click', handleAdminSaveParticipant);
+  DOM.adminDeleteMessages.addEventListener('click', handleAdminDeleteMessages);
+  DOM.adminResetTrophy.addEventListener('click', handleAdminResetTrophy);
+  DOM.adminDeleteAllRecords.addEventListener('click', handleAdminDeleteAllRecords);
+  DOM.adminEditPhone.addEventListener('input', () => {
+    DOM.adminEditPhone.value = normalizePhone(DOM.adminEditPhone.value);
+  });
 
   DOM.auditSearch.addEventListener('input', renderAuditTable);
   DOM.auditTrophyFilter.addEventListener('change', renderAuditTable);

@@ -278,6 +278,7 @@
     <nav class="tab-nav admin-mode-nav" role="tablist" aria-label="管理員模式">
       <button type="button" class="tab-btn active" data-admin-tab="messages" role="tab" aria-selected="true">留言監控</button>
       <button type="button" class="tab-btn" data-admin-tab="trophy" role="tab" aria-selected="false">Trophy 投票</button>
+      <button type="button" class="tab-btn" data-admin-tab="participants" role="tab" aria-selected="false">參加者管理</button>
     </nav>
 
     <!-- Admin Mode A: Messages -->
@@ -368,6 +369,68 @@
 
       <div id="result-summary" class="result-panel hidden">
         <div id="summary-list" class="summary-list"></div>
+      </div>
+    </div>
+
+    <!-- Admin Mode C: Participants -->
+    <div id="admin-participants-panel" class="admin-panel hidden">
+      <div class="admin-participant-form">
+        <h3 class="panel-title">參加者管理</h3>
+        <p class="form-hint">選擇參加者以查看、修改資料或刪除其所有紀錄</p>
+
+        <div class="form-group">
+          <label for="admin-participant-select">選擇參加者</label>
+          <div class="combobox-wrapper" id="admin-participant-combobox">
+            <input type="text" id="admin-participant-select" class="combobox-input" autocomplete="off"
+              placeholder="輸入或選擇參加者" aria-autocomplete="list" aria-controls="admin-participant-dropdown"
+              aria-expanded="false" role="combobox">
+            <button type="button" id="admin-participant-toggle" class="combobox-toggle" aria-label="展開選單">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <ul id="admin-participant-dropdown" class="combobox-dropdown hidden" role="listbox"></ul>
+          </div>
+        </div>
+
+        <div id="admin-participant-detail" class="admin-participant-detail hidden">
+          <div id="admin-participant-stats" class="admin-stats-grid"></div>
+
+          <div class="admin-participant-edit">
+            <h4>修改資料</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="admin-edit-phone">電話號碼</label>
+                <input type="tel" id="admin-edit-phone" inputmode="numeric" maxlength="20">
+              </div>
+              <div class="form-group">
+                <label for="admin-edit-group">分組 (group_id)</label>
+                <input type="text" id="admin-edit-group" placeholder="例如 GROUP_1">
+              </div>
+            </div>
+            <button type="button" id="admin-save-participant" class="btn btn-primary btn-sm btn-progress">
+              <span class="btn-label">儲存修改</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div class="admin-participant-danger">
+            <h4>刪除紀錄</h4>
+            <p class="form-hint">以下操作無法復原，請謹慎使用</p>
+            <div class="admin-danger-actions">
+              <button type="button" id="admin-delete-messages" class="btn btn-danger btn-sm btn-progress">
+                <span class="btn-label">撤回全部已發留言</span>
+                <span class="btn-progress-bar" aria-hidden="true"></span>
+              </button>
+              <button type="button" id="admin-reset-trophy" class="btn btn-danger btn-sm btn-progress">
+                <span class="btn-label">重置 Trophy 投票</span>
+                <span class="btn-progress-bar" aria-hidden="true"></span>
+              </button>
+              <button type="button" id="admin-delete-all-records" class="btn btn-danger btn-sm btn-progress">
+                <span class="btn-label">刪除全部紀錄</span>
+                <span class="btn-progress-bar" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>

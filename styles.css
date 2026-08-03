@@ -1070,6 +1070,59 @@ body.modal-open {
   padding-left: 20px;
 }
 
+/* ─── Admin Participant Management ───────────────────────────────────────────── */
+
+.admin-participant-form {
+  max-width: 640px;
+}
+
+.admin-participant-form .panel-title {
+  margin: 0 0 8px;
+}
+
+.admin-participant-detail {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.admin-participant-edit,
+.admin-participant-danger {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.admin-participant-edit h4,
+.admin-participant-danger h4 {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 480px) {
+  .form-row { grid-template-columns: 1fr; }
+}
+
+.admin-danger-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-danger-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
 .sub-tab-nav {
   display: flex;
   gap: 4px;
