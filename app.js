@@ -253,6 +253,7 @@ function showScreen(name) {
 
 let loadingTickTimer = null;
 let splashTickTimer = null;
+let loadingSafetyTimer = null;
 
 function setLoadingPercent(percent) {
   const value = Math.min(100, Math.max(0, Math.round(percent)));
@@ -276,17 +277,26 @@ function stopLoadingTick() {
   }
 }
 
+function clearLoadingSafetyTimer() {
+  if (loadingSafetyTimer) {
+    clearTimeout(loadingSafetyTimer);
+    loadingSafetyTimer = null;
+  }
+}
+
 function startLoadingTick() {
   stopLoadingTick();
   loadingTickTimer = setInterval(() => {
     const current = parseInt(DOM.loadingPercent?.textContent || '0', 10) || 0;
-    if (current < 90) setLoadingPercent(current + 1);
-  }, 100);
+    if (current < 80) setLoadingPercent(current + 2);
+    else if (current < 96) setLoadingPercent(current + 1);
+  }, 120);
 }
 
 function showLoading(show, percent) {
   if (!show) {
     stopLoadingTick();
+    clearLoadingSafetyTimer();
     DOM.loadingOverlay.classList.add('hidden');
     DOM.loadingOverlay.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('is-loading');
@@ -297,18 +307,23 @@ function showLoading(show, percent) {
   DOM.loadingOverlay.setAttribute('aria-hidden', 'false');
   document.body.classList.add('is-loading');
 
-  if (percent !== undefined) {
-    setLoadingPercent(percent);
-  } else {
-    setLoadingPercent(0);
-  }
+  setLoadingPercent(percent !== undefined ? percent : 0);
   startLoadingTick();
+
+  clearLoadingSafetyTimer();
+  loadingSafetyTimer = setTimeout(() => {
+    if (!DOM.loadingOverlay.classList.contains('hidden')) {
+      finishLoading();
+      showToast('載入時間較長，請檢查網絡後再試', 'error');
+    }
+  }, CONFIG.API_TIMEOUT_MS + 3000);
 }
 
 function finishLoading() {
   stopLoadingTick();
+  clearLoadingSafetyTimer();
   setLoadingPercent(100);
-  setTimeout(() => showLoading(false), 180);
+  setTimeout(() => showLoading(false), 120);
 }
 
 function showSplashThenLogin() {
@@ -1064,7 +1079,9 @@ async function enterParticipantDashboard() {
     renderSent();
     renderProfile();
     startSentWatch();
-    loadTrophyData(false).finally(() => startTrophyWatch());
+    await loadTrophyData(false, { silent: true });
+    setLoadingPercent(98);
+    startTrophyWatch();
   } catch (err) {
     showToast('載入資料失敗：' + err.message, 'error');
   } finally {
@@ -1104,36 +1121,54 @@ async function enterAdminDashboard() {
   stopSentWatch();
   stopTrophyWatch();
   showScreen('admin');
-  switchAdminTab('dashboard');
 
   try {
     showLoading(true, 0);
     const adminPromise = apiAdminFetch().then(data => {
-      setLoadingPercent(40);
+      setLoadingPercent(25);
       return data;
     });
     const bootstrapPromise = apiBootstrap().catch(() => ({ status: 'error' })).then(data => {
+      setLoadingPercent(45);
+      return data;
+    });
+    const overviewPromise = apiAdminTrophyOverview().catch(() => ({ status: 'error' })).then(data => {
       setLoadingPercent(70);
       return data;
     });
-    const [data, bootstrap] = await Promise.all([
+    const [data, bootstrap, overview] = await Promise.all([
       checkApiResponse(await adminPromise),
-      bootstrapPromise
+      bootstrapPromise,
+      overviewPromise
     ]);
     setLoadingPercent(90);
     if (bootstrap.status === 'success') {
       state.participants = bootstrap.participants || [];
       state.apiVersion = bootstrap.version;
+      setParticipantsCache(state.participants);
     }
     state.monitorMessages = data.messages || [];
     state.monitorRevision = data.revision || '';
     state.messagingOpen = data.messaging_status === 'OPEN';
     state.knownMessageIds = new Set(state.monitorMessages.map(m => m.message_id));
+    if (overview.status === 'success') {
+      state.adminTrophy.overview = overview;
+    }
     renderAdminMessages();
     renderAdminDashboard(data);
+    if (overview.status === 'success') {
+      renderAdminTrophyStats();
+      updateVotingStepper();
+      if (DOM.adminVotingStatusBadge) {
+        const vs = overview.voting_status || 'DRAFT';
+        DOM.adminVotingStatusBadge.textContent = VOTING_STATUS_LABELS[vs] || vs;
+      }
+    }
+    switchAdminTab('dashboard', { skipLoad: true });
     startAdminWatch();
   } catch (err) {
     showToast('載入管理員資料失敗：' + err.message, 'error');
+    switchAdminTab('dashboard', { skipLoad: true });
   } finally {
     finishLoading();
   }
@@ -1847,13 +1882,14 @@ function renderTrophyTeammates() {
   });
 }
 
-async function loadTrophyData(force) {
+async function loadTrophyData(force, options = {}) {
+  const silent = options.silent === true;
   if (state.trophy.loading) return;
   try {
     state.trophy.loading = true;
-    if (force || !state.trophy.loaded) showLoading(true, 15);
+    if (!silent && (force || !state.trophy.loaded)) showLoading(true, 15);
     const data = checkApiResponse(await apiTrophyBootstrap());
-    setLoadingPercent(90);
+    if (!silent) setLoadingPercent(92);
     state.trophy.loaded = true;
     state.trophy.votingStatus = data.voting_status;
     state.trophy.trophies = filterValidTrophies(data.trophies || []);
@@ -1877,7 +1913,7 @@ async function loadTrophyData(force) {
     showToast('載入 Trophy 資料失敗：' + err.message, 'error');
   } finally {
     state.trophy.loading = false;
-    if (!DOM.loadingOverlay.classList.contains('hidden')) finishLoading();
+    if (!silent && !DOM.loadingOverlay.classList.contains('hidden')) finishLoading();
   }
 }
 
@@ -1920,11 +1956,12 @@ async function handleTrophySubmitAll() {
 
 // ─── Trophy (Admin) ───────────────────────────────────────────────────────────
 
-async function loadAdminTrophyData() {
+async function loadAdminTrophyData(options = {}) {
+  const silent = options.silent === true;
   if (state.adminTrophy.loading) return;
   try {
     state.adminTrophy.loading = true;
-    showLoading(true, 0);
+    if (!silent) showLoading(true, 0);
     const overviewPromise = apiAdminTrophyOverview().then(data => {
       setLoadingPercent(30);
       return data;
@@ -1964,7 +2001,7 @@ async function loadAdminTrophyData() {
     showToast('載入 Trophy 管理資料失敗：' + err.message, 'error');
   } finally {
     state.adminTrophy.loading = false;
-    finishLoading();
+    if (!silent) finishLoading();
   }
 }
 
@@ -2442,7 +2479,8 @@ function switchParticipantView(viewName) {
   }
 }
 
-function switchAdminTab(tabName) {
+function switchAdminTab(tabName, options = {}) {
+  const skipLoad = options.skipLoad === true;
   document.querySelectorAll('.admin-bottom-nav .bottom-nav-item').forEach(btn => {
     const isActive = btn.dataset.adminTab === tabName;
     btn.classList.toggle('active', isActive);
@@ -2493,7 +2531,7 @@ function switchAdminTab(tabName) {
         renderAdminDashboard(data);
       }
     }).catch(() => renderAdminDashboard());
-    loadAdminTrophyData();
+    if (!skipLoad && !state.adminTrophy.overview) loadAdminTrophyData();
   }
 }
 
