@@ -11,7 +11,7 @@
  * 3. Copy deployment URL to app.js → API_URL
  */
 
-const SCRIPT_VERSION = 15;
+const SCRIPT_VERSION = 16;
 const SPREADSHEET_ID = '1xFLUikp5TEk4e5pd0B7VNbE7vPoZ-iViioomTjbB3RU';
 const ADMIN_ID = 'ADMIN';
 const ADMIN_PHONE = '23082026';
@@ -303,10 +303,20 @@ function requireAdmin(params) {
 
 // ─── Participants ───────────────────────────────────────────────────────────
 
+// Memoized for the lifetime of one request; Apps Script gives each doGet/doPost
+// a fresh script context, so this never serves data across requests.
+let participantsMemo = null;
+
+function invalidateParticipantsMemo() {
+  participantsMemo = null;
+}
+
 function getParticipantsList() {
+  if (participantsMemo) return participantsMemo;
+
   const sheet = getSheet('Participants');
   const rows = getSheetData(sheet);
-  return rows
+  participantsMemo = rows
     .filter(function (r) { return r.participant_id; })
     .map(function (r) {
       return {
@@ -316,6 +326,8 @@ function getParticipantsList() {
       };
     })
     .filter(function (p) { return p.participant_id !== ADMIN_ID; });
+
+  return participantsMemo;
 }
 
 function participantExists(participantId) {
@@ -331,7 +343,7 @@ function deriveGroupIdFromParticipantId(participantId) {
   return 'GROUP_STAFF';
 }
 
-function resolveEffectiveGroupId(participant) {
+function resolveEffectiveGroupId(participant, allParticipants) {
   const groupId = String(participant.group_id || '').trim();
   const phone = normalizePhone(participant.phone_number);
   const derived = deriveGroupIdFromParticipantId(participant.participant_id);
@@ -340,7 +352,7 @@ function resolveEffectiveGroupId(participant) {
     return derived;
   }
 
-  const all = getParticipantsList();
+  const all = allParticipants || getParticipantsList();
   const othersInGroup = all.filter(function (p) {
     return p.participant_id !== participant.participant_id &&
       String(p.group_id || '').trim() === groupId;
@@ -354,9 +366,10 @@ function resolveEffectiveGroupId(participant) {
 
 function getParticipantGroup(participantId) {
   const pid = normalizeParticipantId(participantId);
-  const p = getParticipantsList().find(function (x) { return x.participant_id === pid; });
+  const all = getParticipantsList();
+  const p = all.find(function (x) { return x.participant_id === pid; });
   if (!p) return '';
-  return resolveEffectiveGroupId(p);
+  return resolveEffectiveGroupId(p, all);
 }
 
 function getTeammates(participantId) {
@@ -367,7 +380,7 @@ function getTeammates(participantId) {
     return all.filter(function (p) { return p.participant_id !== pid; });
   }
   return all.filter(function (p) {
-    return resolveEffectiveGroupId(p) === groupId && p.participant_id !== pid;
+    return resolveEffectiveGroupId(p, all) === groupId && p.participant_id !== pid;
   });
 }
 
@@ -704,7 +717,7 @@ function buildGroupVotingStatus(participants, submittedIds) {
 
   const groupMap = {};
   participants.forEach(function (p) {
-    const gid = resolveEffectiveGroupId(p);
+    const gid = resolveEffectiveGroupId(p, participants);
     if (!groupMap[gid]) {
       groupMap[gid] = {
         group_id: gid,
@@ -1274,6 +1287,7 @@ function updateParticipantRecord(participantId, updates) {
       if (updates.group_id !== undefined) {
         sheet.getRange(rowNum, 3).setValue(String(updates.group_id).trim());
       }
+      invalidateParticipantsMemo();
       return true;
     }
   }
