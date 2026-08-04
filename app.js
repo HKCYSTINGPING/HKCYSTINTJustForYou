@@ -106,8 +106,13 @@ const DOM = {};
 function cacheDOM() {
   DOM.loadingOverlay = document.getElementById('loading-overlay');
   DOM.loadingPercent = document.getElementById('loading-percent');
+  DOM.loadingBarFill = document.getElementById('loading-bar-fill');
+  DOM.splashPercent = document.getElementById('splash-percent');
+  DOM.splashBarFill = document.getElementById('splash-bar-fill');
   DOM.toastContainer = document.getElementById('toast-container');
+  DOM.confettiCanvas = document.getElementById('confetti-canvas');
 
+  DOM.screenSplash = document.getElementById('screen-splash');
   DOM.screenLogin = document.getElementById('screen-login');
   DOM.screenParticipant = document.getElementById('screen-participant');
   DOM.screenAdmin = document.getElementById('screen-admin');
@@ -121,8 +126,10 @@ function cacheDOM() {
   DOM.loginNoMatch = document.getElementById('login-no-match');
   DOM.loginStatusBanner = document.getElementById('login-status-banner');
 
-  DOM.participantBadge = document.getElementById('participant-badge');
+  DOM.participantGreeting = document.getElementById('participant-greeting');
+  DOM.participantSubgreeting = document.getElementById('participant-subgreeting');
   DOM.participantLogout = document.getElementById('participant-logout');
+  DOM.homeInboxBadge = document.getElementById('home-inbox-badge');
 
   DOM.sendForm = document.getElementById('send-form');
   DOM.sendReceiver = document.getElementById('send-receiver');
@@ -131,6 +138,7 @@ function cacheDOM() {
   DOM.sendContent = document.getElementById('send-content');
   DOM.sendSubmit = document.getElementById('send-submit');
   DOM.sendClosedBanner = document.getElementById('send-closed-banner');
+  DOM.sendClosedState = document.getElementById('send-closed-state');
   DOM.charCounter = document.getElementById('char-counter');
   DOM.badWordsWarning = document.getElementById('bad-words-warning');
 
@@ -143,6 +151,7 @@ function cacheDOM() {
   DOM.sentEmpty = document.getElementById('sent-empty');
   DOM.sentRefresh = document.getElementById('sent-refresh');
 
+  DOM.trophyNotOpen = document.getElementById('trophy-not-open');
   DOM.trophyStatusBanner = document.getElementById('trophy-status-banner');
   DOM.trophyResultsPanel = document.getElementById('trophy-results-panel');
   DOM.trophyResultsList = document.getElementById('trophy-results-list');
@@ -158,16 +167,29 @@ function cacheDOM() {
   DOM.trophyActions = document.getElementById('trophy-actions');
   DOM.trophySaveDraft = document.getElementById('trophy-save-draft');
   DOM.trophySubmitAll = document.getElementById('trophy-submit-all');
+  DOM.trophySubmittedHome = document.getElementById('trophy-submitted-home');
+
+  DOM.profileAvatar = document.getElementById('profile-avatar');
+  DOM.profileName = document.getElementById('profile-name');
+  DOM.profileGroup = document.getElementById('profile-group');
+  DOM.profileStats = document.getElementById('profile-stats');
 
   DOM.adminLogout = document.getElementById('admin-logout');
+  DOM.adminDashboardPanel = document.getElementById('admin-dashboard-panel');
+  DOM.adminDashboardStats = document.getElementById('admin-dashboard-stats');
+  DOM.adminDashboardStatus = document.getElementById('admin-dashboard-status');
+  DOM.adminRecentActivity = document.getElementById('admin-recent-activity');
   DOM.adminSyncTime = document.getElementById('admin-sync-time');
   DOM.adminMsgCount = document.getElementById('admin-msg-count');
+  DOM.adminMsgSearch = document.getElementById('admin-msg-search');
   DOM.adminMessageList = document.getElementById('admin-message-list');
   DOM.adminMsgEmpty = document.getElementById('admin-msg-empty');
   DOM.adminEnableMsg = document.getElementById('admin-enable-msg');
   DOM.adminDisableMsg = document.getElementById('admin-disable-msg');
   DOM.adminMessagesPanel = document.getElementById('admin-messages-panel');
   DOM.adminTrophyPanel = document.getElementById('admin-trophy-panel');
+  DOM.adminResultsPanel = document.getElementById('admin-results-panel');
+  DOM.adminVotingStatusBadge = document.getElementById('admin-voting-status-badge');
 
   DOM.adminTrophyStats = document.getElementById('admin-trophy-stats');
   DOM.adminPendingVoters = document.getElementById('admin-pending-voters');
@@ -179,6 +201,7 @@ function cacheDOM() {
 
   DOM.auditSearch = document.getElementById('audit-search');
   DOM.auditTrophyFilter = document.getElementById('audit-trophy-filter');
+  DOM.auditCards = document.getElementById('audit-cards');
   DOM.auditTableBody = document.querySelector('#audit-table tbody');
   DOM.profilesList = document.getElementById('profiles-list');
   DOM.summaryList = document.getElementById('summary-list');
@@ -195,6 +218,12 @@ function cacheDOM() {
   DOM.adminDeleteMessages = document.getElementById('admin-delete-messages');
   DOM.adminResetTrophy = document.getElementById('admin-reset-trophy');
   DOM.adminDeleteAllRecords = document.getElementById('admin-delete-all-records');
+  DOM.adminBulkGroup = document.getElementById('admin-bulk-group');
+  DOM.adminBulkAutoGroup = document.getElementById('admin-bulk-auto-group');
+  DOM.adminBulkApplyGroup = document.getElementById('admin-bulk-apply-group');
+  DOM.adminBulkDeleteAll = document.getElementById('admin-bulk-delete-all');
+  DOM.adminVersion = document.getElementById('admin-version');
+  DOM.adminParticipantCount = document.getElementById('admin-participant-count');
 }
 
 // ─── Utilities ──────────────────────────────────────────────────────────────
@@ -214,6 +243,7 @@ function isAdminLogin(participantId) {
 }
 
 function showScreen(name) {
+  if (DOM.screenSplash) DOM.screenSplash.classList.add('hidden');
   DOM.screenLogin.classList.toggle('hidden', name !== 'login');
   DOM.screenParticipant.classList.toggle('hidden', name !== 'participant');
   DOM.screenAdmin.classList.toggle('hidden', name !== 'admin');
@@ -221,15 +251,93 @@ function showScreen(name) {
   document.body.classList.toggle('admin-active', name === 'admin');
 }
 
-function showLoading(show, percent) {
-  DOM.loadingOverlay.classList.toggle('hidden', !show);
-  document.body.classList.toggle('is-loading', show);
-  if (percent !== undefined) {
-    DOM.loadingPercent.textContent = percent + '%';
-    DOM.loadingPercent.classList.toggle('hidden', false);
-  } else {
-    DOM.loadingPercent.classList.add('hidden');
+let loadingTickTimer = null;
+let splashTickTimer = null;
+
+function setLoadingPercent(percent) {
+  const value = Math.min(100, Math.max(0, Math.round(percent)));
+  if (DOM.loadingPercent) DOM.loadingPercent.textContent = value + '%';
+  if (DOM.loadingBarFill) DOM.loadingBarFill.style.width = value + '%';
+  if (DOM.loadingOverlay) DOM.loadingOverlay.setAttribute('aria-valuenow', String(value));
+  return value;
+}
+
+function setSplashPercent(percent) {
+  const value = Math.min(100, Math.max(0, Math.round(percent)));
+  if (DOM.splashPercent) DOM.splashPercent.textContent = value + '%';
+  if (DOM.splashBarFill) DOM.splashBarFill.style.width = value + '%';
+  return value;
+}
+
+function stopLoadingTick() {
+  if (loadingTickTimer) {
+    clearInterval(loadingTickTimer);
+    loadingTickTimer = null;
   }
+}
+
+function startLoadingTick() {
+  stopLoadingTick();
+  loadingTickTimer = setInterval(() => {
+    const current = parseInt(DOM.loadingPercent?.textContent || '0', 10) || 0;
+    if (current < 90) setLoadingPercent(current + 1);
+  }, 100);
+}
+
+function showLoading(show, percent) {
+  if (!show) {
+    stopLoadingTick();
+    DOM.loadingOverlay.classList.add('hidden');
+    DOM.loadingOverlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('is-loading');
+    return;
+  }
+
+  DOM.loadingOverlay.classList.remove('hidden');
+  DOM.loadingOverlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('is-loading');
+
+  if (percent !== undefined) {
+    setLoadingPercent(percent);
+  } else {
+    setLoadingPercent(0);
+  }
+  startLoadingTick();
+}
+
+function finishLoading() {
+  stopLoadingTick();
+  setLoadingPercent(100);
+  setTimeout(() => showLoading(false), 180);
+}
+
+function showSplashThenLogin() {
+  if (!DOM.screenSplash) {
+    showScreen('login');
+    return;
+  }
+  DOM.screenSplash.classList.remove('hidden');
+  DOM.screenLogin.classList.add('hidden');
+  setSplashPercent(0);
+
+  if (splashTickTimer) clearInterval(splashTickTimer);
+  splashTickTimer = setInterval(() => {
+    const current = parseInt(DOM.splashPercent?.textContent || '0', 10) || 0;
+    if (current < 100) setSplashPercent(current + 2);
+  }, 36);
+
+  setTimeout(() => {
+    if (splashTickTimer) {
+      clearInterval(splashTickTimer);
+      splashTickTimer = null;
+    }
+    setSplashPercent(100);
+    DOM.screenSplash.classList.add('splash-exit');
+    setTimeout(() => {
+      DOM.screenSplash.classList.add('hidden');
+      showScreen('login');
+    }, 400);
+  }, 1800);
 }
 
 function showToast(message, type = 'info') {
@@ -284,8 +392,54 @@ function updateInboxBadge() {
   if (!state.participantId) return;
   const readIds = new Set(getReadMessageIds(state.participantId));
   const unread = state.inboxMessages.filter(m => !readIds.has(m.message_id)).length;
-  DOM.inboxBadge.textContent = unread;
-  DOM.inboxBadge.classList.toggle('hidden', unread === 0);
+  if (DOM.inboxBadge) {
+    DOM.inboxBadge.textContent = unread;
+    DOM.inboxBadge.classList.toggle('hidden', unread === 0);
+  }
+  if (DOM.homeInboxBadge) {
+    DOM.homeInboxBadge.textContent = unread;
+    DOM.homeInboxBadge.classList.toggle('hidden', unread === 0);
+  }
+}
+
+function launchConfetti() {
+  const canvas = DOM.confettiCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const colors = ['#E9C46A', '#D4A373', '#7FB77E', '#D66A6A', '#FFF9F2'];
+  const pieces = Array.from({ length: 80 }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height - canvas.height,
+    w: 6 + Math.random() * 6,
+    h: 4 + Math.random() * 4,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    vx: (Math.random() - 0.5) * 4,
+    vy: 2 + Math.random() * 4,
+    rot: Math.random() * 360,
+    vr: (Math.random() - 0.5) * 8
+  }));
+  let frame = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rot * Math.PI) / 180);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.vy += 0.05;
+    });
+    frame++;
+    if (frame < 120) requestAnimationFrame(draw);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  draw();
 }
 
 function containsBadWords(text) {
@@ -294,14 +448,11 @@ function containsBadWords(text) {
 }
 
 function runProgressButton(btn, promise) {
-  btn.classList.add('is-running');
+  btn.classList.add('is-loading');
   btn.disabled = true;
-  const bar = btn.querySelector('.btn-progress-bar');
-  if (bar) bar.style.width = '30%';
   return promise.finally(() => {
-    btn.classList.remove('is-running');
+    btn.classList.remove('is-loading');
     btn.disabled = false;
-    if (bar) bar.style.width = '0%';
   });
 }
 
@@ -524,6 +675,25 @@ async function apiAdminResetParticipantVote(participantId) {
     participant_id: CONFIG.ADMIN_ID,
     phone_number: CONFIG.ADMIN_PHONE,
     target_participant_id: participantId
+  });
+}
+
+async function apiAdminBulkUpdateParticipants(mode, groupId) {
+  const body = {
+    action: 'admin_bulk_update_participants',
+    participant_id: CONFIG.ADMIN_ID,
+    phone_number: CONFIG.ADMIN_PHONE,
+    mode
+  };
+  if (groupId) body.group_id = groupId;
+  return apiPost(body);
+}
+
+async function apiAdminBulkDeleteAllRecords() {
+  return apiPost({
+    action: 'admin_bulk_delete_all_records',
+    participant_id: CONFIG.ADMIN_ID,
+    phone_number: CONFIG.ADMIN_PHONE
   });
 }
 
@@ -864,16 +1034,27 @@ async function handleLogin(e) {
 
 async function enterParticipantDashboard() {
   showScreen('participant');
-  DOM.participantBadge.textContent = state.participantId;
+  updateParticipantGreeting();
   initSendCombobox();
   updateSendFormState();
+  updateCharCounter();
+  switchParticipantView('home');
 
   try {
-    showLoading(true);
+    showLoading(true, 0);
+    const inboxPromise = apiFetchInbox().then(data => {
+      setLoadingPercent(35);
+      return data;
+    });
+    const sentPromise = apiFetchSent().then(data => {
+      setLoadingPercent(65);
+      return data;
+    });
     const [inboxData, sentData] = await Promise.all([
-      checkApiResponse(await apiFetchInbox()),
-      checkApiResponse(await apiFetchSent())
+      checkApiResponse(await inboxPromise),
+      checkApiResponse(await sentPromise)
     ]);
+    setLoadingPercent(85);
     state.inboxMessages = inboxData.messages || [];
     state.sentMessages = sentData.sent_messages || [];
     state.sentRevision = sentData.revision || '';
@@ -881,35 +1062,120 @@ async function enterParticipantDashboard() {
     updateSendFormState();
     renderInbox();
     renderSent();
+    renderProfile();
     startSentWatch();
     loadTrophyData(false).finally(() => startTrophyWatch());
   } catch (err) {
     showToast('載入資料失敗：' + err.message, 'error');
   } finally {
-    showLoading(false);
+    finishLoading();
   }
+}
+
+function updateParticipantGreeting() {
+  if (!DOM.participantGreeting) return;
+  DOM.participantGreeting.textContent = '你好，' + (state.participantId || '') + ' 👋';
+  if (DOM.participantSubgreeting) {
+    DOM.participantSubgreeting.textContent = 'Just For You ❤️';
+  }
+}
+
+function renderProfile() {
+  if (!DOM.profileStats) return;
+  const p = state.participants.find(x => x.participant_id === state.participantId) || {};
+  if (DOM.profileAvatar) DOM.profileAvatar.textContent = (state.participantId || '?').slice(0, 2);
+  if (DOM.profileName) DOM.profileName.textContent = state.participantId || '—';
+  if (DOM.profileGroup) DOM.profileGroup.textContent = p.group_id || '未分組';
+
+  const sentCount = state.sentMessages.filter(m => m.status === 'active').length;
+  const receivedCount = state.inboxMessages.length;
+  const votingLabel = state.trophy.submissionStatus === 'submitted' ? '已提交' :
+    (state.trophy.editable ? '進行中' : VOTING_STATUS_LABELS[state.trophy.votingStatus] || '—');
+
+  DOM.profileStats.innerHTML = `
+    <div class="profile-stat"><div class="profile-stat-value">${sentCount}</div><div class="profile-stat-label">已發留言</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${receivedCount}</div><div class="profile-stat-label">收到留言</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${escapeHtml(p.group_id || '—')}</div><div class="profile-stat-label">分組</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${votingLabel}</div><div class="profile-stat-label">投票狀態</div></div>
+  `;
 }
 
 async function enterAdminDashboard() {
   stopSentWatch();
   stopTrophyWatch();
   showScreen('admin');
+  switchAdminTab('dashboard');
 
   try {
-    showLoading(true);
-    const data = checkApiResponse(await apiAdminFetch());
+    showLoading(true, 0);
+    const adminPromise = apiAdminFetch().then(data => {
+      setLoadingPercent(40);
+      return data;
+    });
+    const bootstrapPromise = apiBootstrap().catch(() => ({ status: 'error' })).then(data => {
+      setLoadingPercent(70);
+      return data;
+    });
+    const [data, bootstrap] = await Promise.all([
+      checkApiResponse(await adminPromise),
+      bootstrapPromise
+    ]);
+    setLoadingPercent(90);
+    if (bootstrap.status === 'success') {
+      state.participants = bootstrap.participants || [];
+      state.apiVersion = bootstrap.version;
+    }
     state.monitorMessages = data.messages || [];
     state.monitorRevision = data.revision || '';
     state.messagingOpen = data.messaging_status === 'OPEN';
     state.knownMessageIds = new Set(state.monitorMessages.map(m => m.message_id));
     renderAdminMessages();
+    renderAdminDashboard(data);
     startAdminWatch();
-    // Trophy 資料延遲載入，切換至 Trophy 分頁時才載入（避免登入卡住）
   } catch (err) {
     showToast('載入管理員資料失敗：' + err.message, 'error');
   } finally {
-    showLoading(false);
+    finishLoading();
   }
+}
+
+function renderAdminDashboard(fetchData) {
+  const msgCount = fetchData?.messages ? fetchData.messages.length : state.monitorMessages.length;
+  const activeCount = state.monitorMessages.filter(m => m.status === 'active').length;
+
+  if (DOM.adminDashboardStats) {
+    DOM.adminDashboardStats.innerHTML = `
+      <div class="stat-card"><div class="stat-value">${state.participants.length || '—'}</div><div class="stat-label">參加者</div></div>
+      <div class="stat-card"><div class="stat-value">${msgCount}</div><div class="stat-label">留言</div></div>
+      <div class="stat-card"><div class="stat-value">${activeCount}</div><div class="stat-label">有效留言</div></div>
+      <div class="stat-card"><div class="stat-value">${state.messagingOpen ? '開啟' : '關閉'}</div><div class="stat-label">留言狀態</div></div>
+    `;
+  }
+
+  if (DOM.adminDashboardStatus) {
+    const votingLabel = state.adminTrophy.overview
+      ? (VOTING_STATUS_LABELS[state.adminTrophy.overview.voting_status] || '—')
+      : '—';
+    DOM.adminDashboardStatus.innerHTML = `
+      <div class="status-item"><span>留言功能</span><span>${state.messagingOpen ? '🟢 開啟' : '🔴 關閉'}</span></div>
+      <div class="status-item"><span>投票狀態</span><span>${votingLabel}</span></div>
+    `;
+  }
+
+  if (DOM.adminRecentActivity) {
+    const recent = state.monitorMessages.slice(0, 5);
+    DOM.adminRecentActivity.innerHTML = recent.length === 0
+      ? '<p class="form-hint">暫無最近活動</p>'
+      : recent.map(m => `
+        <div class="activity-item">
+          <span>${escapeHtml(m.sender_id)} → ${escapeHtml(m.receiver_id)}</span>
+          <time>${formatDateTime(m.created_at)}</time>
+        </div>
+      `).join('');
+  }
+
+  if (DOM.adminVersion) DOM.adminVersion.textContent = state.apiVersion ? 'v' + state.apiVersion : '—';
+  if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length || '—');
 }
 
 function handleLogout() {
@@ -951,9 +1217,16 @@ function handleLogout() {
 
 function updateSendFormState() {
   const closed = !state.messagingOpen;
-  DOM.sendClosedBanner.classList.toggle('hidden', !closed);
-  DOM.sendForm.classList.toggle('disabled', closed);
-  DOM.sendSubmit.disabled = closed;
+  if (DOM.sendClosedBanner) {
+    DOM.sendClosedBanner.textContent = '留言功能目前已關閉，請稍後再試';
+    DOM.sendClosedBanner.classList.toggle('hidden', !closed);
+  }
+  if (DOM.sendClosedState) DOM.sendClosedState.classList.toggle('hidden', !closed);
+  if (DOM.sendForm) {
+    DOM.sendForm.classList.toggle('hidden', closed);
+    DOM.sendForm.classList.toggle('disabled', closed);
+  }
+  if (DOM.sendSubmit) DOM.sendSubmit.disabled = closed;
 }
 
 function updateCharCounter() {
@@ -964,7 +1237,8 @@ function updateCharCounter() {
 
   const hasBad = containsBadWords(DOM.sendContent.value);
   DOM.badWordsWarning.classList.toggle('hidden', !hasBad);
-  DOM.sendSubmit.disabled = hasBad || !state.messagingOpen;
+  const empty = !DOM.sendContent.value.trim();
+  DOM.sendSubmit.disabled = hasBad || !state.messagingOpen || empty;
 }
 
 async function handleSendMessage(e) {
@@ -994,7 +1268,7 @@ async function handleSendMessage(e) {
       state.sentMessages = sentData.sent_messages || [];
       state.sentRevision = sentData.revision || '';
       renderSent();
-      switchParticipantTab('sent');
+      switchParticipantView('sent');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1005,19 +1279,37 @@ async function handleSendMessage(e) {
 
 function renderInbox() {
   const messages = state.inboxMessages;
+  const readIds = new Set(getReadMessageIds(state.participantId));
   DOM.inboxEmpty.classList.toggle('hidden', messages.length > 0);
   DOM.inboxList.innerHTML = '';
 
   messages.forEach(msg => {
+    const isUnread = !readIds.has(msg.message_id);
     const card = document.createElement('div');
-    card.className = 'message-card';
+    card.className = 'message-card' + (isUnread ? ' unread' : '');
     card.innerHTML = `
       <div class="message-meta">
-        <span>匿名留言</span>
-        <time datetime="${escapeHtml(msg.created_at)}">${formatDateTime(msg.created_at)}</time>
+        <span class="message-anon-badge">🔒 匿名留言</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${isUnread ? '<span class="unread-dot" aria-label="未讀"></span>' : ''}
+          <time datetime="${escapeHtml(msg.created_at)}">${formatDateTime(msg.created_at)}</time>
+        </div>
       </div>
       <div class="message-content">${escapeHtml(msg.content)}</div>
     `;
+    card.addEventListener('click', () => {
+      if (isUnread) {
+        const ids = getReadMessageIds(state.participantId);
+        if (!ids.includes(msg.message_id)) {
+          ids.push(msg.message_id);
+          saveReadMessageIds(state.participantId, ids);
+        }
+        card.classList.remove('unread');
+        card.classList.add('read-animation');
+        card.querySelector('.unread-dot')?.remove();
+        updateInboxBadge();
+      }
+    });
     DOM.inboxList.appendChild(card);
   });
 
@@ -1069,6 +1361,7 @@ function renderSent() {
         <time datetime="${escapeHtml(msg.created_at)}">${formatDateTime(msg.created_at)}</time>
       </div>
       <div class="message-content">${escapeHtml(msg.content)}</div>
+      ${isDeleted ? '' : '<span class="badge badge-pill" style="margin-top:8px">正常</span>'}
       ${deletedHtml}
     `;
     DOM.sentList.appendChild(card);
@@ -1106,7 +1399,7 @@ function shouldApplySentWatch(data) {
 function applySentMessages(messages, revision) {
   state.sentMessages = messages;
   state.sentRevision = revision;
-  if (document.querySelector('#tab-sent.active')) {
+  if (document.getElementById('view-sent')?.classList.contains('active')) {
     renderSent();
   }
 }
@@ -1203,9 +1496,18 @@ function stopAdminWatch() {
 
 function getFilteredAdminMessages() {
   const filter = state.monitorViewFilter;
-  if (filter === 'active') return state.monitorMessages.filter(m => m.status === 'active');
-  if (filter === 'deleted') return state.monitorMessages.filter(m => m.status === 'deleted');
-  return state.monitorMessages;
+  const search = (DOM.adminMsgSearch?.value || '').trim().toUpperCase();
+  let messages = state.monitorMessages;
+  if (filter === 'active') messages = messages.filter(m => m.status === 'active');
+  else if (filter === 'deleted') messages = messages.filter(m => m.status === 'deleted');
+  if (search) {
+    messages = messages.filter(m =>
+      m.sender_id.toUpperCase().includes(search) ||
+      m.receiver_id.toUpperCase().includes(search) ||
+      m.content.toUpperCase().includes(search)
+    );
+  }
+  return messages;
 }
 
 function renderAdminMessages() {
@@ -1326,6 +1628,7 @@ async function handleSetMessagingStatus(status, btn) {
       const data = checkApiResponse(await apiSetMessagingStatus(status));
       state.messagingOpen = (data.messaging_status || status) === 'OPEN';
       showToast(status === 'OPEN' ? '留言功能已開啟' : '留言功能已關閉', 'success');
+      renderAdminDashboard();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1369,6 +1672,7 @@ function showTrophyResultsModal(awards) {
   DOM.trophyResultsModal.classList.remove('hidden');
   document.body.classList.add('modal-open');
   state.trophy.resultsModalRevision = state.trophy.trophyRevision;
+  launchConfetti();
 }
 
 function hideTrophyResultsModal() {
@@ -1388,16 +1692,16 @@ function maybeShowPublishedModal(isNewPublish) {
 }
 
 function updateTrophyTabBadge(show) {
-  const trophyTab = document.querySelector('#screen-participant .tab-btn[data-tab="trophy"]');
-  if (!trophyTab) return;
-  let badge = trophyTab.querySelector('.tab-badge-results');
+  const trophyNav = document.querySelector('.bottom-nav-item[data-tab="trophy"]');
+  if (!trophyNav) return;
+  let badge = trophyNav.querySelector('.bottom-nav-badge-results');
   if (show && state.trophy.votingStatus === 'PUBLISHED') {
     if (!badge) {
       badge = document.createElement('span');
-      badge.className = 'tab-badge tab-badge-results';
+      badge.className = 'bottom-nav-badge bottom-nav-badge-results';
       badge.textContent = '!';
       badge.title = '結果已公布';
-      trophyTab.appendChild(badge);
+      trophyNav.appendChild(badge);
     }
   } else if (badge) {
     badge.remove();
@@ -1448,16 +1752,24 @@ function renderParticipantTrophyResults() {
 function updateTrophyStatusBanner() {
   const status = state.trophy.votingStatus;
   const label = VOTING_STATUS_LABELS[status] || status;
-  DOM.trophyStatusBanner.textContent = label;
-  DOM.trophyStatusBanner.className = 'status-banner';
-  if (status === 'VOTING_OPEN') {
-    DOM.trophyStatusBanner.classList.add('status-banner-success');
-  } else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') {
-    DOM.trophyStatusBanner.classList.add('status-banner-warning');
-  } else if (status === 'PUBLISHED') {
-    DOM.trophyStatusBanner.classList.add('status-banner-success');
+  const isDraft = status === 'DRAFT';
+  const isSubmitted = state.trophy.submissionStatus === 'submitted' && !state.trophy.editable;
+
+  if (DOM.trophyNotOpen) {
+    DOM.trophyNotOpen.classList.toggle('hidden', !isDraft || state.trophy.showResults);
   }
-  DOM.trophyStatusBanner.classList.remove('hidden');
+  if (DOM.trophyVotingSection) {
+    DOM.trophyVotingSection.classList.toggle('hidden', isDraft || state.trophy.showResults || isSubmitted);
+  }
+
+  if (DOM.trophyStatusBanner) {
+    DOM.trophyStatusBanner.textContent = label;
+    DOM.trophyStatusBanner.className = 'status-banner';
+    if (status === 'VOTING_OPEN') DOM.trophyStatusBanner.classList.add('status-banner-success');
+    else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') DOM.trophyStatusBanner.classList.add('status-banner-warning');
+    else if (status === 'PUBLISHED') DOM.trophyStatusBanner.classList.add('status-banner-success');
+    DOM.trophyStatusBanner.classList.toggle('hidden', isDraft && !state.trophy.showResults);
+  }
 }
 
 function updateTrophyProgress() {
@@ -1517,7 +1829,10 @@ function renderTrophyTeammates() {
 
     card.innerHTML = `
       <div class="trophy-card-header">
-        ${escapeHtml(tid)}
+        <div class="trophy-card-name">
+          <span class="trophy-card-avatar">${escapeHtml(tid.slice(0, 2))}</span>
+          ${escapeHtml(tid)}
+        </div>
         ${selected.length > 0 ? `<span class="assigned-count">${selected.length} 個 Trophy</span>` : ''}
       </div>
       <div class="trophy-chips">${chips}</div>
@@ -1536,8 +1851,9 @@ async function loadTrophyData(force) {
   if (state.trophy.loading) return;
   try {
     state.trophy.loading = true;
-    if (force || !state.trophy.loaded) showLoading(true);
+    if (force || !state.trophy.loaded) showLoading(true, 15);
     const data = checkApiResponse(await apiTrophyBootstrap());
+    setLoadingPercent(90);
     state.trophy.loaded = true;
     state.trophy.votingStatus = data.voting_status;
     state.trophy.trophies = filterValidTrophies(data.trophies || []);
@@ -1556,11 +1872,12 @@ async function loadTrophyData(force) {
     maybeShowPublishedModal(state.trophy.votingStatus === 'PUBLISHED');
     updateTrophyProgress();
     renderTrophyTeammates();
+    renderProfile();
   } catch (err) {
     showToast('載入 Trophy 資料失敗：' + err.message, 'error');
   } finally {
     state.trophy.loading = false;
-    showLoading(false);
+    if (!DOM.loadingOverlay.classList.contains('hidden')) finishLoading();
   }
 }
 
@@ -1594,6 +1911,7 @@ async function handleTrophySubmitAll() {
       checkApiResponse(await apiTrophySubmit(pairings));
       showToast('投票已提交', 'success');
       await loadTrophyData();
+      switchParticipantView('trophy-submitted');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1606,12 +1924,25 @@ async function loadAdminTrophyData() {
   if (state.adminTrophy.loading) return;
   try {
     state.adminTrophy.loading = true;
-    showLoading(true);
+    showLoading(true, 0);
+    const overviewPromise = apiAdminTrophyOverview().then(data => {
+      setLoadingPercent(30);
+      return data;
+    });
+    const auditPromise = apiAdminTrophyAudit().then(data => {
+      setLoadingPercent(55);
+      return data;
+    });
+    const resultsPromise = apiAdminTrophyResults().then(data => {
+      setLoadingPercent(80);
+      return data;
+    });
     const [overview, audit, results] = await Promise.all([
-      checkApiResponse(await apiAdminTrophyOverview()),
-      checkApiResponse(await apiAdminTrophyAudit()),
-      checkApiResponse(await apiAdminTrophyResults())
+      checkApiResponse(await overviewPromise),
+      checkApiResponse(await auditPromise),
+      checkApiResponse(await resultsPromise)
     ]);
+    setLoadingPercent(95);
 
     state.adminTrophy.overview = overview;
     state.adminTrophy.auditVotes = audit.votes || [];
@@ -1627,11 +1958,13 @@ async function loadAdminTrophyData() {
     renderTrophySummary();
     populateAuditTrophyFilter();
     updateAdminVotingButtons();
+    updateVotingStepper();
+    renderAdminDashboard();
   } catch (err) {
     showToast('載入 Trophy 管理資料失敗：' + err.message, 'error');
   } finally {
     state.adminTrophy.loading = false;
-    showLoading(false);
+    finishLoading();
   }
 }
 
@@ -1736,6 +2069,18 @@ function renderAuditTable() {
       <td>${escapeHtml(v.trophy_name)}</td>
     </tr>
   `).join('');
+
+  if (DOM.auditCards) {
+    DOM.auditCards.innerHTML = filtered.length === 0
+      ? '<p class="form-hint">暫無投票紀錄</p>'
+      : filtered.map(v => `
+        <div class="audit-card">
+          <div class="audit-card-route">${escapeHtml(v.sender_id)} → ${escapeHtml(v.receiver_id)}</div>
+          <div class="audit-card-trophy">🏆 ${escapeHtml(v.trophy_name)}</div>
+          ${v.submitted_at ? `<div class="audit-card-time">${formatDateTime(v.submitted_at)}</div>` : ''}
+        </div>
+      `).join('');
+  }
 }
 
 function renderProfiles() {
@@ -1750,22 +2095,62 @@ function renderProfiles() {
     }).join('');
 
     return `<div class="profile-card">
-      <h4>${escapeHtml(profile.participant_id)}</h4>
+      <div class="profile-card-header">
+        <span>${escapeHtml(profile.participant_id)}</span>
+        <span class="chip chip-secondary">${profile.vote_count || 0} 票</span>
+      </div>
       <ul class="profile-trophy-list">${trophies || '<li>尚未獲得 Trophy</li>'}</ul>
     </div>`;
   }).join('');
 }
 
 function renderTrophySummary() {
-  DOM.summaryList.innerHTML = state.adminTrophy.trophySummary.map(item => {
-    const winners = (item.winners || []).map(w =>
-      `<span class="winner-tag">${escapeHtml(w.participant_id)}</span>`
+  DOM.summaryList.innerHTML = state.adminTrophy.trophySummary.map((item, i) => {
+    const winners = (item.winners || []);
+    const winnerHtml = winners.map(w =>
+      `<div class="summary-winner">${escapeHtml(w.participant_id)} · ${w.vote_count || 0} 票</div>`
     ).join('');
-    return `<div class="summary-card">
-      <h4>${escapeHtml(item.trophy_name)}</h4>
-      <div class="summary-winners">${winners || '暫無得主'}</div>
+    const tieNote = item.is_tie ? '<div class="summary-tie">⚠ 平票</div>' : '';
+    const ranking = (item.top_ranking || []).slice(0, 3).map((r, idx) =>
+      `<div>${idx + 1}. ${escapeHtml(r.participant_id)} (${r.vote_count} 票)</div>`
+    ).join('');
+
+    return `<div class="summary-item" data-idx="${i}">
+      <button type="button" class="summary-item-header">${escapeHtml(item.trophy_name)}</button>
+      <div class="summary-item-body">
+        ${tieNote}
+        ${winnerHtml || '<p>暫無得主</p>'}
+        ${ranking ? '<div style="margin-top:8px;font-weight:600">Top 3</div>' + ranking : ''}
+      </div>
     </div>`;
   }).join('');
+
+  DOM.summaryList.querySelectorAll('.summary-item-header').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.summary-item').classList.toggle('open');
+    });
+  });
+}
+
+function updateVotingStepper() {
+  const status = state.adminTrophy.overview?.voting_status || 'DRAFT';
+  const steps = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
+  const currentIdx = steps.indexOf(status);
+
+  if (DOM.adminVotingStatusBadge) {
+    DOM.adminVotingStatusBadge.textContent = VOTING_STATUS_LABELS[status] || status;
+  }
+
+  document.querySelectorAll('.stepper-step').forEach(el => {
+    const step = el.dataset.step;
+    const idx = steps.indexOf(step);
+    el.classList.toggle('active', step === status);
+    el.classList.toggle('done', idx >= 0 && idx < currentIdx);
+  });
+
+  document.querySelectorAll('.stepper-line').forEach((line, i) => {
+    line.classList.toggle('done', i < currentIdx);
+  });
 }
 
 function updateAdminVotingButtons() {
@@ -1841,14 +2226,15 @@ async function selectAdminParticipant(participantId) {
   DOM.adminParticipantDetail.classList.remove('hidden');
 
   try {
-    showLoading(true);
+    showLoading(true, 20);
     const data = checkApiResponse(await apiAdminParticipantDetail(participantId));
+    setLoadingPercent(90);
     state.adminParticipant.detail = data;
     renderAdminParticipantDetail(data);
   } catch (err) {
     showToast('載入參加者資料失敗：' + err.message, 'error');
   } finally {
-    showLoading(false);
+    finishLoading();
   }
 }
 
@@ -1960,6 +2346,67 @@ async function handleAdminDeleteAllRecords() {
   })());
 }
 
+async function handleAdminBulkAutoGroup() {
+  if (!window.confirm('確定要依參加者編號自動修正全部分組嗎？\n（例如 1A→GROUP_1、STAFF→GROUP_STAFF）')) return;
+
+  await runProgressButton(DOM.adminBulkAutoGroup, (async () => {
+    try {
+      const data = checkApiResponse(await apiAdminBulkUpdateParticipants('auto_group'));
+      showToast(data.message || ('已修正 ' + (data.updated || 0) + ' 位參加者'), 'success');
+      await reloadParticipantsAfterBulk();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleAdminBulkApplyGroup() {
+  const groupId = (DOM.adminBulkGroup.value || DOM.adminEditGroup.value || '').trim();
+  if (!groupId) {
+    showToast('請在「統一分組」欄位輸入 group_id', 'error');
+    return;
+  }
+  if (!window.confirm('確定要將分組「' + groupId + '」套用到全部 ' + state.participants.length + ' 位參加者嗎？')) return;
+
+  await runProgressButton(DOM.adminBulkApplyGroup, (async () => {
+    try {
+      const data = checkApiResponse(await apiAdminBulkUpdateParticipants('set_group_id', groupId));
+      showToast(data.message || ('已套用到 ' + (data.updated || 0) + ' 位參加者'), 'success');
+      await reloadParticipantsAfterBulk();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleAdminBulkDeleteAll() {
+  const count = state.participants.length;
+  if (!window.confirm('確定要刪除全部 ' + count + ' 位參加者的所有紀錄嗎？\n包括：已發留言、Trophy 投票、結果。\n此操作無法復原！')) return;
+  if (!window.confirm('再次確認：真的要清除所有參加者的全部紀錄嗎？')) return;
+
+  await runProgressButton(DOM.adminBulkDeleteAll, (async () => {
+    try {
+      const data = checkApiResponse(await apiAdminBulkDeleteAllRecords());
+      showToast(data.message || ('已處理 ' + (data.participants_processed || 0) + ' 位參加者'), 'success');
+      const full = checkApiResponse(await apiAdminFetch());
+      applyAdminMessages(full.messages || [], full.revision || '');
+      await reloadParticipantsAfterBulk();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function reloadParticipantsAfterBulk() {
+  const data = checkApiResponse(await apiBootstrap());
+  state.participants = data.participants || [];
+  setParticipantsCache(state.participants);
+  initAdminParticipantCombobox();
+  if (state.adminParticipant.selectedId) {
+    await refreshAdminParticipantDetail();
+  }
+}
+
 function initAdminParticipantsPanel() {
   initAdminParticipantCombobox();
   if (state.adminParticipant.selectedId) {
@@ -1967,38 +2414,53 @@ function initAdminParticipantsPanel() {
   }
 }
 
-// ─── Tab Navigation ───────────────────────────────────────────────────────────
+// ─── Navigation ───────────────────────────────────────────────────────────
 
-function switchParticipantTab(tabName) {
-  document.querySelectorAll('#screen-participant .tab-btn').forEach(btn => {
-    const isActive = btn.dataset.tab === tabName;
+const BOTTOM_NAV_TABS = ['home', 'inbox', 'trophy', 'profile'];
+
+function switchParticipantView(viewName) {
+  document.querySelectorAll('#screen-participant .app-view').forEach(view => {
+    const isActive = view.dataset.view === viewName;
+    view.classList.toggle('active', isActive);
+    view.classList.toggle('hidden', !isActive);
+  });
+
+  const isBottomTab = BOTTOM_NAV_TABS.includes(viewName);
+  document.querySelectorAll('#screen-participant .bottom-nav-item').forEach(btn => {
+    const tab = btn.dataset.tab;
+    const isActive = isBottomTab && tab === viewName;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-selected', isActive);
   });
-  document.querySelectorAll('#screen-participant .tab-panel').forEach(panel => {
-    panel.classList.toggle('active', panel.id === 'tab-' + tabName);
-    panel.classList.toggle('hidden', panel.id !== 'tab-' + tabName);
-  });
 
-  if (tabName === 'inbox') {
+  if (viewName === 'inbox') {
     markAllInboxRead();
-  } else if (tabName === 'trophy') {
+  } else if (viewName === 'trophy') {
     loadTrophyData(true);
+  } else if (viewName === 'profile') {
+    renderProfile();
   }
 }
 
 function switchAdminTab(tabName) {
-  document.querySelectorAll('.admin-mode-nav .tab-btn').forEach(btn => {
+  document.querySelectorAll('.admin-bottom-nav .bottom-nav-item').forEach(btn => {
     const isActive = btn.dataset.adminTab === tabName;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-selected', isActive);
   });
-  DOM.adminMessagesPanel.classList.toggle('active', tabName === 'messages');
-  DOM.adminMessagesPanel.classList.toggle('hidden', tabName !== 'messages');
-  DOM.adminTrophyPanel.classList.toggle('active', tabName === 'trophy');
-  DOM.adminTrophyPanel.classList.toggle('hidden', tabName !== 'trophy');
-  DOM.adminParticipantsPanel.classList.toggle('active', tabName === 'participants');
-  DOM.adminParticipantsPanel.classList.toggle('hidden', tabName !== 'participants');
+
+  const panels = {
+    dashboard: DOM.adminDashboardPanel,
+    messages: DOM.adminMessagesPanel,
+    voting: DOM.adminTrophyPanel,
+    results: DOM.adminResultsPanel,
+    settings: DOM.adminParticipantsPanel
+  };
+  Object.entries(panels).forEach(([key, panel]) => {
+    if (!panel) return;
+    panel.classList.toggle('active', key === tabName);
+    panel.classList.toggle('hidden', key !== tabName);
+  });
 
   if (tabName === 'messages') {
     apiAdminFetch().then(data => {
@@ -2007,10 +2469,13 @@ function switchAdminTab(tabName) {
       }
     }).catch(() => {});
     startAdminWatch();
-  } else if (tabName === 'trophy') {
+  } else if (tabName === 'voting') {
     stopAdminWatch();
     loadAdminTrophyData();
-  } else if (tabName === 'participants') {
+  } else if (tabName === 'results') {
+    stopAdminWatch();
+    loadAdminTrophyData();
+  } else if (tabName === 'settings') {
     stopAdminWatch();
     apiBootstrap().then(data => {
       if (data.status === 'success') {
@@ -2018,7 +2483,17 @@ function switchAdminTab(tabName) {
         setParticipantsCache(state.participants);
       }
       initAdminParticipantsPanel();
+      if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length);
     }).catch(() => initAdminParticipantsPanel());
+  } else if (tabName === 'dashboard') {
+    stopAdminWatch();
+    apiAdminFetch().then(data => {
+      if (data.status === 'success') {
+        state.monitorMessages = data.messages || [];
+        renderAdminDashboard(data);
+      }
+    }).catch(() => renderAdminDashboard());
+    loadAdminTrophyData();
   }
 }
 
@@ -2058,11 +2533,23 @@ function bindEvents() {
     if (e.target === DOM.trophyResultsModal) hideTrophyResultsModal();
   });
 
-  document.querySelectorAll('#screen-participant .tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchParticipantTab(btn.dataset.tab));
+  if (DOM.trophySubmittedHome) {
+    DOM.trophySubmittedHome.addEventListener('click', () => switchParticipantView('home'));
+  }
+
+  document.querySelectorAll('#screen-participant .bottom-nav-item').forEach(btn => {
+    btn.addEventListener('click', () => switchParticipantView(btn.dataset.tab));
   });
 
-  document.querySelectorAll('.admin-mode-nav .tab-btn').forEach(btn => {
+  document.querySelectorAll('#screen-participant .home-card').forEach(card => {
+    card.addEventListener('click', () => switchParticipantView(card.dataset.nav));
+  });
+
+  document.querySelectorAll('#screen-participant .back-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchParticipantView(btn.dataset.back || 'home'));
+  });
+
+  document.querySelectorAll('.admin-bottom-nav .bottom-nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchAdminTab(btn.dataset.adminTab));
   });
 
@@ -2070,14 +2557,18 @@ function bindEvents() {
     btn.addEventListener('click', () => switchResultTab(btn.dataset.resultTab));
   });
 
-  document.querySelectorAll('.filter-btn').forEach(btn => {
+  document.querySelectorAll('.chip-filter').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.chip-filter').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.monitorViewFilter = btn.dataset.filter;
       renderAdminMessages();
     });
   });
+
+  if (DOM.adminMsgSearch) {
+    DOM.adminMsgSearch.addEventListener('input', renderAdminMessages);
+  }
 
   DOM.adminEnableMsg.addEventListener('click', () => handleSetMessagingStatus('OPEN', DOM.adminEnableMsg));
   DOM.adminDisableMsg.addEventListener('click', () => handleSetMessagingStatus('CLOSE', DOM.adminDisableMsg));
@@ -2091,6 +2582,9 @@ function bindEvents() {
   DOM.adminDeleteMessages.addEventListener('click', handleAdminDeleteMessages);
   DOM.adminResetTrophy.addEventListener('click', handleAdminResetTrophy);
   DOM.adminDeleteAllRecords.addEventListener('click', handleAdminDeleteAllRecords);
+  DOM.adminBulkAutoGroup.addEventListener('click', handleAdminBulkAutoGroup);
+  DOM.adminBulkApplyGroup.addEventListener('click', handleAdminBulkApplyGroup);
+  DOM.adminBulkDeleteAll.addEventListener('click', handleAdminBulkDeleteAll);
   DOM.adminEditPhone.addEventListener('input', () => {
     DOM.adminEditPhone.value = normalizePhone(DOM.adminEditPhone.value);
   });
@@ -2124,7 +2618,7 @@ function bindEvents() {
 function init() {
   cacheDOM();
   bindEvents();
-  showScreen('login');
+  showSplashThenLogin();
   bootstrapApp();
 }
 

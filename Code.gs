@@ -10,7 +10,7 @@
  * 4. Copy deployment URL to app.js → API_URL
  */
 
-const SCRIPT_VERSION = 13;
+const SCRIPT_VERSION = 14;
 const ADMIN_ID = 'ADMIN';
 const ADMIN_PHONE = '23082026';
 const LEGACY_ADMIN_PASSWORD = 'TNIT23082026';
@@ -68,6 +68,10 @@ function doGet(e) {
         return jsonResponse(adminUpdateParticipant(params));
       case 'admin_delete_participant_records':
         return jsonResponse(adminDeleteParticipantRecords(params));
+      case 'admin_bulk_update_participants':
+        return jsonResponse(adminBulkUpdateParticipants(params));
+      case 'admin_bulk_delete_all_records':
+        return jsonResponse(adminBulkDeleteAllRecords(params));
       default:
         return jsonResponse({ status: 'error', message: '未知的操作：' + action });
     }
@@ -100,6 +104,10 @@ function doPost(e) {
         return jsonResponse(adminUpdateParticipant(body));
       case 'admin_delete_participant_records':
         return jsonResponse(adminDeleteParticipantRecords(body));
+      case 'admin_bulk_update_participants':
+        return jsonResponse(adminBulkUpdateParticipants(body));
+      case 'admin_bulk_delete_all_records':
+        return jsonResponse(adminBulkDeleteAllRecords(body));
       default:
         if (!action && body.sender_id && body.receiver_id && body.content !== undefined) {
           return jsonResponse(sendMessage(body));
@@ -1349,6 +1357,63 @@ function adminDeleteParticipantRecords(params) {
     messages_deleted: messagesDeleted,
     trophy_reset: deleteTrophy,
     results_cleared: deleteResults
+  });
+}
+
+function adminBulkUpdateParticipants(params) {
+  requireAdmin(params);
+  const mode = String(params.mode || '').toLowerCase();
+  const participants = getParticipantsList();
+  let updated = 0;
+
+  if (mode === 'auto_group') {
+    participants.forEach(function (p) {
+      var gid = deriveGroupIdFromParticipantId(p.participant_id);
+      if (updateParticipantRecord(p.participant_id, { group_id: gid })) {
+        updated++;
+      }
+    });
+    return successResponse({
+      mode: mode,
+      updated: updated,
+      message: '已自動修正 ' + updated + ' 位參加者的分組'
+    });
+  }
+
+  if (mode === 'set_group_id') {
+    var groupId = String(params.group_id || '').trim();
+    if (!groupId) return errorResponse('請提供分組 group_id');
+    participants.forEach(function (p) {
+      if (updateParticipantRecord(p.participant_id, { group_id: groupId })) {
+        updated++;
+      }
+    });
+    return successResponse({
+      mode: mode,
+      updated: updated,
+      group_id: groupId,
+      message: '已將分組套用到 ' + updated + ' 位參加者'
+    });
+  }
+
+  return errorResponse('無效的批量模式');
+}
+
+function adminBulkDeleteAllRecords(params) {
+  requireAdmin(params);
+  var participants = getParticipantsList();
+  var totalMessages = 0;
+
+  participants.forEach(function (p) {
+    totalMessages += deleteParticipantSentMessages(p.participant_id);
+    resetParticipantTrophyData(p.participant_id);
+    clearTrophyResultsForParticipant(p.participant_id);
+  });
+
+  return successResponse({
+    participants_processed: participants.length,
+    messages_deleted: totalMessages,
+    message: '已清除 ' + participants.length + ' 位參加者的全部紀錄'
   });
 }
 
