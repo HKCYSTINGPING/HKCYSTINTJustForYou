@@ -1,16 +1,18 @@
 /**
  * HKCYSTINTJustForYou — Google Apps Script Backend
- * SCRIPT_VERSION = 13
+ * SCRIPT_VERSION = 15
+ *
+ * Spreadsheet:
+ * https://docs.google.com/spreadsheets/d/1xFLUikp5TEk4e5pd0B7VNbE7vPoZ-iViioomTjbB3RU/edit
  *
  * Deployment:
- * 1. Create Google Spreadsheet with tabs: Participants, Messages, Open, Trophy,
- *    Trophy_log, Trophy_draft, Trophy_submissions, Trophy_results, Voting
- * 2. Paste this file into Apps Script editor, bind to spreadsheet
- * 3. Deploy as Web App: Execute as Me, Access: Anyone
- * 4. Copy deployment URL to app.js → API_URL
+ * 1. Open the spreadsheet → Extensions > Apps Script → paste this file
+ * 2. Deploy as Web App: Execute as Me, Access: Anyone
+ * 3. Copy deployment URL to app.js → API_URL
  */
 
 const SCRIPT_VERSION = 15;
+const SPREADSHEET_ID = '1xFLUikp5TEk4e5pd0B7VNbE7vPoZ-iViioomTjbB3RU';
 const ADMIN_ID = 'ADMIN';
 const ADMIN_PHONE = '23082026';
 const LEGACY_ADMIN_PASSWORD = 'TNIT23082026';
@@ -164,6 +166,9 @@ function errorResponse(message) {
 // ─── Sheet Access ───────────────────────────────────────────────────────────
 
 function getSpreadsheet() {
+  if (SPREADSHEET_ID) {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  }
   return SpreadsheetApp.getActiveSpreadsheet();
 }
 
