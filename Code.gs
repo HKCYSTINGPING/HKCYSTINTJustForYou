@@ -10,7 +10,7 @@
  * 4. Copy deployment URL to app.js → API_URL
  */
 
-const SCRIPT_VERSION = 14;
+const SCRIPT_VERSION = 15;
 const ADMIN_ID = 'ADMIN';
 const ADMIN_PHONE = '23082026';
 const LEGACY_ADMIN_PASSWORD = 'TNIT23082026';
@@ -73,6 +73,14 @@ function doGet(e) {
       case 'admin_bulk_delete_all_records':
         return jsonResponse(adminBulkDeleteAllRecords(params));
       default:
+        if (!action) {
+          return jsonResponse({
+            status: 'success',
+            service: 'HKCYS TINT Just For You API',
+            version: SCRIPT_VERSION,
+            hint: '前端請使用 ?action=bootstrap 等參數；直接開啟此網址屬正常現象'
+          });
+        }
         return jsonResponse({ status: 'error', message: '未知的操作：' + action });
     }
   } catch (err) {
@@ -108,11 +116,21 @@ function doPost(e) {
         return jsonResponse(adminBulkUpdateParticipants(body));
       case 'admin_bulk_delete_all_records':
         return jsonResponse(adminBulkDeleteAllRecords(body));
+      case 'send_message':
+        return jsonResponse(sendMessage(body));
       default:
         if (!action && body.sender_id && body.receiver_id && body.content !== undefined) {
           return jsonResponse(sendMessage(body));
         }
-        return jsonResponse({ status: 'error', message: '未知的 POST 操作' });
+        if (!action) {
+          return jsonResponse({
+            status: 'success',
+            service: 'HKCYS TINT Just For You API',
+            version: SCRIPT_VERSION,
+            hint: 'POST 請在 body 加入 action 欄位'
+          });
+        }
+        return jsonResponse({ status: 'error', message: '未知的 POST 操作：' + action });
     }
   } catch (err) {
     return jsonResponse({ status: 'error', message: String(err.message || err) });

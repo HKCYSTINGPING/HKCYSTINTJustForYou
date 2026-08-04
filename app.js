@@ -566,7 +566,7 @@ async function apiBootstrap() {
 
 async function apiFetchInbox() {
   return apiGet({
-    fetch_type: 'inbox',
+    action: 'inbox',
     participant_id: state.participantId,
     phone_number: state.phoneNumber
   });
@@ -574,7 +574,7 @@ async function apiFetchInbox() {
 
 async function apiFetchSent() {
   return apiGet({
-    fetch_type: 'sent',
+    action: 'sent',
     participant_id: state.participantId,
     phone_number: state.phoneNumber
   });
@@ -582,7 +582,7 @@ async function apiFetchSent() {
 
 async function apiWatchSent(revision, options = {}) {
   return apiGet({
-    fetch_type: 'watch_sent_messages',
+    action: 'watch_sent_messages',
     participant_id: state.participantId,
     phone_number: state.phoneNumber,
     revision: revision
@@ -591,6 +591,7 @@ async function apiWatchSent(revision, options = {}) {
 
 async function apiSendMessage(receiverId, content) {
   return apiPost({
+    action: 'send_message',
     sender_id: state.participantId,
     phone: state.phoneNumber,
     receiver_id: receiverId,
@@ -600,7 +601,7 @@ async function apiSendMessage(receiverId, content) {
 
 async function apiAdminFetch() {
   return apiGet({
-    fetch_type: 'admin',
+    action: 'admin',
     participant_id: CONFIG.ADMIN_ID,
     phone_number: CONFIG.ADMIN_PHONE
   });
