@@ -6,7 +6,7 @@
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwMYdGrwHEvW_9M8sH3apxJnlXEAHUr4oQs3Ac-DkEHh5_zkgI0YP6nCPE0L4N9rUQThg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwNHsaZ4-smjmdCaYvmNcANIhIiXtUWUH5QHG0KJwSwpq4RxlelkRSa7QRJXFJQKpwV6A/exec';
 
 const CONFIG = {
   PARTICIPANTS_CACHE_KEY: 'hkcy_participants',
