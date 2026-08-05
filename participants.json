@@ -1,0 +1,251 @@
+{
+  "generated_at": "2026-08-05T12:05:44+00:00",
+  "count": 49,
+  "participants": [
+    {
+      "participant_id": "1A",
+      "group_id": "GROUP_1",
+      "phone_number": "98765432"
+    },
+    {
+      "participant_id": "1B",
+      "group_id": "GROUP_1",
+      "phone_number": "98765438"
+    },
+    {
+      "participant_id": "1C",
+      "group_id": "GROUP_1",
+      "phone_number": "98765444"
+    },
+    {
+      "participant_id": "1D",
+      "group_id": "GROUP_1",
+      "phone_number": "98765450"
+    },
+    {
+      "participant_id": "1E",
+      "group_id": "GROUP_1",
+      "phone_number": "98765456"
+    },
+    {
+      "participant_id": "1F",
+      "group_id": "GROUP_1",
+      "phone_number": "98765462"
+    },
+    {
+      "participant_id": "2A",
+      "group_id": "GROUP_2",
+      "phone_number": "98765433"
+    },
+    {
+      "participant_id": "2B",
+      "group_id": "GROUP_2",
+      "phone_number": "98765439"
+    },
+    {
+      "participant_id": "2C",
+      "group_id": "GROUP_2",
+      "phone_number": "98765445"
+    },
+    {
+      "participant_id": "2D",
+      "group_id": "GROUP_2",
+      "phone_number": "98765451"
+    },
+    {
+      "participant_id": "2E",
+      "group_id": "GROUP_2",
+      "phone_number": "98765457"
+    },
+    {
+      "participant_id": "2F",
+      "group_id": "GROUP_2",
+      "phone_number": "98765463"
+    },
+    {
+      "participant_id": "3A",
+      "group_id": "GROUP_3",
+      "phone_number": "98765434"
+    },
+    {
+      "participant_id": "3B",
+      "group_id": "GROUP_3",
+      "phone_number": "98765440"
+    },
+    {
+      "participant_id": "3C",
+      "group_id": "GROUP_3",
+      "phone_number": "98765446"
+    },
+    {
+      "participant_id": "3D",
+      "group_id": "GROUP_3",
+      "phone_number": "98765452"
+    },
+    {
+      "participant_id": "3E",
+      "group_id": "GROUP_3",
+      "phone_number": "98765458"
+    },
+    {
+      "participant_id": "3F",
+      "group_id": "GROUP_3",
+      "phone_number": "98765464"
+    },
+    {
+      "participant_id": "4A",
+      "group_id": "GROUP_4",
+      "phone_number": "98765435"
+    },
+    {
+      "participant_id": "4B",
+      "group_id": "GROUP_4",
+      "phone_number": "98765441"
+    },
+    {
+      "participant_id": "4C",
+      "group_id": "GROUP_4",
+      "phone_number": "98765447"
+    },
+    {
+      "participant_id": "4D",
+      "group_id": "GROUP_4",
+      "phone_number": "98765453"
+    },
+    {
+      "participant_id": "4E",
+      "group_id": "GROUP_4",
+      "phone_number": "98765459"
+    },
+    {
+      "participant_id": "4F",
+      "group_id": "GROUP_4",
+      "phone_number": "98765465"
+    },
+    {
+      "participant_id": "5A",
+      "group_id": "GROUP_5",
+      "phone_number": "98765436"
+    },
+    {
+      "participant_id": "5B",
+      "group_id": "GROUP_5",
+      "phone_number": "98765442"
+    },
+    {
+      "participant_id": "5C",
+      "group_id": "GROUP_5",
+      "phone_number": "98765448"
+    },
+    {
+      "participant_id": "5D",
+      "group_id": "GROUP_5",
+      "phone_number": "98765454"
+    },
+    {
+      "participant_id": "5E",
+      "group_id": "GROUP_5",
+      "phone_number": "98765460"
+    },
+    {
+      "participant_id": "5F",
+      "group_id": "GROUP_5",
+      "phone_number": "98765466"
+    },
+    {
+      "participant_id": "6A",
+      "group_id": "GROUP_6",
+      "phone_number": "98765437"
+    },
+    {
+      "participant_id": "6B",
+      "group_id": "GROUP_6",
+      "phone_number": "98765443"
+    },
+    {
+      "participant_id": "6C",
+      "group_id": "GROUP_6",
+      "phone_number": "98765449"
+    },
+    {
+      "participant_id": "6D",
+      "group_id": "GROUP_6",
+      "phone_number": "98765455"
+    },
+    {
+      "participant_id": "6E",
+      "group_id": "GROUP_6",
+      "phone_number": "98765461"
+    },
+    {
+      "participant_id": "6F",
+      "group_id": "GROUP_6",
+      "phone_number": "98765462"
+    },
+    {
+      "participant_id": "BRO",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "14141414"
+    },
+    {
+      "participant_id": "CHERYL",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "00000000"
+    },
+    {
+      "participant_id": "CHUNJAI",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "55555555"
+    },
+    {
+      "participant_id": "IRENE",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "66666666"
+    },
+    {
+      "participant_id": "KAKA",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "77777777"
+    },
+    {
+      "participant_id": "KAYI",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "88888888"
+    },
+    {
+      "participant_id": "KELLY",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "13131313"
+    },
+    {
+      "participant_id": "PHOEBE",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "22222222"
+    },
+    {
+      "participant_id": "QQ",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "12121212"
+    },
+    {
+      "participant_id": "RENAE",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "44444444"
+    },
+    {
+      "participant_id": "RIGHT",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "33333333"
+    },
+    {
+      "participant_id": "WILL",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "11111111"
+    },
+    {
+      "participant_id": "WINGLAM",
+      "group_id": "GROUP_STAFF",
+      "phone_number": "99999999"
+    }
+  ]
+}

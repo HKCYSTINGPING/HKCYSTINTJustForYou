@@ -11,7 +11,7 @@
  * 3. Copy deployment URL to app.js → API_URL
  */
 
-const SCRIPT_VERSION = 16;
+const SCRIPT_VERSION = 17;
 const SPREADSHEET_ID = '1xFLUikp5TEk4e5pd0B7VNbE7vPoZ-iViioomTjbB3RU';
 const ADMIN_ID = 'ADMIN';
 const ADMIN_PHONE = '23082026';
@@ -163,6 +163,70 @@ function errorResponse(message) {
   return { status: 'error', message: message };
 }
 
+// ─── Cache ──────────────────────────────────────────────────────────────────
+
+/**
+ * Polling endpoints used to read whole sheets just to answer "did anything
+ * change?". The script cache is shared by every caller, so one sheet read now
+ * serves all clients polling inside the TTL window instead of one read each.
+ *
+ * Writes clear the affected keys, so the TTLs are only a backstop against a
+ * missed invalidation rather than the normal path to freshness.
+ */
+const CACHE_TTL_PARTICIPANTS = 900;
+const CACHE_TTL_REVISION = 15;
+const CACHE_TTL_STATUS = 15;
+
+const CACHE_KEY_PARTICIPANTS = 'participants_v17';
+const CACHE_KEY_MESSAGES_REVISION = 'messages_revision_v17';
+const CACHE_KEY_MESSAGING_STATUS = 'messaging_status_v17';
+const CACHE_KEY_VOTING_CONFIG = 'voting_config_v17';
+const CACHE_KEY_TROPHIES = 'trophies_v17';
+const CACHE_KEY_TROPHY_RESULTS = 'trophy_results_v17';
+const CACHE_KEY_QUEUE_PREFIX = 'queue_v17_';
+const CACHE_TTL_PRESENCE = 40;
+
+function scriptCache() {
+  return CacheService.getScriptCache();
+}
+
+// A cache outage must degrade to a slow request, never to a failed one.
+function cacheGetString(key) {
+  try {
+    return scriptCache().get(key);
+  } catch (_) {
+    return null;
+  }
+}
+
+function cachePutString(key, value, ttlSeconds) {
+  try {
+    scriptCache().put(key, value, ttlSeconds);
+  } catch (_) { /* ignore */ }
+}
+
+function cacheGetJson(key) {
+  const raw = cacheGetString(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
+function cachePutJson(key, value, ttlSeconds) {
+  try {
+    cachePutString(key, JSON.stringify(value), ttlSeconds);
+  } catch (_) { /* ignore */ }
+}
+
+function cacheRemove(keys) {
+  try {
+    scriptCache().removeAll(keys);
+  } catch (_) { /* ignore */ }
+}
+
 // ─── Sheet Access ───────────────────────────────────────────────────────────
 
 function getSpreadsheet() {
@@ -290,7 +354,42 @@ function requireAuth(params) {
   if (!auth.valid) {
     throw new Error('登入驗證失敗，請確認參加者編號與電話號碼');
   }
+  recordClientQueueDepth(auth, params.q);
   return auth;
+}
+
+/**
+ * Clients report how much work they still have queued by attaching it to
+ * requests they were already making, which lets the admin dashboard show live
+ * load without anyone spending an extra execution on reporting it.
+ */
+function recordClientQueueDepth(auth, reported) {
+  if (!auth || auth.isAdmin || reported === undefined || reported === null) return;
+  const depth = parseInt(reported, 10);
+  if (isNaN(depth) || depth < 0) return;
+  cachePutString(CACHE_KEY_QUEUE_PREFIX + auth.participant_id, String(depth), CACHE_TTL_PRESENCE);
+}
+
+function getQueueSnapshot() {
+  const participants = getParticipantsList();
+  const keys = participants.map(function (p) {
+    return CACHE_KEY_QUEUE_PREFIX + p.participant_id;
+  });
+
+  let entries = {};
+  try {
+    entries = scriptCache().getAll(keys) || {};
+  } catch (_) {
+    entries = {};
+  }
+
+  const active = Object.keys(entries);
+  let queued = 0;
+  active.forEach(function (key) {
+    queued += parseInt(entries[key], 10) || 0;
+  });
+
+  return { queued: queued, online: active.length, total: participants.length };
 }
 
 function requireAdmin(params) {
@@ -309,10 +408,19 @@ let participantsMemo = null;
 
 function invalidateParticipantsMemo() {
   participantsMemo = null;
+  cacheRemove([CACHE_KEY_PARTICIPANTS]);
 }
 
 function getParticipantsList() {
   if (participantsMemo) return participantsMemo;
+
+  // Every authenticated request resolves credentials against this list, so
+  // caching it removes one full sheet read from the entire API surface.
+  const cached = cacheGetJson(CACHE_KEY_PARTICIPANTS);
+  if (cached) {
+    participantsMemo = cached;
+    return participantsMemo;
+  }
 
   const sheet = getSheet('Participants');
   const rows = getSheetData(sheet);
@@ -327,6 +435,7 @@ function getParticipantsList() {
     })
     .filter(function (p) { return p.participant_id !== ADMIN_ID; });
 
+  cachePutJson(CACHE_KEY_PARTICIPANTS, participantsMemo, CACHE_TTL_PARTICIPANTS);
   return participantsMemo;
 }
 
@@ -387,15 +496,21 @@ function getTeammates(participantId) {
 // ─── Messaging Status ─────────────────────────────────────────────────────────
 
 function getMessagingStatus() {
+  const cached = cacheGetString(CACHE_KEY_MESSAGING_STATUS);
+  if (cached) return cached;
+
   const sheet = getSheet('Open');
-  const val = String(sheet.getRange('A2').getValue() || 'OPEN').trim().toUpperCase();
-  return val === 'CLOSE' ? 'CLOSE' : 'OPEN';
+  const raw = String(sheet.getRange('A2').getValue() || 'OPEN').trim().toUpperCase();
+  const val = raw === 'CLOSE' ? 'CLOSE' : 'OPEN';
+  cachePutString(CACHE_KEY_MESSAGING_STATUS, val, CACHE_TTL_STATUS);
+  return val;
 }
 
 function setMessagingStatusValue(status) {
   const sheet = getSheet('Open');
   const val = String(status).trim().toUpperCase() === 'CLOSE' ? 'CLOSE' : 'OPEN';
   sheet.getRange('A2').setValue(val);
+  cachePutString(CACHE_KEY_MESSAGING_STATUS, val, CACHE_TTL_STATUS);
   return val;
 }
 
@@ -445,6 +560,26 @@ function formatMessageRow(r) {
   };
 }
 
+/**
+ * Answers "did anything change?" without touching the Messages sheet. This is
+ * the hot path: every client polls it on a timer, and before caching each poll
+ * cost a full sheet read.
+ */
+function getCachedMessagesRevision() {
+  const cached = cacheGetString(CACHE_KEY_MESSAGES_REVISION);
+  if (cached) return cached;
+  return rememberMessagesRevision(getMessagesRevision(getAllMessages()));
+}
+
+function rememberMessagesRevision(revision) {
+  cachePutString(CACHE_KEY_MESSAGES_REVISION, revision, CACHE_TTL_REVISION);
+  return revision;
+}
+
+function invalidateMessagesCache() {
+  cacheRemove([CACHE_KEY_MESSAGES_REVISION]);
+}
+
 function getMessagesRevision(messages) {
   const body = messages.map(function (m) { return m.message_id + ':' + m.status; }).sort().join('\u0001');
   const hash = computeMD5(body);
@@ -478,6 +613,7 @@ function sendMessage(body) {
   const createdAt = nowIso();
   const sheet = getSheet('Messages');
   sheet.appendRow([messageId, senderId, receiverId, content, createdAt, 'active', '']);
+  invalidateMessagesCache();
 
   return successResponse({
     message_id: messageId,
@@ -538,6 +674,15 @@ function watchSentMessages(params) {
   const auth = requireAuth(params);
   const pid = auth.participant_id;
   const clientRevision = String(params.revision || '');
+
+  if (clientRevision && getCachedMessagesRevision() === clientRevision) {
+    return successResponse({
+      changed: false,
+      revision: clientRevision,
+      messaging_status: getMessagingStatus()
+    });
+  }
+
   const allMessages = getAllMessages();
   const sentMessages = allMessages
     .filter(function (m) { return m.sender_id === pid; })
@@ -554,7 +699,7 @@ function watchSentMessages(params) {
     })
     .sort(function (a, b) { return b.created_at.localeCompare(a.created_at); });
 
-  const revision = getMessagesRevision(allMessages);
+  const revision = rememberMessagesRevision(getMessagesRevision(allMessages));
   const changed = revision !== clientRevision;
 
   return successResponse({
@@ -571,9 +716,10 @@ function fetchAdminDashboard(params) {
   const messages = getAllMessages().sort(function (a, b) {
     return b.created_at.localeCompare(a.created_at);
   });
-  const revision = getMessagesRevision(messages);
+  const revision = rememberMessagesRevision(getMessagesRevision(messages));
   return successResponse({
     role: 'admin',
+    queue: getQueueSnapshot(),
     messages: messages,
     revision: revision,
     messaging_status: getMessagingStatus(),
@@ -595,10 +741,20 @@ function adminListMessages(params) {
 function adminWatchMessages(params) {
   requireAdmin(params);
   const clientRevision = String(params.revision || '');
+
+  if (clientRevision && getCachedMessagesRevision() === clientRevision) {
+    return successResponse({
+      changed: false,
+      revision: clientRevision,
+      messaging_status: getMessagingStatus(),
+      queue: getQueueSnapshot()
+    });
+  }
+
   const messages = getAllMessages().sort(function (a, b) {
     return b.created_at.localeCompare(a.created_at);
   });
-  const revision = getMessagesRevision(messages);
+  const revision = rememberMessagesRevision(getMessagesRevision(messages));
   const changed = revision !== clientRevision;
 
   return successResponse({
@@ -606,7 +762,8 @@ function adminWatchMessages(params) {
     revision: revision,
     message_count: messages.length,
     messages: changed ? messages : [],
-    messaging_status: getMessagingStatus()
+    messaging_status: getMessagingStatus(),
+    queue: getQueueSnapshot()
   });
 }
 
@@ -628,6 +785,7 @@ function adminDeleteMessage(params) {
     }
   }
   if (!found) return errorResponse('找不到該訊息');
+  invalidateMessagesCache();
   return successResponse({ message_id: messageId });
 }
 
@@ -644,16 +802,22 @@ function bootstrap() {
 // ─── Voting Status ──────────────────────────────────────────────────────────
 
 function getVotingConfig() {
-  const sheet = getSheet('Voting');
-  const rawStatus = String(sheet.getRange('A2').getValue() || 'DRAFT').trim().toUpperCase();
+  const cached = cacheGetJson(CACHE_KEY_VOTING_CONFIG);
+  if (cached) return cached;
+
+  // Read as one range: four separate getValue() calls were four round trips on
+  // a path that the trophy poll hits constantly.
+  const row = getSheet('Voting').getRange('A2:D2').getValues()[0];
+  const rawStatus = String(row[0] || 'DRAFT').trim().toUpperCase();
   const valid = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
-  const votingStatus = valid.indexOf(rawStatus) >= 0 ? rawStatus : 'DRAFT';
-  return {
-    voting_status: votingStatus,
-    allow_resubmit: String(sheet.getRange('B2').getValue() || 'FALSE').trim().toUpperCase() === 'TRUE',
-    calculated_at: String(sheet.getRange('C2').getValue() || ''),
-    published_at: String(sheet.getRange('D2').getValue() || '')
+  const config = {
+    voting_status: valid.indexOf(rawStatus) >= 0 ? rawStatus : 'DRAFT',
+    allow_resubmit: String(row[1] || 'FALSE').trim().toUpperCase() === 'TRUE',
+    calculated_at: String(row[2] || ''),
+    published_at: String(row[3] || '')
   };
+  cachePutJson(CACHE_KEY_VOTING_CONFIG, config, CACHE_TTL_STATUS);
+  return config;
 }
 
 function getVotingStatus() {
@@ -674,15 +838,18 @@ function setVotingConfig(updates) {
   if (updates.published_at !== undefined) {
     sheet.getRange('D2').setValue(updates.published_at);
   }
+  cacheRemove([CACHE_KEY_VOTING_CONFIG]);
   return getVotingConfig();
 }
 
 // ─── Trophy Data ──────────────────────────────────────────────────────────────
 
 function getTrophies() {
-  const sheet = getSheet('Trophy');
-  const rows = getSheetData(sheet);
-  return rows
+  const cached = cacheGetJson(CACHE_KEY_TROPHIES);
+  if (cached) return cached;
+
+  const rows = getSheetData(getSheet('Trophy'));
+  const trophies = rows
     .filter(function (r) {
       const id = String(r.Trophy_id || '').trim();
       return id && /^T\d+$/i.test(id);
@@ -693,6 +860,8 @@ function getTrophies() {
         trophy_name: String(r.Trophy_name || r.Trophy_id).trim()
       };
     });
+  cachePutJson(CACHE_KEY_TROPHIES, trophies, CACHE_TTL_PARTICIPANTS);
+  return trophies;
 }
 
 function formatGroupLabel(groupId) {
@@ -742,22 +911,41 @@ function buildGroupVotingStatus(participants, submittedIds) {
   });
 }
 
-function getParticipantAwards(participantId) {
-  const sheet = getSheet('Trophy_results');
-  const rows = getSheetData(sheet);
-  const pid = normalizeParticipantId(participantId);
-  const trophies = getTrophies();
-  const trophyMap = {};
-  trophies.forEach(function (t) { trophyMap[t.trophy_id] = t.trophy_name; });
+/**
+ * Once results are published every client polls for its own awards at the same
+ * time, so the results table is cached whole and filtered per participant.
+ */
+function getAllTrophyResults() {
+  const cached = cacheGetJson(CACHE_KEY_TROPHY_RESULTS);
+  if (cached) return cached;
 
-  return rows
-    .filter(function (r) { return normalizeParticipantId(r.participant_id) === pid; })
+  const rows = getSheetData(getSheet('Trophy_results')).map(function (r) {
+    return {
+      participant_id: normalizeParticipantId(r.participant_id),
+      trophy_id: String(r.Trophy_id),
+      award_source: String(r.award_source || 'round1')
+    };
+  });
+  cachePutJson(CACHE_KEY_TROPHY_RESULTS, rows, CACHE_TTL_STATUS);
+  return rows;
+}
+
+function invalidateTrophyResultsCache() {
+  cacheRemove([CACHE_KEY_TROPHY_RESULTS]);
+}
+
+function getParticipantAwards(participantId) {
+  const pid = normalizeParticipantId(participantId);
+  const trophyMap = {};
+  getTrophies().forEach(function (t) { trophyMap[t.trophy_id] = t.trophy_name; });
+
+  return getAllTrophyResults()
+    .filter(function (r) { return r.participant_id === pid; })
     .map(function (r) {
-      const tid = String(r.Trophy_id);
       return {
-        trophy_id: tid,
-        trophy_name: trophyMap[tid] || tid,
-        award_source: String(r.award_source || 'round1')
+        trophy_id: r.trophy_id,
+        trophy_name: trophyMap[r.trophy_id] || r.trophy_id,
+        award_source: r.award_source
       };
     });
 }
@@ -1255,6 +1443,7 @@ function clearTrophyResultsForParticipant(participantId) {
       sheet.deleteRow(i + 2);
     }
   }
+  invalidateTrophyResultsCache();
 }
 
 function deleteParticipantSentMessages(participantId) {
@@ -1271,6 +1460,7 @@ function deleteParticipantSentMessages(participantId) {
       count++;
     }
   }
+  if (count > 0) invalidateMessagesCache();
   return count;
 }
 
@@ -1581,9 +1771,14 @@ function calculateTrophyResults() {
   if (lastRow > 1) {
     sheet.getRange(2, 1, lastRow - 1, 4).clearContent();
   }
-  results.forEach(function (r) {
-    sheet.appendRow([r.participant_id, r.trophy_id, r.award_source, calculatedAt]);
-  });
+  if (results.length > 0) {
+    // One write for the whole table: appending row by row was hundreds of
+    // round trips and put this close to the execution time limit.
+    sheet.getRange(2, 1, results.length, 4).setValues(results.map(function (r) {
+      return [r.participant_id, r.trophy_id, r.award_source, calculatedAt];
+    }));
+  }
+  invalidateTrophyResultsCache();
 
   return { results: results, fallback_activated: fallbackActivated };
 }

@@ -33,7 +33,7 @@ jobs:
       - name: Prepare site
         run: |
           mkdir _site
-          cp index.html app.js styles.css _site/
+          cp index.html app.js styles.css participants.json _site/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

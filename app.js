@@ -9,6 +9,10 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwNHsaZ4-smjmdCaYvmNcANIhIiXtUWUH5QHG0KJwSwpq4RxlelkRSa7QRJXFJQKpwV6A/exec';
 
 const CONFIG = {
+  // Served by GitHub Pages rather than Apps Script. Every visitor needs this
+  // list at the same moment when the event starts, and the backend only allows
+  // 30 concurrent executions.
+  PARTICIPANTS_URL: 'participants.json',
   PARTICIPANTS_CACHE_KEY: 'hkcy_participants',
   PARTICIPANTS_CACHE_TTL: 30 * 60 * 1000,
   INBOX_CACHE_PREFIX: 'hkcy_inbox_',
@@ -17,14 +21,24 @@ const CONFIG = {
   ADMIN_PHONE: '23082026',
   MAX_MESSAGE_LENGTH: 300,
   CHAR_WARN_THRESHOLD: 250,
-  ADMIN_WATCH_INTERVAL: 800,
-  ADMIN_WATCH_INTERVAL_HIDDEN: 3000,
-  ADMIN_BACKUP_SYNC: 12000,
-  SENT_WATCH_INTERVAL: 1500,
-  SENT_WATCH_INTERVAL_HIDDEN: 4000,
-  SENT_BACKUP_SYNC: 15000,
-  TROPHY_WATCH_INTERVAL: 2000,
-  TROPHY_WATCH_INTERVAL_HIDDEN: 5000,
+  // Apps Script allows only 30 concurrent executions. With ~50 people online
+  // these intervals decide whether the backend keeps up or queues into a
+  // cascade of timeouts, so they are deliberately slow.
+  ADMIN_WATCH_INTERVAL: 4000,
+  ADMIN_WATCH_INTERVAL_HIDDEN: 15000,
+  ADMIN_BACKUP_SYNC: 60000,
+  SENT_WATCH_INTERVAL: 8000,
+  SENT_WATCH_INTERVAL_HIDDEN: 30000,
+  SENT_BACKUP_SYNC: 120000,
+  TROPHY_WATCH_INTERVAL: 10000,
+  TROPHY_WATCH_INTERVAL_HIDDEN: 30000,
+  WATCH_JITTER_RATIO: 0.3,
+  WATCH_MAX_BACKOFF: 8,
+  // Longest anyone waits on screen before the work moves to the background.
+  ACTION_HANDOFF_MS: 3000,
+  QUEUE_MAX_ATTEMPTS: 4,
+  QUEUE_RETRY_BASE_MS: 2000,
+  QUEUE_RETRY_MAX_MS: 20000,
   TOAST_DURATION: 3000,
   API_TIMEOUT_MS: 25000
 };
@@ -57,6 +71,7 @@ const state = {
   monitorMessages: [],
   monitorRevision: '',
   monitorViewFilter: 'all',
+  adminLoad: null,
   knownMessageIds: new Set(),
   trophy: {
     loaded: false,
@@ -98,6 +113,9 @@ let adminWatchTimer = null;
 let trophyWatchTimer = null;
 let sentBackupTimer = null;
 let adminBackupTimer = null;
+let sentWatchFailures = 0;
+let adminWatchFailures = 0;
+let trophyWatchFailures = 0;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -179,6 +197,8 @@ function cacheDOM() {
   DOM.adminDashboardStats = document.getElementById('admin-dashboard-stats');
   DOM.adminDashboardStatus = document.getElementById('admin-dashboard-status');
   DOM.adminRecentActivity = document.getElementById('admin-recent-activity');
+  DOM.adminQueuePill = document.getElementById('admin-queue-pill');
+  DOM.adminLiveLoad = document.getElementById('admin-live-load');
   DOM.adminSyncTime = document.getElementById('admin-sync-time');
   DOM.adminMsgCount = document.getElementById('admin-msg-count');
   DOM.adminMsgSearch = document.getElementById('admin-msg-search');
@@ -500,15 +520,146 @@ function buildPairingsFromAssignments(assignments) {
   return pairings;
 }
 
-function getWatchInterval(fast, slow) {
-  return document.hidden ? slow : fast;
+/**
+ * Spreads clients apart instead of letting every browser fire on the same tick,
+ * and backs off when the API is already struggling so a slow backend does not
+ * get buried under retries.
+ */
+function getWatchInterval(fast, slow, failures) {
+  const base = (document.hidden ? slow : fast) *
+    Math.min(Math.pow(2, failures || 0), CONFIG.WATCH_MAX_BACKOFF);
+  const jitter = base * CONFIG.WATCH_JITTER_RATIO;
+  return Math.round(base - jitter / 2 + Math.random() * jitter);
+}
+
+// ─── Background Action Queue ────────────────────────────────────────────────
+
+/**
+ * Actions run in the background instead of holding the screen hostage. Apps
+ * Script takes seconds to answer and allows only 30 concurrent executions, so
+ * the queue is deliberately serial: one client never fires several requests at
+ * once, and the person using it never waits more than ACTION_HANDOFF_MS.
+ */
+const actionQueue = {
+  items: [],
+  active: null,
+  running: false
+};
+
+const queueListeners = [];
+
+function onQueueChange(listener) {
+  queueListeners.push(listener);
+}
+
+function getQueueDepth() {
+  return actionQueue.items.length;
+}
+
+function notifyQueueChange() {
+  const depth = getQueueDepth();
+  queueListeners.forEach(listener => {
+    try {
+      listener(depth, actionQueue.active);
+    } catch (_) { /* a broken indicator must not stall the queue */ }
+  });
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function queueRetryDelay(attempts) {
+  const base = Math.min(CONFIG.QUEUE_RETRY_BASE_MS * Math.pow(2, attempts - 1), CONFIG.QUEUE_RETRY_MAX_MS);
+  return Math.round(base * (0.75 + Math.random() * 0.5));
+}
+
+function enqueueAction(task) {
+  let settle;
+  const item = {
+    id: 'q' + Date.now() + Math.random().toString(36).slice(2, 7),
+    label: task.label || '操作',
+    run: task.run,
+    onSuccess: task.onSuccess,
+    onFailure: task.onFailure,
+    attempts: 0,
+    settled: null
+  };
+  item.settled = new Promise(resolve => { settle = resolve; });
+  item.settle = settle;
+
+  actionQueue.items.push(item);
+  notifyQueueChange();
+  processQueue();
+  return item;
+}
+
+async function processQueue() {
+  if (actionQueue.running) return;
+  actionQueue.running = true;
+
+  while (actionQueue.items.length) {
+    const item = actionQueue.items[0];
+    actionQueue.active = item;
+    notifyQueueChange();
+
+    try {
+      const result = checkApiResponse(await item.run());
+      actionQueue.items.shift();
+      actionQueue.active = null;
+      if (item.onSuccess) item.onSuccess(result);
+      item.settle({ ok: true });
+    } catch (err) {
+      item.attempts++;
+      if (item.attempts >= CONFIG.QUEUE_MAX_ATTEMPTS) {
+        actionQueue.items.shift();
+        actionQueue.active = null;
+        if (item.onFailure) item.onFailure(err);
+        item.settle({ ok: false, error: err });
+      } else {
+        actionQueue.active = null;
+        notifyQueueChange();
+        await delay(queueRetryDelay(item.attempts));
+      }
+    }
+    notifyQueueChange();
+  }
+
+  actionQueue.running = false;
+  notifyQueueChange();
+}
+
+/**
+ * Waits for real progress, but only briefly. Resolves true when the work was
+ * handed off to the background so the caller can stop blocking the user.
+ */
+function runWithHandoff(promise, ms) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = handedOff => {
+      if (done) return;
+      done = true;
+      resolve(handedOff);
+    };
+    const timer = setTimeout(() => finish(true), ms);
+    promise.then(() => finish(false), () => finish(false)).finally(() => clearTimeout(timer));
+  });
 }
 
 // ─── API ────────────────────────────────────────────────────────────────────
 
+/**
+ * Rides along on requests the client is already making so the admin dashboard
+ * can show live queue depth without anyone spending an extra API call on it.
+ */
+function withQueueTelemetry(params) {
+  if (!state.participantId || state.isAdmin) return params;
+  return Object.assign({}, params, { q: getQueueDepth() });
+}
+
 async function apiGet(params, options = {}) {
   const url = new URL(API_URL);
-  Object.entries(params).forEach(([k, v]) => {
+  Object.entries(withQueueTelemetry(params)).forEach(([k, v]) => {
     if (v !== undefined && v !== null) url.searchParams.set(k, v);
   });
 
@@ -545,7 +696,7 @@ async function apiPost(body, options = {}) {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withQueueTelemetry(body)),
       signal: controller.signal
     });
     if (!res.ok) throw new Error('網路錯誤：' + res.status);
@@ -562,6 +713,16 @@ async function apiPost(body, options = {}) {
 
 async function apiBootstrap() {
   return apiGet({ action: 'bootstrap' });
+}
+
+async function loadStaticParticipants() {
+  const res = await fetch(CONFIG.PARTICIPANTS_URL, { cache: 'no-cache' });
+  if (!res.ok) throw new Error('網路錯誤：' + res.status);
+  const data = await res.json();
+  if (!Array.isArray(data.participants) || data.participants.length === 0) {
+    throw new Error('參加者名單是空的');
+  }
+  return data.participants;
 }
 
 async function apiFetchInbox() {
@@ -977,28 +1138,48 @@ function refreshComboboxItems() {
 // ─── Login ──────────────────────────────────────────────────────────────────
 
 async function bootstrapApp() {
-  try {
-    const cached = getParticipantsCache();
-    if (cached) {
-      state.participants = cached;
-      initLoginCombobox();
-    }
+  const cached = getParticipantsCache();
+  if (cached) {
+    state.participants = cached;
+    initLoginCombobox();
+  }
 
-    const data = checkApiResponse(await apiBootstrap());
-    state.participants = data.participants || [];
-    state.messagingOpen = data.messaging_status === 'OPEN';
-    state.apiVersion = data.version;
+  try {
+    state.participants = await loadStaticParticipants();
     setParticipantsCache(state.participants);
 
     if (!loginCombobox) initLoginCombobox();
     else refreshComboboxItems();
-
-    updateLoginStatusBanner();
   } catch (err) {
     if (!state.participants.length) {
       showToast('無法載入參加者名單：' + err.message, 'error');
     }
   }
+}
+
+/**
+ * participants.json can lag behind an edit made in the admin panel during the
+ * event, so a failed login is re-checked against the sheet before the person is
+ * turned away. Only runs on failure, so the normal path stays offline.
+ */
+async function refetchParticipantsAndMatch(participantId, phone) {
+  try {
+    const data = checkApiResponse(await apiBootstrap());
+    state.participants = data.participants || [];
+    state.messagingOpen = data.messaging_status === 'OPEN';
+    state.apiVersion = data.version;
+    setParticipantsCache(state.participants);
+    refreshComboboxItems();
+    return findParticipantMatch(participantId, phone);
+  } catch (_) {
+    return null;
+  }
+}
+
+function findParticipantMatch(participantId, phone) {
+  return state.participants.find(p =>
+    p.participant_id === participantId && normalizePhone(p.phone_number) === phone
+  ) || null;
 }
 
 function updateLoginStatusBanner() {
@@ -1023,9 +1204,8 @@ async function handleLogin(e) {
   const participantId = isAdmin ? CONFIG.ADMIN_ID : normalizeId(rawId);
 
   if (!isAdmin) {
-    const match = state.participants.find(p =>
-      p.participant_id === participantId && normalizePhone(p.phone_number) === phone
-    );
+    const match = findParticipantMatch(participantId, phone) ||
+      await refetchParticipantsAndMatch(participantId, phone);
     if (!match) {
       showToast('參加者編號或電話號碼不正確', 'error');
       return;
@@ -1246,6 +1426,7 @@ function handleLogout() {
   DOM.loginParticipant.value = '';
   DOM.loginPhone.value = '';
   showScreen('login');
+  updateLoginStatusBanner();
   bootstrapApp();
 }
 
@@ -1291,24 +1472,49 @@ async function handleSendMessage(e) {
   if (!content) { showToast('請輸入留言內容', 'error'); return; }
   if (containsBadWords(content)) { showToast('內容包含不適當用語', 'error'); return; }
 
-  await runProgressButton(DOM.sendSubmit, (async () => {
-    try {
-      checkApiResponse(await apiSendMessage(receiverId, content));
-      showToast('留言已發送', 'success');
-      DOM.sendContent.value = '';
-      DOM.sendReceiver.value = '';
-      selectedReceiverId = null;
-      updateCharCounter();
+  // The message is shown as sent straight away and the request is handed to the
+  // queue; the sent list carries the real state so nobody stares at a spinner.
+  const localId = 'local-' + Date.now() + Math.random().toString(36).slice(2, 6);
+  state.sentMessages = [{
+    message_id: localId,
+    receiver_id: receiverId,
+    content: content,
+    created_at: new Date().toISOString(),
+    status: 'active',
+    pending: true
+  }, ...state.sentMessages];
 
-      const sentData = checkApiResponse(await apiFetchSent());
-      state.sentMessages = sentData.sent_messages || [];
-      state.sentRevision = sentData.revision || '';
-      renderSent();
-      switchParticipantView('sent');
-    } catch (err) {
-      showToast(err.message, 'error');
+  DOM.sendContent.value = '';
+  DOM.sendReceiver.value = '';
+  selectedReceiverId = null;
+  updateCharCounter();
+  renderSent();
+
+  const item = enqueueAction({
+    label: '傳送留言給 ' + receiverId,
+    run: () => apiSendMessage(receiverId, content),
+    onSuccess: () => {
+      updateLocalSentMessage(localId, { pending: false });
+    },
+    onFailure: err => {
+      updateLocalSentMessage(localId, { pending: false, failed: true, error: err.message });
+      showToast('留言傳送失敗：' + err.message, 'error');
     }
-  })());
+  });
+
+  const handedOff = await runProgressButton(
+    DOM.sendSubmit, runWithHandoff(item.settled, CONFIG.ACTION_HANDOFF_MS)
+  );
+
+  switchParticipantView('sent');
+  showToast(handedOff ? '留言傳送中，可以繼續使用' : '留言已發送', handedOff ? 'info' : 'success');
+}
+
+function updateLocalSentMessage(localId, patch) {
+  const idx = state.sentMessages.findIndex(m => m.message_id === localId);
+  if (idx < 0) return;
+  state.sentMessages[idx] = Object.assign({}, state.sentMessages[idx], patch);
+  renderSent();
 }
 
 // ─── Messaging — Inbox ────────────────────────────────────────────────────────
@@ -1369,6 +1575,33 @@ async function refreshInbox() {
 
 // ─── Messaging — Sent ─────────────────────────────────────────────────────────
 
+function sentStatusBadge(msg, isDeleted) {
+  if (isDeleted) return '';
+  if (msg.failed) {
+    return `<button type="button" class="badge badge-failed" data-retry-id="${escapeHtml(msg.message_id)}">傳送失敗，按此重試</button>`;
+  }
+  if (msg.pending) {
+    return '<span class="badge badge-pending" style="margin-top:8px">傳送中…</span>';
+  }
+  return '<span class="badge badge-pill" style="margin-top:8px">正常</span>';
+}
+
+function retryFailedSentMessage(localId) {
+  const msg = state.sentMessages.find(m => m.message_id === localId);
+  if (!msg || !msg.failed) return;
+
+  updateLocalSentMessage(localId, { pending: true, failed: false, error: '' });
+  enqueueAction({
+    label: '重試傳送留言',
+    run: () => apiSendMessage(msg.receiver_id, msg.content),
+    onSuccess: () => updateLocalSentMessage(localId, { pending: false }),
+    onFailure: err => {
+      updateLocalSentMessage(localId, { pending: false, failed: true, error: err.message });
+      showToast('留言傳送失敗：' + err.message, 'error');
+    }
+  });
+}
+
 function renderSent() {
   const messages = state.sentMessages;
   DOM.sentEmpty.classList.toggle('hidden', messages.length > 0);
@@ -1377,7 +1610,10 @@ function renderSent() {
   messages.forEach(msg => {
     const isDeleted = msg.status === 'deleted';
     const card = document.createElement('div');
-    card.className = 'message-card' + (isDeleted ? ' deleted' : '');
+    card.className = 'message-card' +
+      (isDeleted ? ' deleted' : '') +
+      (msg.pending ? ' message-pending' : '') +
+      (msg.failed ? ' message-failed' : '');
     card.dataset.messageId = msg.message_id;
 
     let deletedHtml = '';
@@ -1397,7 +1633,7 @@ function renderSent() {
         <time datetime="${escapeHtml(msg.created_at)}">${formatDateTime(msg.created_at)}</time>
       </div>
       <div class="message-content">${escapeHtml(msg.content)}</div>
-      ${isDeleted ? '' : '<span class="badge badge-pill" style="margin-top:8px">正常</span>'}
+      ${sentStatusBadge(msg, isDeleted)}
       ${deletedHtml}
     `;
     DOM.sentList.appendChild(card);
@@ -1408,8 +1644,7 @@ async function refreshSent() {
   await runProgressButton(DOM.sentRefresh, (async () => {
     try {
       const data = checkApiResponse(await apiFetchSent());
-      state.sentMessages = data.sent_messages || [];
-      state.sentRevision = data.revision || '';
+      applySentMessages(data.sent_messages || [], data.revision || '');
       renderSent();
       showToast('已發送列表已更新', 'success');
     } catch (err) {
@@ -1427,13 +1662,29 @@ function stopSentWatch() {
 }
 
 function shouldApplySentWatch(data) {
+  // The backend answers an unchanged poll without reading the sheet, so it
+  // omits message_count; treat that as "nothing to do" rather than a mismatch.
+  if (data.changed === false && data.revision === state.sentRevision) return false;
   return data.changed === true ||
     data.message_count !== state.sentMessages.length ||
     data.revision !== state.sentRevision;
 }
 
+/**
+ * A refresh from the server must not make a queued message disappear before the
+ * backend has actually stored it.
+ */
+function mergeLocalSentMessages(serverMessages) {
+  const local = state.sentMessages.filter(m => m.pending || m.failed);
+  if (!local.length) return serverMessages;
+
+  const key = m => m.receiver_id + '\u0001' + m.content;
+  const confirmed = new Set(serverMessages.map(key));
+  return [...local.filter(m => !confirmed.has(key(m))), ...serverMessages];
+}
+
 function applySentMessages(messages, revision) {
-  state.sentMessages = messages;
+  state.sentMessages = mergeLocalSentMessages(messages);
   state.sentRevision = revision;
   if (document.getElementById('view-sent')?.classList.contains('active')) {
     renderSent();
@@ -1459,13 +1710,17 @@ async function runSentWatchLoop() {
       state.messagingOpen = data.messaging_status === 'OPEN';
       updateSendFormState();
     }
+    sentWatchFailures = 0;
   } catch (err) {
     if (err.name !== 'AbortError') {
+      sentWatchFailures++;
       console.warn('Sent watch error:', err.message);
     }
   }
 
-  const interval = getWatchInterval(CONFIG.SENT_WATCH_INTERVAL, CONFIG.SENT_WATCH_INTERVAL_HIDDEN);
+  const interval = getWatchInterval(
+    CONFIG.SENT_WATCH_INTERVAL, CONFIG.SENT_WATCH_INTERVAL_HIDDEN, sentWatchFailures
+  );
   sentWatchTimer = setTimeout(runSentWatchLoop, interval);
 }
 
@@ -1506,13 +1761,17 @@ async function runTrophyWatchLoop() {
         loadTrophyData(false);
       }
     }
+    trophyWatchFailures = 0;
   } catch (err) {
     if (err.name !== 'AbortError') {
+      trophyWatchFailures++;
       console.warn('Trophy watch error:', err.message);
     }
   }
 
-  const interval = getWatchInterval(CONFIG.TROPHY_WATCH_INTERVAL, CONFIG.TROPHY_WATCH_INTERVAL_HIDDEN);
+  const interval = getWatchInterval(
+    CONFIG.TROPHY_WATCH_INTERVAL, CONFIG.TROPHY_WATCH_INTERVAL_HIDDEN, trophyWatchFailures
+  );
   trophyWatchTimer = setTimeout(runTrophyWatchLoop, interval);
 }
 
@@ -1588,7 +1847,41 @@ function renderAdminMessages() {
   });
 }
 
+/**
+ * Live picture of how much participant work is still waiting to reach the
+ * backend, and how long the backend is taking to answer.
+ */
+function applyAdminLiveLoad(queue, responseMs) {
+  state.adminLoad = {
+    queued: queue ? queue.queued || 0 : 0,
+    online: queue ? queue.online || 0 : 0,
+    total: queue ? queue.total || 0 : state.participants.length,
+    responseMs: responseMs
+  };
+  renderAdminLiveLoad();
+}
+
+function renderAdminLiveLoad() {
+  const load = state.adminLoad;
+  if (!load) return;
+
+  if (DOM.adminQueuePill) {
+    DOM.adminQueuePill.textContent = '排隊 ' + load.queued;
+    DOM.adminQueuePill.classList.toggle('hidden', load.queued === 0);
+    DOM.adminQueuePill.classList.toggle('badge-queue-busy', load.queued > 10);
+  }
+
+  if (DOM.adminLiveLoad) {
+    DOM.adminLiveLoad.innerHTML = `
+      <div class="stat-card"><div class="stat-value">${load.queued}</div><div class="stat-label">排隊中</div></div>
+      <div class="stat-card"><div class="stat-value">${load.online} / ${load.total}</div><div class="stat-label">活躍人數</div></div>
+      <div class="stat-card"><div class="stat-value">${(load.responseMs / 1000).toFixed(1)}s</div><div class="stat-label">後端回應</div></div>
+    `;
+  }
+}
+
 function shouldApplyAdminWatch(data) {
+  if (data.changed === false && data.revision === state.monitorRevision) return false;
   return data.changed === true ||
     data.message_count !== state.monitorMessages.length ||
     data.revision !== state.monitorRevision;
@@ -1606,9 +1899,11 @@ async function runAdminWatchLoop() {
   if (!state.isAdmin) return;
 
   adminWatchAbort = new AbortController();
+  const startedAt = Date.now();
 
   try {
     const data = checkApiResponse(await apiAdminWatch(state.monitorRevision));
+    applyAdminLiveLoad(data.queue, Date.now() - startedAt);
     if (shouldApplyAdminWatch(data)) {
       if (data.messages && data.messages.length > 0) {
         applyAdminMessages(data.messages, data.revision);
@@ -1620,11 +1915,15 @@ async function runAdminWatchLoop() {
     if (data.messaging_status !== undefined) {
       state.messagingOpen = data.messaging_status === 'OPEN';
     }
+    adminWatchFailures = 0;
   } catch (err) {
+    adminWatchFailures++;
     console.warn('Admin watch error:', err.message);
   }
 
-  const interval = getWatchInterval(CONFIG.ADMIN_WATCH_INTERVAL, CONFIG.ADMIN_WATCH_INTERVAL_HIDDEN);
+  const interval = getWatchInterval(
+    CONFIG.ADMIN_WATCH_INTERVAL, CONFIG.ADMIN_WATCH_INTERVAL_HIDDEN, adminWatchFailures
+  );
   adminWatchTimer = setTimeout(runAdminWatchLoop, interval);
 }
 
@@ -1920,14 +2219,16 @@ async function loadTrophyData(force, options = {}) {
 
 async function handleTrophySaveDraft() {
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
-  await runProgressButton(DOM.trophySaveDraft, (async () => {
-    try {
-      checkApiResponse(await apiTrophySaveDraft(pairings));
-      showToast('草稿已儲存', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  })());
+  const item = enqueueAction({
+    label: '儲存 Trophy 草稿',
+    run: () => apiTrophySaveDraft(pairings),
+    onFailure: err => showToast('草稿儲存失敗：' + err.message, 'error')
+  });
+
+  const handedOff = await runProgressButton(
+    DOM.trophySaveDraft, runWithHandoff(item.settled, CONFIG.ACTION_HANDOFF_MS)
+  );
+  showToast(handedOff ? '草稿儲存中，可以繼續使用' : '草稿已儲存', handedOff ? 'info' : 'success');
 }
 
 async function handleTrophySubmitAll() {
@@ -1943,16 +2244,22 @@ async function handleTrophySubmitAll() {
   }
 
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
-  await runProgressButton(DOM.trophySubmitAll, (async () => {
-    try {
-      checkApiResponse(await apiTrophySubmit(pairings));
-      showToast('投票已提交', 'success');
-      await loadTrophyData();
-      switchParticipantView('trophy-submitted');
-    } catch (err) {
-      showToast(err.message, 'error');
+  const item = enqueueAction({
+    label: '提交 Trophy 投票',
+    run: () => apiTrophySubmit(pairings),
+    onSuccess: () => loadTrophyData(true, { silent: true }),
+    onFailure: err => {
+      showToast('投票提交失敗，請再試一次：' + err.message, 'error');
+      switchParticipantView('trophy');
     }
-  })());
+  });
+
+  const handedOff = await runProgressButton(
+    DOM.trophySubmitAll, runWithHandoff(item.settled, CONFIG.ACTION_HANDOFF_MS)
+  );
+
+  switchParticipantView('trophy-submitted');
+  showToast(handedOff ? '投票提交中，可以繼續使用' : '投票已提交', handedOff ? 'info' : 'success');
 }
 
 // ─── Trophy (Admin) ───────────────────────────────────────────────────────────
@@ -2525,13 +2832,16 @@ function switchAdminTab(tabName, options = {}) {
       if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length);
     }).catch(() => initAdminParticipantsPanel());
   } else if (tabName === 'dashboard') {
-    stopAdminWatch();
     apiAdminFetch().then(data => {
       if (data.status === 'success') {
         state.monitorMessages = data.messages || [];
+        state.monitorRevision = data.revision || '';
         renderAdminDashboard(data);
       }
     }).catch(() => renderAdminDashboard());
+    // Kept polling here too: the live load panel is only useful if it updates,
+    // and a single admin session costs the backend almost nothing.
+    startAdminWatch();
     if (!skipLoad && !state.adminTrophy.overview) loadAdminTrophyData();
   }
 }
@@ -2564,6 +2874,11 @@ function bindEvents() {
 
   DOM.inboxRefresh.addEventListener('click', refreshInbox);
   DOM.sentRefresh.addEventListener('click', refreshSent);
+
+  DOM.sentList.addEventListener('click', (e) => {
+    const retryBtn = e.target.closest('[data-retry-id]');
+    if (retryBtn) retryFailedSentMessage(retryBtn.dataset.retryId);
+  });
 
   DOM.trophySaveDraft.addEventListener('click', handleTrophySaveDraft);
   DOM.trophySubmitAll.addEventListener('click', handleTrophySubmitAll);

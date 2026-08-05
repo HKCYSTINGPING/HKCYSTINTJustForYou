@@ -324,6 +324,7 @@
         <span id="admin-live-badge" class="badge badge-live">
           <span class="live-dot"></span> 即時
         </span>
+        <span id="admin-queue-pill" class="badge badge-queue hidden" role="status" aria-live="polite">排隊 0</span>
       </div>
       <button type="button" id="admin-logout" class="btn btn-ghost btn-icon" aria-label="登出">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -336,6 +337,11 @@
       <!-- Dashboard -->
       <div id="admin-dashboard-panel" class="admin-panel active" data-admin-view="dashboard">
         <div id="admin-dashboard-stats" class="stats-grid"></div>
+        <div class="card">
+          <h3 class="section-title">即時負載</h3>
+          <div id="admin-live-load" class="stats-grid"></div>
+          <p class="hint-text">參加者嘅操作會喺背景排隊送出，呢度顯示全場仲有幾多個未送達。</p>
+        </div>
         <div class="card">
           <h3 class="section-title">系統狀態</h3>
           <div id="admin-dashboard-status" class="status-row"></div>
