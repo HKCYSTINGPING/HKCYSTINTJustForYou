@@ -9,11 +9,10 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  administration: read
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -27,13 +26,11 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Prepare site
         run: |
           mkdir _site
-          cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json _site/
+          cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json .nojekyll _site/
           # A missing module would only surface as a blank page in someone's
           # browser, so fail the deploy here instead.
           for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json; do
