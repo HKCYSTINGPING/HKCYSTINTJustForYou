@@ -99,6 +99,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Login presence: each participant may only touch their own document.
+    // The admin dashboard reads the whole collection to show who is in.
+    match /presence/{participantId} {
+      allow read: if isAdmin();
+      allow create, update: if isParticipant()
+        && participantId == pid()
+        && request.resource.data.participant_id == pid();
+      allow delete: if isAdmin() || (isParticipant() && participantId == pid());
+    }
+
     // Anything not named above is closed.
     match /{document=**} {
       allow read, write: if false;

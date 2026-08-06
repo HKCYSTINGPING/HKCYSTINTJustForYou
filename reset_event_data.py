@@ -13,7 +13,7 @@ Add --voting-status VOTING_OPEN if you want voting open right away.
 
 import argparse
 
-WIPE_COLLECTIONS = ("messages", "submissions", "results")
+WIPE_COLLECTIONS = ("messages", "submissions", "results", "presence")
 
 
 def main():

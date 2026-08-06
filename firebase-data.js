@@ -515,3 +515,46 @@ export async function resetParticipantVote(participantId) {
     batch => batch.delete(doc(db, 'results', participantId))
   ]);
 }
+
+// ─── Presence ───────────────────────────────────────────────────────────────
+
+/**
+ * Marks this participant as here. first_seen sticks for the whole event so the
+ * admin dashboard can show who has logged in at least once; last_seen is
+ * refreshed on a heartbeat so "currently online" stays meaningful.
+ */
+export async function touchPresence(participantId) {
+  const ref = doc(db, 'presence', participantId);
+  const existing = await getDoc(ref);
+  const payload = {
+    participant_id: participantId,
+    online: true,
+    last_seen: serverTimestamp()
+  };
+  if (!existing.exists() || !(existing.data() || {}).first_seen) {
+    payload.first_seen = serverTimestamp();
+  }
+  await setDoc(ref, payload, { merge: true });
+}
+
+export function markPresenceOffline(participantId) {
+  return setDoc(doc(db, 'presence', participantId), {
+    participant_id: participantId,
+    online: false,
+    last_seen: serverTimestamp()
+  }, { merge: true });
+}
+
+export function subscribePresence(onData, onError) {
+  return onSnapshot(collection(db, 'presence'), snapshot => {
+    onData(snapshot.docs.map(d => {
+      const data = d.data() || {};
+      return {
+        participant_id: data.participant_id || d.id,
+        online: data.online !== false,
+        first_seen: toIso(data.first_seen),
+        last_seen: toIso(data.last_seen)
+      };
+    }));
+  }, onError);
+}

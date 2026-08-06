@@ -23,7 +23,11 @@ const CONFIG = {
   // Firestore answers in well under a second on a working connection, so a
   // wait this long means the network is the problem and saying so beats
   // leaving someone watching a progress bar.
-  LOADING_TIMEOUT_MS: 15000
+  LOADING_TIMEOUT_MS: 15000,
+  // How often a logged-in participant refreshes their presence document.
+  PRESENCE_HEARTBEAT_MS: 45000,
+  // last_seen newer than this counts as currently online on the dashboard.
+  PRESENCE_ONLINE_MS: 120000
 };
 
 const BAD_WORDS = [
@@ -85,7 +89,10 @@ const state = {
   adminParticipant: {
     selectedId: null,
     detail: null
-  }
+  },
+  presence: [],
+  // Which login-status group cards are open on the dashboard.
+  expandedLoginGroups: null
 };
 
 let adminParticipantCombobox = null;
@@ -96,6 +103,7 @@ let resultUnsubscribe = null;
 // Skip the first snapshot so login itself does not look like a status change.
 let votingStatusPrimed = false;
 let messagingStatusPrimed = false;
+let presenceHeartbeatTimer = null;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -176,6 +184,7 @@ function cacheDOM() {
   DOM.adminDashboardPanel = document.getElementById('admin-dashboard-panel');
   DOM.adminDashboardStats = document.getElementById('admin-dashboard-stats');
   DOM.adminDashboardStatus = document.getElementById('admin-dashboard-status');
+  DOM.adminLoginStatus = document.getElementById('admin-login-status');
   DOM.adminRecentActivity = document.getElementById('admin-recent-activity');
   DOM.adminQueuePill = document.getElementById('admin-queue-pill');
   DOM.adminLiveLoad = document.getElementById('admin-live-load');
@@ -508,6 +517,7 @@ function track(unsubscribe) {
 }
 
 function stopAllSubscriptions() {
+  stopPresenceHeartbeat();
   subscriptions.forEach(stop => {
     try {
       stop();
@@ -517,6 +527,23 @@ function stopAllSubscriptions() {
   resultUnsubscribe = null;
   votingStatusPrimed = false;
   messagingStatusPrimed = false;
+}
+
+async function startPresenceHeartbeat() {
+  if (!state.participantId || state.isAdmin) return;
+  stopPresenceHeartbeat();
+  const pulse = () => {
+    data.touchPresence(state.participantId).catch(() => { /* presence is best-effort */ });
+  };
+  pulse();
+  presenceHeartbeatTimer = setInterval(pulse, CONFIG.PRESENCE_HEARTBEAT_MS);
+}
+
+function stopPresenceHeartbeat() {
+  if (presenceHeartbeatTimer) {
+    clearInterval(presenceHeartbeatTimer);
+    presenceHeartbeatTimer = null;
+  }
 }
 
 function reportSubscriptionError(what) {
@@ -1028,6 +1055,7 @@ async function enterParticipantDashboard() {
     setLoadingPercent(45);
     await startParticipantSubscriptions();
     setLoadingPercent(95);
+    await startPresenceHeartbeat();
     recalcTrophyProgress();
     renderTrophyTeammates();
     renderProfile();
@@ -1151,6 +1179,15 @@ async function startAdminSubscriptions() {
         refreshAdminTrophyViews();
       },
       '得獎結果'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribePresence(cb, err),
+      rows => {
+        state.presence = rows;
+        renderAdminLoginStatus();
+        renderAdminLiveLoad();
+      },
+      '登入狀況'
     )
   ]);
 }
@@ -1210,16 +1247,24 @@ function renderAdminDashboard(fetchData) {
 
   if (DOM.adminVersion) DOM.adminVersion.textContent = 'Firestore';
   if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length || '—');
+  renderAdminLoginStatus();
 }
 
 function handleLogout() {
+  const leavingId = state.participantId;
+  const wasAdmin = state.isAdmin;
   stopAllSubscriptions();
+  if (leavingId && !wasAdmin) {
+    data.markPresenceOffline(leavingId).catch(() => { /* best-effort */ });
+  }
   data.signOutUser().catch(() => { /* the local session is gone either way */ });
   state.participantId = null;
   state.isAdmin = false;
   state.inboxMessages = [];
   state.sentMessages = [];
   state.monitorMessages = [];
+  state.presence = [];
+  state.expandedLoginGroups = null;
   hideTrophyResultsModal();
   state.trophy = {
     loaded: false,
@@ -1478,18 +1523,25 @@ function renderAdminLiveLoad() {
     m => m.status === 'active' && m.created_at > recentCutoff
   ).length;
   const voted = state.adminTrophy.submissions.filter(s => s.status === 'submitted').length;
+  const onlineCutoff = Date.now() - CONFIG.PRESENCE_ONLINE_MS;
+  const online = state.presence.filter(p => {
+    if (!p.last_seen) return false;
+    return new Date(p.last_seen).getTime() >= onlineCutoff && p.online !== false;
+  }).length;
+  const loggedIn = state.presence.filter(p => !!p.first_seen).length;
 
   if (DOM.adminQueuePill) {
-    DOM.adminQueuePill.textContent = '5 分鐘內 ' + recent + ' 則';
-    DOM.adminQueuePill.classList.toggle('hidden', recent === 0);
-    DOM.adminQueuePill.classList.toggle('badge-queue-busy', recent > 20);
+    DOM.adminQueuePill.textContent = '在線 ' + online;
+    DOM.adminQueuePill.classList.toggle('hidden', online === 0);
+    DOM.adminQueuePill.classList.toggle('badge-queue-busy', online > 30);
   }
 
   if (DOM.adminLiveLoad) {
     DOM.adminLiveLoad.innerHTML = `
+      <div class="stat-card"><div class="stat-value">${loggedIn}/${state.participants.length}</div><div class="stat-label">已登入</div></div>
+      <div class="stat-card"><div class="stat-value">${online}</div><div class="stat-label">現正線上</div></div>
+      <div class="stat-card"><div class="stat-value">${voted}/${state.participants.length}</div><div class="stat-label">已完成投票</div></div>
       <div class="stat-card"><div class="stat-value">${recent}</div><div class="stat-label">近 5 分鐘留言</div></div>
-      <div class="stat-card"><div class="stat-value">${voted} / ${state.participants.length}</div><div class="stat-label">已完成投票</div></div>
-      <div class="stat-card"><div class="stat-value">即時</div><div class="stat-label">連線狀態</div></div>
     `;
   }
 }
@@ -1803,35 +1855,56 @@ function renderAdminTrophyStats() {
   `;
 }
 
-function renderAdminPendingVoters() {
-  const groups = state.adminTrophy.overview?.group_voting_status || [];
-  const pending = state.adminTrophy.overview?.pending_participants || [];
+/**
+ * Shared group cards used by voting progress and login status on the dashboard.
+ * doneKey marks members who are "complete" (voted / logged in).
+ */
+function renderGroupStatusCards(options) {
+  const {
+    container,
+    title,
+    groups,
+    expandedSetRef,
+    doneKey,
+    doneLabel,
+    pendingLabel,
+    emptyAllDone,
+    emptyPendingTitle
+  } = options;
+
+  if (!container) return;
+
+  const pending = [];
+  groups.forEach(g => {
+    g.members.forEach(m => {
+      if (!m[doneKey]) pending.push(m.participant_id);
+    });
+  });
 
   if (groups.length === 0) {
-    DOM.adminPendingVoters.innerHTML = pending.length === 0
-      ? '<p>所有參加者均已完成投票</p>'
-      : `<h4>尚未完成投票（${pending.length} 人）</h4><ul>${pending.map(p => '<li>' + escapeHtml(p) + '</li>').join('')}</ul>`;
+    container.innerHTML = pending.length === 0
+      ? `<p>${emptyAllDone}</p>`
+      : `<h4>${emptyPendingTitle}（${pending.length} 人）</h4><ul>${pending.map(p => '<li>' + escapeHtml(p) + '</li>').join('')}</ul>`;
     return;
   }
 
-  // First paint: open groups that still have pending voters; remember toggles after that.
-  if (!state.adminTrophy.expandedGroups) {
-    state.adminTrophy.expandedGroups = new Set(
-      groups.filter(g => g.members.some(m => !m.voted)).map(g => g.group_label)
-    );
+  if (!expandedSetRef.get()) {
+    expandedSetRef.set(new Set(
+      groups.filter(g => g.members.some(m => !m[doneKey])).map(g => g.group_label)
+    ));
   }
+  const expanded = expandedSetRef.get();
 
-  const totalPending = pending.length;
   const cards = groups.map(group => {
-    const votedCount = group.members.filter(m => m.voted).length;
+    const doneCount = group.members.filter(m => m[doneKey]).length;
     const label = group.group_label;
-    const title = group.display_label || formatGroupLabel(label);
-    const isOpen = state.adminTrophy.expandedGroups.has(label);
+    const heading = group.display_label || formatGroupLabel(label);
+    const isOpen = expanded.has(label);
     const membersHtml = group.members.map(m => `
-      <div class="voter-member ${m.voted ? 'voter-done' : 'voter-pending'}">
-        <span class="voter-check" aria-hidden="true">${m.voted ? '✓' : '○'}</span>
+      <div class="voter-member ${m[doneKey] ? 'voter-done' : 'voter-pending'}">
+        <span class="voter-check" aria-hidden="true">${m[doneKey] ? '✓' : '○'}</span>
         <span class="voter-id">${escapeHtml(m.participant_id)}</span>
-        <span class="voter-status-label">${m.voted ? '已投' : '未投'}</span>
+        <span class="voter-status-label">${m[doneKey] ? doneLabel : pendingLabel}</span>
       </div>
     `).join('');
 
@@ -1839,31 +1912,97 @@ function renderAdminPendingVoters() {
       <div class="group-voter-card${isOpen ? ' is-open' : ''}" data-group="${escapeHtml(label)}">
         <button type="button" class="group-voter-header" aria-expanded="${isOpen ? 'true' : 'false'}">
           <span class="group-voter-chevron" aria-hidden="true"></span>
-          <h4>${escapeHtml(title)}</h4>
-          <span class="group-voter-count">${votedCount}/${group.members.length}</span>
+          <h4>${escapeHtml(heading)}</h4>
+          <span class="group-voter-count">${doneCount}/${group.members.length}</span>
         </button>
         <div class="group-voter-members"${isOpen ? '' : ' hidden'}>${membersHtml}</div>
       </div>
     `;
   }).join('');
 
-  DOM.adminPendingVoters.innerHTML = `
-    <h4 class="admin-pending-title">投票進度（按組別）${totalPending > 0 ? ` · 尚餘 ${totalPending} 人` : ''}</h4>
+  container.innerHTML = `
+    <h4 class="admin-pending-title">${title}${pending.length > 0 ? ` · 尚餘 ${pending.length} 人` : ''}</h4>
     <div class="group-voter-grid">${cards}</div>
   `;
 
-  DOM.adminPendingVoters.querySelectorAll('.group-voter-header').forEach(btn => {
+  container.querySelectorAll('.group-voter-header').forEach(btn => {
     btn.addEventListener('click', () => {
       const card = btn.closest('.group-voter-card');
       const groupLabel = card?.dataset.group;
-      if (!groupLabel || !state.adminTrophy.expandedGroups) return;
-      const open = state.adminTrophy.expandedGroups.has(groupLabel);
-      if (open) state.adminTrophy.expandedGroups.delete(groupLabel);
-      else state.adminTrophy.expandedGroups.add(groupLabel);
+      if (!groupLabel || !expanded) return;
+      const open = expanded.has(groupLabel);
+      if (open) expanded.delete(groupLabel);
+      else expanded.add(groupLabel);
       card.classList.toggle('is-open', !open);
       btn.setAttribute('aria-expanded', open ? 'false' : 'true');
       card.querySelector('.group-voter-members')?.classList.toggle('hidden', open);
     });
+  });
+}
+
+function renderAdminPendingVoters() {
+  renderGroupStatusCards({
+    container: DOM.adminPendingVoters,
+    title: '投票進度（按組別）',
+    groups: state.adminTrophy.overview?.group_voting_status || [],
+    expandedSetRef: {
+      get: () => state.adminTrophy.expandedGroups,
+      set: value => { state.adminTrophy.expandedGroups = value; }
+    },
+    doneKey: 'voted',
+    doneLabel: '已投',
+    pendingLabel: '未投',
+    emptyAllDone: '所有參加者均已完成投票',
+    emptyPendingTitle: '尚未完成投票'
+  });
+}
+
+function buildLoginStatusGroups() {
+  const loggedIn = new Set(
+    state.presence.filter(p => !!p.first_seen).map(p => p.participant_id)
+  );
+  const onlineCutoff = Date.now() - CONFIG.PRESENCE_ONLINE_MS;
+  const online = new Set(
+    state.presence.filter(p => {
+      if (!p.last_seen) return false;
+      return new Date(p.last_seen).getTime() >= onlineCutoff && p.online !== false;
+    }).map(p => p.participant_id)
+  );
+
+  const byGroup = new Map();
+  state.participants.forEach(p => {
+    const group = p.group_id || '未分組';
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group).push({
+      participant_id: p.participant_id,
+      logged_in: loggedIn.has(p.participant_id),
+      online: online.has(p.participant_id)
+    });
+  });
+
+  return [...byGroup.entries()]
+    .sort((a, b) => compareGroupLabels(a[0], b[0]))
+    .map(([group_label, members]) => ({
+      group_label,
+      display_label: formatGroupLabel(group_label),
+      members
+    }));
+}
+
+function renderAdminLoginStatus() {
+  renderGroupStatusCards({
+    container: DOM.adminLoginStatus,
+    title: '登入狀況（按組別）',
+    groups: buildLoginStatusGroups(),
+    expandedSetRef: {
+      get: () => state.expandedLoginGroups,
+      set: value => { state.expandedLoginGroups = value; }
+    },
+    doneKey: 'logged_in',
+    doneLabel: '已登入',
+    pendingLabel: '未登入',
+    emptyAllDone: '所有參加者均已登入',
+    emptyPendingTitle: '尚未登入'
   });
 }
 
