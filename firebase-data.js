@@ -55,8 +55,33 @@ export async function signIn(participantId, phone) {
   // in, closing the tab (or signing out) clears it.
   await setPersistence(auth, browserSessionPersistence);
   const email = isAdminId(participantId) ? ADMIN_EMAIL : participantEmail(participantId);
-  const credential = await signInWithEmailAndPassword(auth, email, phone);
+  const password = resolveAuthPassword(participantId, phone);
+  const credential = await signInWithEmailAndPassword(auth, email, password);
   return credential.user;
+}
+
+/**
+ * Firebase Auth requires passwords of at least 6 characters. Numbered seats
+ * like "1A" are shorter, so we repeat the id until it meets the minimum.
+ * The participant still types just their id; this expansion is internal.
+ */
+export function authPasswordForParticipantId(participantId) {
+  const id = String(participantId || '').trim().toUpperCase();
+  if (!id) return '';
+  if (id.length >= 6) return id;
+  let password = id;
+  while (password.length < 6) password += id;
+  return password;
+}
+
+/** Map what the user typed into the Auth password we actually stored. */
+export function resolveAuthPassword(participantId, entered) {
+  const raw = String(entered || '').trim();
+  const id = String(participantId || '').trim().toUpperCase();
+  if (raw && id && raw.toUpperCase() === id) {
+    return authPasswordForParticipantId(id);
+  }
+  return raw;
 }
 
 export function signOutUser() {
@@ -91,7 +116,7 @@ export function describeAuthError(err) {
     case 'auth/invalid-login-credentials':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-      return '參加者編號或電話號碼不正確';
+      return '參加者編號或密碼不正確';
     case 'auth/invalid-email':
       return '參加者編號格式不正確';
     case 'auth/user-disabled':

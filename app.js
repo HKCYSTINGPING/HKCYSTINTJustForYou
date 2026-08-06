@@ -912,20 +912,20 @@ function updateLoginStatusBanner() {
 async function handleLogin(e) {
   e.preventDefault();
   const rawId = DOM.loginParticipant.value.trim();
-  const phone = normalizePhone(DOM.loginPhone.value);
+  const password = String(DOM.loginPhone.value || '').trim();
 
   if (!rawId) { showToast('請輸入參加者編號', 'error'); return; }
-  if (!phone) { showToast('請輸入電話號碼', 'error'); return; }
+  if (!password) { showToast('請輸入密碼', 'error'); return; }
 
   const isAdmin = isAdminLogin(rawId);
   const participantId = isAdmin ? CONFIG.ADMIN_ID : normalizeId(rawId);
 
   await runProgressButton(DOM.loginSubmit, (async () => {
     try {
-      // Firebase checks the password. The browser no longer holds anyone's
-      // phone number, and every later read and write carries the resulting
-      // identity so the security rules can enforce who may see what.
-      await data.signIn(participantId, phone);
+      // Firebase checks the password. Numbered seats type their own id; Staff
+      // still use their phone. Short ids are expanded inside signIn to meet
+      // Auth's 6-character minimum.
+      await data.signIn(participantId, password);
     } catch (err) {
       showToast(data.describeAuthError(err), 'error');
       return;
@@ -2819,8 +2819,10 @@ function bindEvents() {
   DOM.participantLogout.addEventListener('click', handleLogout);
   DOM.adminLogout.addEventListener('click', handleLogout);
 
+  // Allow alphanumeric passwords (seat id). Digits-only stripping is only for
+  // the admin phone editor.
   DOM.loginPhone.addEventListener('input', () => {
-    DOM.loginPhone.value = normalizePhone(DOM.loginPhone.value);
+    DOM.loginPhone.value = String(DOM.loginPhone.value || '').toUpperCase();
   });
 
   DOM.sendForm.addEventListener('submit', handleSendMessage);
