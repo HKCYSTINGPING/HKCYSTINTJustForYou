@@ -800,6 +800,25 @@ function createCombobox(config) {
   };
 }
 
+function isStaffGroup(groupId) {
+  return /STAFF/i.test(String(groupId || ''));
+}
+
+function isStaffParticipant(p) {
+  return !!(p && isStaffGroup(p.group_id));
+}
+
+/** Login dropdown: numbered groups only. Staff type their own id. */
+function getLoginMenuParticipants() {
+  return state.participants.filter(p => !isStaffParticipant(p));
+}
+
+function findParticipantById(participantId) {
+  const id = normalizeId(participantId);
+  if (!id) return null;
+  return state.participants.find(p => normalizeId(p.participant_id) === id) || null;
+}
+
 let loginCombobox = null;
 let sendCombobox = null;
 let selectedReceiverId = null;
@@ -809,21 +828,27 @@ function initLoginCombobox() {
     input: DOM.loginParticipant,
     dropdown: DOM.loginDropdown,
     toggle: DOM.loginComboboxToggle,
-    items: state.participants,
+    items: getLoginMenuParticipants(),
     getLabel: (item) => item.participant_id,
     onInput: (value) => {
       const isAdmin = isAdminLogin(value);
       DOM.loginComboboxToggle.classList.toggle('hidden', isAdmin);
-      DOM.loginNoMatch.classList.add('hidden');
       if (isAdmin) {
         loginCombobox.closeDropdown();
-      } else {
-        const filtered = loginCombobox.getFilteredItems(value);
-        DOM.loginNoMatch.classList.toggle('hidden', !value.trim() || filtered.length > 0 || isAdmin);
+        DOM.loginNoMatch.classList.add('hidden');
+        return;
       }
+      const filtered = loginCombobox.getFilteredItems(value);
+      // Staff (and any known id) may type freely even though they are not listed.
+      const known = !!findParticipantById(value);
+      DOM.loginNoMatch.classList.toggle(
+        'hidden',
+        !value.trim() || filtered.length > 0 || known
+      );
     },
     onSelect: (item) => {
       DOM.loginParticipant.value = item.participant_id;
+      DOM.loginNoMatch.classList.add('hidden');
     }
   });
 }
@@ -845,7 +870,7 @@ function initSendCombobox() {
 }
 
 function refreshComboboxItems() {
-  if (loginCombobox) loginCombobox.setItems(state.participants);
+  if (loginCombobox) loginCombobox.setItems(getLoginMenuParticipants());
   if (sendCombobox) {
     sendCombobox.setItems(state.participants);
     sendCombobox.setExcludeIds([state.participantId, CONFIG.ADMIN_ID]);
