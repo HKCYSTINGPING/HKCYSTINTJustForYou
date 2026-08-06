@@ -540,6 +540,27 @@ async function loadStaticParticipants() {
 
 // ─── Derived trophy views ───────────────────────────────────────────────────
 
+/** GROUP_1 before GROUP_2 … then GROUP_STAFF / everything else. */
+function compareGroupLabels(a, b) {
+  const rank = label => {
+    const m = String(label).match(/^GROUP_(\d+)$/i);
+    if (m) return Number(m[1]);
+    if (/STAFF/i.test(label)) return 1000;
+    return 2000;
+  };
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  return String(a).localeCompare(String(b));
+}
+
+function formatGroupLabel(label) {
+  const m = String(label || '').match(/^GROUP_(\d+)$/i);
+  if (m) return 'Group ' + m[1];
+  if (/STAFF/i.test(label)) return 'Staff';
+  return label || '未分組';
+}
+
 /**
  * The old backend assembled these summaries server side. Firestore has no
  * server to run code on, but the admin already holds every submission through
@@ -570,8 +591,12 @@ function buildTrophyOverview(submissions, trophies) {
       trophy_count: trophies.length
     },
     group_voting_status: [...byGroup.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([group_label, members]) => ({ group_label, members })),
+      .sort((a, b) => compareGroupLabels(a[0], b[0]))
+      .map(([group_label, members]) => ({
+        group_label,
+        display_label: formatGroupLabel(group_label),
+        members
+      })),
     pending_participants: state.participants
       .filter(p => !submitted.has(p.participant_id))
       .map(p => p.participant_id)
@@ -1800,12 +1825,13 @@ function renderAdminPendingVoters() {
   const cards = groups.map(group => {
     const votedCount = group.members.filter(m => m.voted).length;
     const label = group.group_label;
+    const title = group.display_label || formatGroupLabel(label);
     const isOpen = state.adminTrophy.expandedGroups.has(label);
     const membersHtml = group.members.map(m => `
       <div class="voter-member ${m.voted ? 'voter-done' : 'voter-pending'}">
         <span class="voter-check" aria-hidden="true">${m.voted ? '✓' : '○'}</span>
         <span class="voter-id">${escapeHtml(m.participant_id)}</span>
-        <span class="voter-status-label">${m.voted ? '已投票' : '未投票'}</span>
+        <span class="voter-status-label">${m.voted ? '已投' : '未投'}</span>
       </div>
     `).join('');
 
@@ -1813,7 +1839,7 @@ function renderAdminPendingVoters() {
       <div class="group-voter-card${isOpen ? ' is-open' : ''}" data-group="${escapeHtml(label)}">
         <button type="button" class="group-voter-header" aria-expanded="${isOpen ? 'true' : 'false'}">
           <span class="group-voter-chevron" aria-hidden="true"></span>
-          <h4>${escapeHtml(label)}</h4>
+          <h4>${escapeHtml(title)}</h4>
           <span class="group-voter-count">${votedCount}/${group.members.length}</span>
         </button>
         <div class="group-voter-members"${isOpen ? '' : ' hidden'}>${membersHtml}</div>
