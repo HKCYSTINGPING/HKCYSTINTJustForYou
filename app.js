@@ -348,12 +348,6 @@ function finishLoading() {
   setTimeout(() => showLoading(false), 120);
 }
 
-function showSplashThenLogin() {
-  runSplashAnimation().then(() => {
-    showScreen('login');
-  });
-}
-
 /** Plays the splash animation and resolves when it has finished exiting. */
 function runSplashAnimation() {
   return new Promise(resolve => {
