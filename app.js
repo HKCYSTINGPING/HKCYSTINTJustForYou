@@ -78,7 +78,9 @@ const state = {
     fallbackActivated: false,
     trophies: [],
     submissions: [],
-    results: []
+    results: [],
+    // Which group cards the admin has opened; survives live re-renders.
+    expandedGroups: null
   },
   adminParticipant: {
     selectedId: null,
@@ -1787,9 +1789,18 @@ function renderAdminPendingVoters() {
     return;
   }
 
+  // First paint: open groups that still have pending voters; remember toggles after that.
+  if (!state.adminTrophy.expandedGroups) {
+    state.adminTrophy.expandedGroups = new Set(
+      groups.filter(g => g.members.some(m => !m.voted)).map(g => g.group_label)
+    );
+  }
+
   const totalPending = pending.length;
   const cards = groups.map(group => {
     const votedCount = group.members.filter(m => m.voted).length;
+    const label = group.group_label;
+    const isOpen = state.adminTrophy.expandedGroups.has(label);
     const membersHtml = group.members.map(m => `
       <div class="voter-member ${m.voted ? 'voter-done' : 'voter-pending'}">
         <span class="voter-check" aria-hidden="true">${m.voted ? '✓' : '○'}</span>
@@ -1799,12 +1810,13 @@ function renderAdminPendingVoters() {
     `).join('');
 
     return `
-      <div class="group-voter-card">
-        <div class="group-voter-header">
-          <h4>${escapeHtml(group.group_label)}</h4>
+      <div class="group-voter-card${isOpen ? ' is-open' : ''}" data-group="${escapeHtml(label)}">
+        <button type="button" class="group-voter-header" aria-expanded="${isOpen ? 'true' : 'false'}">
+          <span class="group-voter-chevron" aria-hidden="true"></span>
+          <h4>${escapeHtml(label)}</h4>
           <span class="group-voter-count">${votedCount}/${group.members.length}</span>
-        </div>
-        <div class="group-voter-members">${membersHtml}</div>
+        </button>
+        <div class="group-voter-members"${isOpen ? '' : ' hidden'}>${membersHtml}</div>
       </div>
     `;
   }).join('');
@@ -1813,6 +1825,20 @@ function renderAdminPendingVoters() {
     <h4 class="admin-pending-title">投票進度（按組別）${totalPending > 0 ? ` · 尚餘 ${totalPending} 人` : ''}</h4>
     <div class="group-voter-grid">${cards}</div>
   `;
+
+  DOM.adminPendingVoters.querySelectorAll('.group-voter-header').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.group-voter-card');
+      const groupLabel = card?.dataset.group;
+      if (!groupLabel || !state.adminTrophy.expandedGroups) return;
+      const open = state.adminTrophy.expandedGroups.has(groupLabel);
+      if (open) state.adminTrophy.expandedGroups.delete(groupLabel);
+      else state.adminTrophy.expandedGroups.add(groupLabel);
+      card.classList.toggle('is-open', !open);
+      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      card.querySelector('.group-voter-members')?.classList.toggle('hidden', open);
+    });
+  });
 }
 
 function renderAdminFallbackBanner() {
