@@ -15,6 +15,8 @@ const CONFIG = {
   PARTICIPANTS_URL: 'participants.json',
   PARTICIPANTS_CACHE_KEY: 'hkcy_participants',
   PARTICIPANTS_CACHE_TTL: 30 * 60 * 1000,
+  // Tab-scoped login identity: survives reload, cleared on logout / tab close.
+  SESSION_KEY: 'hkcy_session',
   READ_MSG_PREFIX: 'hkcy_read_',
   ADMIN_ID: 'ADMIN',
   MAX_MESSAGE_LENGTH: 300,
@@ -347,32 +349,43 @@ function finishLoading() {
 }
 
 function showSplashThenLogin() {
-  if (!DOM.screenSplash) {
+  runSplashAnimation().then(() => {
     showScreen('login');
-    return;
-  }
-  DOM.screenSplash.classList.remove('hidden');
-  DOM.screenLogin.classList.add('hidden');
-  setSplashPercent(0);
+  });
+}
 
-  if (splashTickTimer) clearInterval(splashTickTimer);
-  splashTickTimer = setInterval(() => {
-    const current = parseInt(DOM.splashPercent?.textContent || '0', 10) || 0;
-    if (current < 100) setSplashPercent(current + 2);
-  }, 36);
-
-  setTimeout(() => {
-    if (splashTickTimer) {
-      clearInterval(splashTickTimer);
-      splashTickTimer = null;
+/** Plays the splash animation and resolves when it has finished exiting. */
+function runSplashAnimation() {
+  return new Promise(resolve => {
+    if (!DOM.screenSplash) {
+      resolve();
+      return;
     }
-    setSplashPercent(100);
-    DOM.screenSplash.classList.add('splash-exit');
+    DOM.screenSplash.classList.remove('hidden', 'splash-exit');
+    DOM.screenLogin.classList.add('hidden');
+    if (DOM.screenParticipant) DOM.screenParticipant.classList.add('hidden');
+    if (DOM.screenAdmin) DOM.screenAdmin.classList.add('hidden');
+    setSplashPercent(0);
+
+    if (splashTickTimer) clearInterval(splashTickTimer);
+    splashTickTimer = setInterval(() => {
+      const current = parseInt(DOM.splashPercent?.textContent || '0', 10) || 0;
+      if (current < 100) setSplashPercent(current + 2);
+    }, 36);
+
     setTimeout(() => {
-      DOM.screenSplash.classList.add('hidden');
-      showScreen('login');
-    }, 400);
-  }, 1800);
+      if (splashTickTimer) {
+        clearInterval(splashTickTimer);
+        splashTickTimer = null;
+      }
+      setSplashPercent(100);
+      DOM.screenSplash.classList.add('splash-exit');
+      setTimeout(() => {
+        DOM.screenSplash.classList.add('hidden');
+        resolve();
+      }, 400);
+    }, 1800);
+  });
 }
 
 function showToast(message, type = 'info') {
@@ -901,6 +914,7 @@ async function handleLogin(e) {
 
     state.participantId = participantId;
     state.isAdmin = isAdmin;
+    saveSession(participantId, isAdmin);
 
     if (isAdmin) {
       await enterAdminDashboard();
@@ -908,6 +922,75 @@ async function handleLogin(e) {
       await enterParticipantDashboard();
     }
   })());
+}
+
+function saveSession(participantId, isAdmin) {
+  try {
+    sessionStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify({
+      participantId,
+      isAdmin: !!isAdmin,
+      savedAt: Date.now()
+    }));
+  } catch (_) { /* private mode / quota — Firebase session is still enough */ }
+}
+
+function clearSession() {
+  try {
+    sessionStorage.removeItem(CONFIG.SESSION_KEY);
+  } catch (_) { /* ignore */ }
+}
+
+function readSession() {
+  try {
+    const raw = sessionStorage.getItem(CONFIG.SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.participantId) return null;
+    return {
+      participantId: normalizeId(data.participantId),
+      isAdmin: !!data.isAdmin
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * After a reload, Firebase Auth restores the tab session and we re-enter the
+ * matching dashboard. Returns true if the user was signed back in.
+ */
+async function tryRestoreSession() {
+  const user = await data.waitForAuth();
+  if (!user) {
+    clearSession();
+    return false;
+  }
+
+  const fromAuth = data.identityFromUser(user);
+  if (!fromAuth) {
+    clearSession();
+    await data.signOutUser().catch(() => {});
+    return false;
+  }
+
+  const stored = readSession();
+  // Prefer the tab-stored id when it matches the signed-in account; otherwise
+  // trust Firebase and refresh the tab copy.
+  if (stored && stored.participantId === fromAuth.participantId) {
+    state.participantId = stored.participantId;
+    state.isAdmin = stored.isAdmin || fromAuth.isAdmin;
+  } else {
+    state.participantId = fromAuth.participantId;
+    state.isAdmin = fromAuth.isAdmin;
+    saveSession(state.participantId, state.isAdmin);
+  }
+
+  if (state.isAdmin) {
+    await enterAdminDashboard();
+  } else {
+    await enterParticipantDashboard();
+  }
+  return true;
 }
 
 /**
@@ -1291,6 +1374,7 @@ function handleLogout() {
     data.markPresenceOffline(leavingId).catch(() => { /* best-effort */ });
   }
   data.signOutUser().catch(() => { /* the local session is gone either way */ });
+  clearSession();
   state.participantId = null;
   state.isAdmin = false;
   state.inboxMessages = [];
@@ -2813,8 +2897,28 @@ function init() {
   cacheDOM();
   bindEvents();
   initAdminMessageScrollPause();
-  showSplashThenLogin();
-  bootstrapApp();
+  startApp();
+}
+
+async function startApp() {
+  const splashDone = runSplashAnimation();
+  try {
+    await bootstrapApp();
+  } catch (_) { /* bootstrapApp already toasts hard failures */ }
+
+  let restored = false;
+  try {
+    restored = await tryRestoreSession();
+  } catch (err) {
+    clearSession();
+    console.warn('無法恢復登入狀態:', err && err.message);
+  }
+
+  await splashDone;
+  if (!restored) {
+    showScreen('login');
+    updateLoginStatusBanner();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);

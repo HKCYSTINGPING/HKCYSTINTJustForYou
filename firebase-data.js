@@ -15,6 +15,8 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.17.1/fireba
 import {
   getAuth,
   onAuthStateChanged,
+  setPersistence,
+  browserSessionPersistence,
   signInWithEmailAndPassword,
   signOut
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
@@ -49,6 +51,9 @@ export function isAdminId(participantId) {
 }
 
 export async function signIn(participantId, phone) {
+  // Keep the Firebase session in this browser tab only: reload stays signed
+  // in, closing the tab (or signing out) clears it.
+  await setPersistence(auth, browserSessionPersistence);
   const email = isAdminId(participantId) ? ADMIN_EMAIL : participantEmail(participantId);
   const credential = await signInWithEmailAndPassword(auth, email, phone);
   return credential.user;
@@ -58,12 +63,24 @@ export function signOutUser() {
   return signOut(auth);
 }
 
+/** Map a Firebase Auth user back to the app's participant id. */
+export function identityFromUser(user) {
+  if (!user || !user.email) return null;
+  const email = String(user.email).trim().toLowerCase();
+  if (email === ADMIN_EMAIL.toLowerCase()) {
+    return { participantId: 'ADMIN', isAdmin: true };
+  }
+  const local = email.split('@')[0] || '';
+  if (!local) return null;
+  return { participantId: local.toUpperCase(), isAdmin: false };
+}
+
 /** Resolves once Firebase has restored (or ruled out) a previous session. */
 export function waitForAuth() {
   return new Promise(resolve => {
     const stop = onAuthStateChanged(auth, user => {
       stop();
-      resolve(user);
+      resolve(user || null);
     });
   });
 }
