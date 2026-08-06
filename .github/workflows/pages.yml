@@ -33,7 +33,12 @@ jobs:
       - name: Prepare site
         run: |
           mkdir _site
-          cp index.html app.js styles.css participants.json _site/
+          cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json _site/
+          # A missing module would only surface as a blank page in someone's
+          # browser, so fail the deploy here instead.
+          for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json; do
+            test -s "_site/$f" || { echo "缺少 $f"; exit 1; }
+          done
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

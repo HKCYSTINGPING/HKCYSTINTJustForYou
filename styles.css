@@ -729,17 +729,6 @@ textarea.input-field {
   animation: pulse-dot 1.2s ease-in-out infinite;
 }
 
-.badge-failed {
-  margin-top: 8px;
-  background: var(--danger-bg);
-  color: var(--danger);
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.badge-failed:hover { filter: brightness(0.97); }
-
 .badge-queue {
   background: var(--warning-bg);
   color: var(--secondary);
@@ -757,11 +746,6 @@ textarea.input-field {
 }
 
 .message-card.message-pending { opacity: 0.75; }
-
-.message-card.message-failed {
-  border-color: var(--danger);
-  background: var(--danger-bg);
-}
 
 .hint-text {
   margin-top: var(--space-sm);

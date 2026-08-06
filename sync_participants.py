@@ -2,12 +2,14 @@
 """
 Regenerate participants.json from the live Google Sheet.
 
-The login screen reads that file straight from GitHub Pages instead of calling
-Apps Script, which removes one ~2.5s backend request per visitor and, more
-importantly, removes the burst of ~50 simultaneous executions that happens when
-everyone opens the page at the start of the event.
+The login screen reads that file straight from GitHub Pages so the page can
+render immediately without waiting on any backend.
 
-Run this whenever participant IDs, phone numbers or groups change in the sheet:
+Phone numbers are deliberately left out. They are the login passwords now, and
+Firebase Authentication checks them, so the browser never needs to see anyone
+else's. Run migrate_to_firestore.py to push phone changes to Firebase.
+
+Run this whenever participant IDs or groups change in the sheet:
 
     python3 sync_participants.py
 
@@ -42,22 +44,22 @@ def fetch_participants():
 
 def normalize(participants):
     rows = []
+    missing_phone = []
     for p in participants:
         pid = str(p.get("participant_id", "")).strip().upper()
         phone = "".join(ch for ch in str(p.get("phone_number", "")) if ch.isdigit())
         group = str(p.get("group_id", "")).strip()
         if pid:
-            rows.append(
-                {"participant_id": pid, "group_id": group, "phone_number": phone}
-            )
+            rows.append({"participant_id": pid, "group_id": group})
+            if not phone:
+                missing_phone.append(pid)
     rows.sort(key=lambda r: (r["group_id"], r["participant_id"]))
-    return rows
+    return rows, missing_phone
 
 
 def main():
-    rows = normalize(fetch_participants())
+    rows, missing = normalize(fetch_participants())
 
-    missing = [r["participant_id"] for r in rows if not r["phone_number"]]
     if missing:
         print(f"警告：以下參加者冇電話號碼，將無法登入：{', '.join(missing)}", file=sys.stderr)
 

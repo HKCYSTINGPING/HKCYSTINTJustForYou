@@ -1,46 +1,29 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    HKCYSTINTJustForYou — Frontend Application
-   Sections: Configuration, State, DOM, Utilities, API, Combobox,
-             Messaging, Admin Monitor, Sent Watch, Trophy, Init
+   Sections: Configuration, State, DOM, Utilities, Data, Combobox,
+             Messaging, Admin Monitor, Trophy, Init
    ═══════════════════════════════════════════════════════════════════════════ */
+
+import * as data from './firebase-data.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwNHsaZ4-smjmdCaYvmNcANIhIiXtUWUH5QHG0KJwSwpq4RxlelkRSa7QRJXFJQKpwV6A/exec';
-
 const CONFIG = {
-  // Served by GitHub Pages rather than Apps Script. Every visitor needs this
-  // list at the same moment when the event starts, and the backend only allows
-  // 30 concurrent executions.
+  // Served by GitHub Pages so the login screen can draw before any network
+  // round trip. It carries ids and groups only; phone numbers are passwords
+  // and live in Firebase Authentication.
   PARTICIPANTS_URL: 'participants.json',
   PARTICIPANTS_CACHE_KEY: 'hkcy_participants',
   PARTICIPANTS_CACHE_TTL: 30 * 60 * 1000,
-  INBOX_CACHE_PREFIX: 'hkcy_inbox_',
   READ_MSG_PREFIX: 'hkcy_read_',
   ADMIN_ID: 'ADMIN',
-  ADMIN_PHONE: '23082026',
   MAX_MESSAGE_LENGTH: 300,
   CHAR_WARN_THRESHOLD: 250,
-  // Apps Script allows only 30 concurrent executions. With ~50 people online
-  // these intervals decide whether the backend keeps up or queues into a
-  // cascade of timeouts, so they are deliberately slow.
-  ADMIN_WATCH_INTERVAL: 4000,
-  ADMIN_WATCH_INTERVAL_HIDDEN: 15000,
-  ADMIN_BACKUP_SYNC: 60000,
-  SENT_WATCH_INTERVAL: 8000,
-  SENT_WATCH_INTERVAL_HIDDEN: 30000,
-  SENT_BACKUP_SYNC: 120000,
-  TROPHY_WATCH_INTERVAL: 10000,
-  TROPHY_WATCH_INTERVAL_HIDDEN: 30000,
-  WATCH_JITTER_RATIO: 0.3,
-  WATCH_MAX_BACKOFF: 8,
-  // Longest anyone waits on screen before the work moves to the background.
-  ACTION_HANDOFF_MS: 3000,
-  QUEUE_MAX_ATTEMPTS: 4,
-  QUEUE_RETRY_BASE_MS: 2000,
-  QUEUE_RETRY_MAX_MS: 20000,
   TOAST_DURATION: 3000,
-  API_TIMEOUT_MS: 25000
+  // Firestore answers in well under a second on a working connection, so a
+  // wait this long means the network is the problem and saying so beats
+  // leaving someone watching a progress bar.
+  LOADING_TIMEOUT_MS: 15000
 };
 
 const BAD_WORDS = [
@@ -60,18 +43,15 @@ const BAD_WORDS = [
 
 const state = {
   participantId: null,
-  phoneNumber: null,
-  apiVersion: null,
   participants: [],
   inboxMessages: [],
   sentMessages: [],
-  sentRevision: '',
   messagingOpen: true,
   isAdmin: false,
   monitorMessages: [],
-  monitorRevision: '',
   monitorViewFilter: 'all',
   adminLoad: null,
+  votingConfig: { voting_status: 'DRAFT', allow_resubmit: false, calculated_at: '', published_at: '' },
   knownMessageIds: new Set(),
   trophy: {
     loaded: false,
@@ -95,7 +75,10 @@ const state = {
     auditVotes: [],
     profiles: [],
     trophySummary: [],
-    fallbackActivated: false
+    fallbackActivated: false,
+    trophies: [],
+    submissions: [],
+    results: []
   },
   adminParticipant: {
     selectedId: null,
@@ -105,17 +88,9 @@ const state = {
 
 let adminParticipantCombobox = null;
 
-let sentWatchAbort = null;
-let adminWatchAbort = null;
-let trophyWatchAbort = null;
-let sentWatchTimer = null;
-let adminWatchTimer = null;
-let trophyWatchTimer = null;
-let sentBackupTimer = null;
-let adminBackupTimer = null;
-let sentWatchFailures = 0;
-let adminWatchFailures = 0;
-let trophyWatchFailures = 0;
+// Every open Firestore listener, so signing out can close all of them.
+let subscriptions = [];
+let resultUnsubscribe = null;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -336,7 +311,7 @@ function showLoading(show, percent) {
       finishLoading();
       showToast('載入時間較長，請檢查網絡後再試', 'error');
     }
-  }, CONFIG.API_TIMEOUT_MS + 3000);
+  }, CONFIG.LOADING_TIMEOUT_MS);
 }
 
 function finishLoading() {
@@ -520,200 +495,31 @@ function buildPairingsFromAssignments(assignments) {
   return pairings;
 }
 
-/**
- * Spreads clients apart instead of letting every browser fire on the same tick,
- * and backs off when the API is already struggling so a slow backend does not
- * get buried under retries.
- */
-function getWatchInterval(fast, slow, failures) {
-  const base = (document.hidden ? slow : fast) *
-    Math.min(Math.pow(2, failures || 0), CONFIG.WATCH_MAX_BACKOFF);
-  const jitter = base * CONFIG.WATCH_JITTER_RATIO;
-  return Math.round(base - jitter / 2 + Math.random() * jitter);
+// ─── Subscriptions ──────────────────────────────────────────────────────────
+
+function track(unsubscribe) {
+  subscriptions.push(unsubscribe);
+  return unsubscribe;
 }
 
-// ─── Background Action Queue ────────────────────────────────────────────────
-
-/**
- * Actions run in the background instead of holding the screen hostage. Apps
- * Script takes seconds to answer and allows only 30 concurrent executions, so
- * the queue is deliberately serial: one client never fires several requests at
- * once, and the person using it never waits more than ACTION_HANDOFF_MS.
- */
-const actionQueue = {
-  items: [],
-  active: null,
-  running: false
-};
-
-const queueListeners = [];
-
-function onQueueChange(listener) {
-  queueListeners.push(listener);
-}
-
-function getQueueDepth() {
-  return actionQueue.items.length;
-}
-
-function notifyQueueChange() {
-  const depth = getQueueDepth();
-  queueListeners.forEach(listener => {
+function stopAllSubscriptions() {
+  subscriptions.forEach(stop => {
     try {
-      listener(depth, actionQueue.active);
-    } catch (_) { /* a broken indicator must not stall the queue */ }
+      stop();
+    } catch (_) { /* already closed */ }
   });
+  subscriptions = [];
+  resultUnsubscribe = null;
 }
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function queueRetryDelay(attempts) {
-  const base = Math.min(CONFIG.QUEUE_RETRY_BASE_MS * Math.pow(2, attempts - 1), CONFIG.QUEUE_RETRY_MAX_MS);
-  return Math.round(base * (0.75 + Math.random() * 0.5));
-}
-
-function enqueueAction(task) {
-  let settle;
-  const item = {
-    id: 'q' + Date.now() + Math.random().toString(36).slice(2, 7),
-    label: task.label || '操作',
-    run: task.run,
-    onSuccess: task.onSuccess,
-    onFailure: task.onFailure,
-    attempts: 0,
-    settled: null
+function reportSubscriptionError(what) {
+  return err => {
+    console.warn(what + ' listener error:', err && err.message);
+    showToast(what + '連線中斷，正在重試…', 'error');
   };
-  item.settled = new Promise(resolve => { settle = resolve; });
-  item.settle = settle;
-
-  actionQueue.items.push(item);
-  notifyQueueChange();
-  processQueue();
-  return item;
 }
 
-async function processQueue() {
-  if (actionQueue.running) return;
-  actionQueue.running = true;
-
-  while (actionQueue.items.length) {
-    const item = actionQueue.items[0];
-    actionQueue.active = item;
-    notifyQueueChange();
-
-    try {
-      const result = checkApiResponse(await item.run());
-      actionQueue.items.shift();
-      actionQueue.active = null;
-      if (item.onSuccess) item.onSuccess(result);
-      item.settle({ ok: true });
-    } catch (err) {
-      item.attempts++;
-      if (item.attempts >= CONFIG.QUEUE_MAX_ATTEMPTS) {
-        actionQueue.items.shift();
-        actionQueue.active = null;
-        if (item.onFailure) item.onFailure(err);
-        item.settle({ ok: false, error: err });
-      } else {
-        actionQueue.active = null;
-        notifyQueueChange();
-        await delay(queueRetryDelay(item.attempts));
-      }
-    }
-    notifyQueueChange();
-  }
-
-  actionQueue.running = false;
-  notifyQueueChange();
-}
-
-/**
- * Waits for real progress, but only briefly. Resolves true when the work was
- * handed off to the background so the caller can stop blocking the user.
- */
-function runWithHandoff(promise, ms) {
-  return new Promise(resolve => {
-    let done = false;
-    const finish = handedOff => {
-      if (done) return;
-      done = true;
-      resolve(handedOff);
-    };
-    const timer = setTimeout(() => finish(true), ms);
-    promise.then(() => finish(false), () => finish(false)).finally(() => clearTimeout(timer));
-  });
-}
-
-// ─── API ────────────────────────────────────────────────────────────────────
-
-/**
- * Rides along on requests the client is already making so the admin dashboard
- * can show live queue depth without anyone spending an extra API call on it.
- */
-function withQueueTelemetry(params) {
-  if (!state.participantId || state.isAdmin) return params;
-  return Object.assign({}, params, { q: getQueueDepth() });
-}
-
-async function apiGet(params, options = {}) {
-  const url = new URL(API_URL);
-  Object.entries(withQueueTelemetry(params)).forEach(([k, v]) => {
-    if (v !== undefined && v !== null) url.searchParams.set(k, v);
-  });
-
-  const controller = new AbortController();
-  const timeoutMs = options.timeout || CONFIG.API_TIMEOUT_MS;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  if (options.signal) {
-    options.signal.addEventListener('abort', () => controller.abort(), { once: true });
-  }
-
-  const fetchOpts = { method: 'GET', signal: controller.signal };
-
-  try {
-    const res = await fetch(url.toString(), fetchOpts);
-    if (!res.ok) throw new Error('網路錯誤：' + res.status);
-    return res.json();
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error('連線逾時，請稍後再試');
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function apiPost(body, options = {}) {
-  const controller = new AbortController();
-  const timeoutMs = options.timeout || CONFIG.API_TIMEOUT_MS;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(withQueueTelemetry(body)),
-      signal: controller.signal
-    });
-    if (!res.ok) throw new Error('網路錯誤：' + res.status);
-    return res.json();
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new Error('連線逾時，請稍後再試');
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function apiBootstrap() {
-  return apiGet({ action: 'bootstrap' });
-}
+// ─── Roster ─────────────────────────────────────────────────────────────────
 
 async function loadStaticParticipants() {
   const res = await fetch(CONFIG.PARTICIPANTS_URL, { cache: 'no-cache' });
@@ -725,227 +531,61 @@ async function loadStaticParticipants() {
   return data.participants;
 }
 
-async function apiFetchInbox() {
-  return apiGet({
-    action: 'inbox',
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber
-  });
-}
+// ─── Derived trophy views ───────────────────────────────────────────────────
 
-async function apiFetchSent() {
-  return apiGet({
-    action: 'sent',
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber
-  });
-}
+/**
+ * The old backend assembled these summaries server side. Firestore has no
+ * server to run code on, but the admin already holds every submission through
+ * a listener, so the same numbers are derived here for free.
+ */
+function buildTrophyOverview(submissions, trophies) {
+  const submitted = new Set(
+    submissions.filter(s => s.status === 'submitted').map(s => s.participant_id)
+  );
+  const totalVotes = submissions.reduce((sum, s) => sum + s.pairings.length, 0);
 
-async function apiWatchSent(revision, options = {}) {
-  return apiGet({
-    action: 'watch_sent_messages',
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber,
-    revision: revision
-  }, options);
-}
-
-async function apiSendMessage(receiverId, content) {
-  return apiPost({
-    action: 'send_message',
-    sender_id: state.participantId,
-    phone: state.phoneNumber,
-    receiver_id: receiverId,
-    content
-  });
-}
-
-async function apiAdminFetch() {
-  return apiGet({
-    action: 'admin',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE
-  });
-}
-
-async function apiAdminWatch(revision) {
-  return apiGet({
-    action: 'admin_watch_messages',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    revision
-  });
-}
-
-async function apiAdminDeleteMessage(messageId) {
-  return apiGet({
-    action: 'admin_delete_message',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    message_id: messageId
-  });
-}
-
-async function apiSetMessagingStatus(status) {
-  try {
-    return await apiGet({
-      action: 'set_messaging_status',
-      participant_id: CONFIG.ADMIN_ID,
-      phone_number: CONFIG.ADMIN_PHONE,
-      messaging_status: status
+  const byGroup = new Map();
+  state.participants.forEach(p => {
+    const group = p.group_id || '未分組';
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group).push({
+      participant_id: p.participant_id,
+      voted: submitted.has(p.participant_id)
     });
-  } catch (_) {
-    return apiGet({
-      action: 'get_messaging_status',
-      admin: 'TNIT23082026',
-      phone_number: CONFIG.ADMIN_PHONE,
-      sub_action: 'set',
-      messaging_status: status
+  });
+
+  return {
+    voting_status: state.votingConfig.voting_status,
+    stats: {
+      completed_voters: submitted.size,
+      total_participants: state.participants.length,
+      total_votes: totalVotes,
+      trophy_count: trophies.length
+    },
+    group_voting_status: [...byGroup.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([group_label, members]) => ({ group_label, members })),
+    pending_participants: state.participants
+      .filter(p => !submitted.has(p.participant_id))
+      .map(p => p.participant_id)
+  };
+}
+
+function buildAuditVotes(submissions, trophies) {
+  const names = new Map(trophies.map(t => [t.trophy_id, t.trophy_name]));
+  const rows = [];
+  submissions.forEach(submission => {
+    submission.pairings.forEach(pair => {
+      rows.push({
+        sender_id: submission.participant_id,
+        receiver_id: pair.receiver_id,
+        trophy_id: pair.trophy_id,
+        trophy_name: names.get(pair.trophy_id) || pair.trophy_id,
+        submitted_at: submission.submitted_at || submission.updated_at
+      });
     });
-  }
-}
-
-async function apiWatchTrophyStatus(revision, options = {}) {
-  return apiGet({
-    action: 'watch_trophy_status',
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber,
-    revision: revision
-  }, options);
-}
-
-async function apiAdminParticipantDetail(participantId) {
-  return apiGet({
-    action: 'admin_participant_detail',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    target_participant_id: participantId
   });
-}
-
-async function apiAdminUpdateParticipant(participantId, phone, groupId) {
-  return apiPost({
-    action: 'admin_update_participant',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    target_participant_id: participantId,
-    new_phone_number: phone,
-    group_id: groupId
-  });
-}
-
-async function apiAdminDeleteParticipantRecords(participantId, options = {}) {
-  return apiPost({
-    action: 'admin_delete_participant_records',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    target_participant_id: participantId,
-    delete_messages: options.deleteMessages !== false,
-    delete_trophy: options.deleteTrophy !== false,
-    delete_results: options.deleteResults !== false
-  });
-}
-
-async function apiAdminResetParticipantVote(participantId) {
-  return apiGet({
-    action: 'admin_reset_participant_vote',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    target_participant_id: participantId
-  });
-}
-
-async function apiAdminBulkUpdateParticipants(mode, groupId) {
-  const body = {
-    action: 'admin_bulk_update_participants',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    mode
-  };
-  if (groupId) body.group_id = groupId;
-  return apiPost(body);
-}
-
-async function apiAdminBulkDeleteAllRecords() {
-  return apiPost({
-    action: 'admin_bulk_delete_all_records',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE
-  });
-}
-
-async function apiTrophyBootstrap() {
-  return apiGet({
-    action: 'trophy_bootstrap',
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber
-  });
-}
-
-async function apiTrophySaveDraft(pairings) {
-  return apiPost({
-    action: 'trophy_save_draft',
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber,
-    pairings
-  });
-}
-
-async function apiTrophySubmit(pairings) {
-  return apiPost({
-    action: 'trophy_submit',
-    participant_id: state.participantId,
-    phone_number: state.phoneNumber,
-    pairings
-  });
-}
-
-async function apiAdminTrophyOverview() {
-  return apiGet({
-    action: 'admin_trophy_overview',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE
-  });
-}
-
-async function apiAdminTrophyAudit() {
-  return apiGet({
-    action: 'admin_trophy_audit',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE
-  });
-}
-
-async function apiAdminTrophyResults() {
-  return apiGet({
-    action: 'admin_trophy_results',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE
-  });
-}
-
-async function apiAdminSetVotingStatus(votingStatus, allowResubmit) {
-  const params = {
-    action: 'admin_set_voting_status',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE,
-    voting_status: votingStatus
-  };
-  if (allowResubmit !== undefined) params.allow_resubmit = allowResubmit;
-  return apiGet(params);
-}
-
-async function apiAdminCalculate() {
-  return apiGet({
-    action: 'admin_calculate_trophy_results',
-    participant_id: CONFIG.ADMIN_ID,
-    phone_number: CONFIG.ADMIN_PHONE
-  });
-}
-
-function checkApiResponse(data) {
-  if (data.status === 'error') throw new Error(data.message || '操作失敗');
-  return data;
+  return rows.sort((a, b) => a.sender_id.localeCompare(b.sender_id));
 }
 
 // ─── Combobox ───────────────────────────────────────────────────────────────
@@ -1157,31 +797,6 @@ async function bootstrapApp() {
   }
 }
 
-/**
- * participants.json can lag behind an edit made in the admin panel during the
- * event, so a failed login is re-checked against the sheet before the person is
- * turned away. Only runs on failure, so the normal path stays offline.
- */
-async function refetchParticipantsAndMatch(participantId, phone) {
-  try {
-    const data = checkApiResponse(await apiBootstrap());
-    state.participants = data.participants || [];
-    state.messagingOpen = data.messaging_status === 'OPEN';
-    state.apiVersion = data.version;
-    setParticipantsCache(state.participants);
-    refreshComboboxItems();
-    return findParticipantMatch(participantId, phone);
-  } catch (_) {
-    return null;
-  }
-}
-
-function findParticipantMatch(participantId, phone) {
-  return state.participants.find(p =>
-    p.participant_id === participantId && normalizePhone(p.phone_number) === phone
-  ) || null;
-}
-
 function updateLoginStatusBanner() {
   if (!state.messagingOpen) {
     DOM.loginStatusBanner.textContent = '留言功能目前已關閉';
@@ -1203,21 +818,18 @@ async function handleLogin(e) {
   const isAdmin = isAdminLogin(rawId);
   const participantId = isAdmin ? CONFIG.ADMIN_ID : normalizeId(rawId);
 
-  if (!isAdmin) {
-    const match = findParticipantMatch(participantId, phone) ||
-      await refetchParticipantsAndMatch(participantId, phone);
-    if (!match) {
-      showToast('參加者編號或電話號碼不正確', 'error');
+  await runProgressButton(DOM.loginSubmit, (async () => {
+    try {
+      // Firebase checks the password. The browser no longer holds anyone's
+      // phone number, and every later read and write carries the resulting
+      // identity so the security rules can enforce who may see what.
+      await data.signIn(participantId, phone);
+    } catch (err) {
+      showToast(data.describeAuthError(err), 'error');
       return;
     }
-  } else if (phone !== CONFIG.ADMIN_PHONE) {
-    showToast('管理員電話號碼不正確', 'error');
-    return;
-  }
 
-  await runProgressButton(DOM.loginSubmit, (async () => {
     state.participantId = participantId;
-    state.phoneNumber = phone;
     state.isAdmin = isAdmin;
 
     if (isAdmin) {
@@ -1226,6 +838,134 @@ async function handleLogin(e) {
       await enterParticipantDashboard();
     }
   })());
+}
+
+/**
+ * Opens a listener and resolves once its first snapshot has been applied, so
+ * the loading screen can wait for real data without polling for it.
+ */
+function subscribeAndWait(subscribe, handle, label) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    track(subscribe(
+      (...args) => {
+        handle(...args);
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      },
+      err => {
+        if (!settled) {
+          settled = true;
+          reject(err);
+          return;
+        }
+        reportSubscriptionError(label)(err);
+      }
+    ));
+  });
+}
+
+async function startParticipantSubscriptions() {
+  const pid = state.participantId;
+
+  await Promise.all([
+    subscribeAndWait(
+      (cb, err) => data.subscribeMessagingStatus(cb, err),
+      status => {
+        state.messagingOpen = status === 'OPEN';
+        updateSendFormState();
+        updateCharCounter();
+      },
+      '留言開關'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeInbox(pid, cb, err),
+      messages => {
+        state.inboxMessages = messages;
+        renderInbox();
+        renderProfile();
+      },
+      '收件箱'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeSent(pid, cb, err),
+      messages => {
+        state.sentMessages = messages;
+        renderSent();
+        renderProfile();
+      },
+      '已發送列表'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeVotingConfig(cb, err),
+      config => {
+        state.votingConfig = config;
+        state.trophy.votingStatus = config.voting_status;
+        state.trophy.trophyRevision = config.published_at || config.calculated_at || config.voting_status;
+        recalcTrophyPermissions();
+        ensureResultSubscription();
+        updateTrophyStatusBanner();
+        renderParticipantTrophyResults();
+        renderTrophyTeammates();
+        renderProfile();
+      },
+      '投票狀態'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeMySubmission(pid, cb, err),
+      submission => {
+        state.trophy.submissionStatus = submission ? submission.status : 'draft';
+        state.trophy.assignments = submission ? data.pairingsToAssignments(submission.pairings) : {};
+        state.trophy.loaded = true;
+        recalcTrophyPermissions();
+        recalcTrophyProgress();
+        renderTrophyTeammates();
+        updateTrophyStatusBanner();
+        renderProfile();
+      },
+      '投票紀錄'
+    )
+  ]);
+}
+
+/**
+ * Results are unreadable until they are published, and a listener that gets
+ * refused is dead for good. So the listener is opened only once publishing has
+ * happened, and closed again if the admin reopens voting.
+ */
+function ensureResultSubscription() {
+  const published = state.votingConfig.voting_status === 'PUBLISHED';
+
+  if (!published) {
+    if (resultUnsubscribe) {
+      resultUnsubscribe();
+      resultUnsubscribe = null;
+    }
+    state.trophy.myAwards = [];
+    return;
+  }
+  if (resultUnsubscribe) return;
+
+  resultUnsubscribe = track(data.subscribeMyResult(
+    state.participantId,
+    result => {
+      state.trophy.myAwards = result ? result.awards : [];
+      renderParticipantTrophyResults();
+      maybeShowPublishedModal(true);
+    },
+    reportSubscriptionError('得獎結果')
+  ));
+}
+
+/** Whether this participant may still change their ballot right now. */
+function recalcTrophyPermissions() {
+  const open = state.votingConfig.voting_status === 'VOTING_OPEN';
+  const submitted = state.trophy.submissionStatus === 'submitted';
+  state.trophy.editable = open && (!submitted || state.votingConfig.allow_resubmit);
+  state.trophy.readonly = !state.trophy.editable;
+  state.trophy.showResults = state.votingConfig.voting_status === 'PUBLISHED';
 }
 
 async function enterParticipantDashboard() {
@@ -1237,32 +977,15 @@ async function enterParticipantDashboard() {
   switchParticipantView('home');
 
   try {
-    showLoading(true, 0);
-    const inboxPromise = apiFetchInbox().then(data => {
-      setLoadingPercent(35);
-      return data;
-    });
-    const sentPromise = apiFetchSent().then(data => {
-      setLoadingPercent(65);
-      return data;
-    });
-    const [inboxData, sentData] = await Promise.all([
-      checkApiResponse(await inboxPromise),
-      checkApiResponse(await sentPromise)
-    ]);
-    setLoadingPercent(85);
-    state.inboxMessages = inboxData.messages || [];
-    state.sentMessages = sentData.sent_messages || [];
-    state.sentRevision = sentData.revision || '';
-    state.messagingOpen = sentData.messaging_status === 'OPEN';
-    updateSendFormState();
-    renderInbox();
-    renderSent();
+    showLoading(true, 10);
+    state.trophy.trophies = filterValidTrophies(await data.fetchTrophies());
+    state.trophy.teammates = data.getTeammates(state.participantId, state.participants);
+    setLoadingPercent(45);
+    await startParticipantSubscriptions();
+    setLoadingPercent(95);
+    recalcTrophyProgress();
+    renderTrophyTeammates();
     renderProfile();
-    startSentWatch();
-    await loadTrophyData(false, { silent: true });
-    setLoadingPercent(98);
-    startTrophyWatch();
   } catch (err) {
     showToast('載入資料失敗：' + err.message, 'error');
   } finally {
@@ -1298,58 +1021,108 @@ function renderProfile() {
   `;
 }
 
+/**
+ * Recomputes every trophy view the admin sees. Cheap enough to run on each
+ * snapshot: the whole event is fifty people and a few hundred votes.
+ */
+function refreshAdminTrophyViews() {
+  const trophies = state.adminTrophy.trophies;
+  const submissions = state.adminTrophy.submissions;
+
+  state.adminTrophy.overview = buildTrophyOverview(submissions, trophies);
+  state.adminTrophy.auditVotes = buildAuditVotes(submissions, trophies);
+
+  const projection = data.computeResults(state.participants, trophies, submissions);
+  state.adminTrophy.trophySummary = projection.trophySummary;
+
+  // Once results have been calculated the stored awards are what counts;
+  // before that, show what calculating now would produce.
+  const stored = state.adminTrophy.results;
+  state.adminTrophy.profiles = stored.length > 0
+    ? stored
+      .map(r => ({
+        participant_id: r.participant_id,
+        trophies: r.awards,
+        vote_count: r.awards.reduce((sum, a) => sum + (a.vote_count || 0), 0)
+      }))
+      .sort((a, b) => a.participant_id.localeCompare(b.participant_id))
+    : projection.profiles;
+
+  renderAdminTrophyStats();
+  renderAdminPendingVoters();
+  renderAdminFallbackBanner();
+  renderAuditTable();
+  renderProfiles();
+  renderTrophySummary();
+  populateAuditTrophyFilter();
+  updateAdminVotingButtons();
+  updateVotingStepper();
+  renderAdminDashboard();
+}
+
+async function startAdminSubscriptions() {
+  await Promise.all([
+    subscribeAndWait(
+      (cb, err) => data.subscribeMessagingStatus(cb, err),
+      status => {
+        state.messagingOpen = status === 'OPEN';
+        renderAdminDashboard();
+      },
+      '留言開關'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeAllMessages(cb, err),
+      messages => {
+        state.monitorMessages = messages;
+        state.knownMessageIds = new Set(messages.map(m => m.message_id));
+        renderAdminMessages();
+        renderAdminDashboard();
+        renderAdminLiveLoad();
+      },
+      '留言監控'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeVotingConfig(cb, err),
+      config => {
+        state.votingConfig = config;
+        state.adminTrophy.fallbackActivated = !!config.fallback_activated;
+        refreshAdminTrophyViews();
+      },
+      '投票狀態'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeAllSubmissions(cb, err),
+      submissions => {
+        state.adminTrophy.submissions = submissions;
+        refreshAdminTrophyViews();
+        renderAdminLiveLoad();
+      },
+      '投票紀錄'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeAllResults(cb, err),
+      results => {
+        state.adminTrophy.results = results;
+        refreshAdminTrophyViews();
+      },
+      '得獎結果'
+    )
+  ]);
+}
+
 async function enterAdminDashboard() {
-  stopSentWatch();
-  stopTrophyWatch();
   showScreen('admin');
 
   try {
-    showLoading(true, 0);
-    const adminPromise = apiAdminFetch().then(data => {
-      setLoadingPercent(25);
-      return data;
-    });
-    const bootstrapPromise = apiBootstrap().catch(() => ({ status: 'error' })).then(data => {
-      setLoadingPercent(45);
-      return data;
-    });
-    const overviewPromise = apiAdminTrophyOverview().catch(() => ({ status: 'error' })).then(data => {
-      setLoadingPercent(70);
-      return data;
-    });
-    const [data, bootstrap, overview] = await Promise.all([
-      checkApiResponse(await adminPromise),
-      bootstrapPromise,
-      overviewPromise
-    ]);
-    setLoadingPercent(90);
-    if (bootstrap.status === 'success') {
-      state.participants = bootstrap.participants || [];
-      state.apiVersion = bootstrap.version;
-      setParticipantsCache(state.participants);
-    }
-    state.monitorMessages = data.messages || [];
-    state.monitorRevision = data.revision || '';
-    state.messagingOpen = data.messaging_status === 'OPEN';
-    state.knownMessageIds = new Set(state.monitorMessages.map(m => m.message_id));
-    if (overview.status === 'success') {
-      state.adminTrophy.overview = overview;
-    }
-    renderAdminMessages();
-    renderAdminDashboard(data);
-    if (overview.status === 'success') {
-      renderAdminTrophyStats();
-      updateVotingStepper();
-      if (DOM.adminVotingStatusBadge) {
-        const vs = overview.voting_status || 'DRAFT';
-        DOM.adminVotingStatusBadge.textContent = VOTING_STATUS_LABELS[vs] || vs;
-      }
-    }
-    switchAdminTab('dashboard', { skipLoad: true });
-    startAdminWatch();
+    showLoading(true, 10);
+    state.adminTrophy.trophies = filterValidTrophies(await data.fetchTrophies());
+    setLoadingPercent(40);
+    await startAdminSubscriptions();
+    setLoadingPercent(95);
+    switchAdminTab('dashboard');
   } catch (err) {
     showToast('載入管理員資料失敗：' + err.message, 'error');
-    switchAdminTab('dashboard', { skipLoad: true });
+    switchAdminTab('dashboard');
   } finally {
     finishLoading();
   }
@@ -1390,22 +1163,18 @@ function renderAdminDashboard(fetchData) {
       `).join('');
   }
 
-  if (DOM.adminVersion) DOM.adminVersion.textContent = state.apiVersion ? 'v' + state.apiVersion : '—';
+  if (DOM.adminVersion) DOM.adminVersion.textContent = 'Firestore';
   if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length || '—');
 }
 
 function handleLogout() {
-  stopSentWatch();
-  stopAdminWatch();
-  stopTrophyWatch();
+  stopAllSubscriptions();
+  data.signOutUser().catch(() => { /* the local session is gone either way */ });
   state.participantId = null;
-  state.phoneNumber = null;
   state.isAdmin = false;
   state.inboxMessages = [];
   state.sentMessages = [];
-  state.sentRevision = '';
   state.monitorMessages = [];
-  state.monitorRevision = '';
   hideTrophyResultsModal();
   state.trophy = {
     loaded: false,
@@ -1472,49 +1241,20 @@ async function handleSendMessage(e) {
   if (!content) { showToast('請輸入留言內容', 'error'); return; }
   if (containsBadWords(content)) { showToast('內容包含不適當用語', 'error'); return; }
 
-  // The message is shown as sent straight away and the request is handed to the
-  // queue; the sent list carries the real state so nobody stares at a spinner.
-  const localId = 'local-' + Date.now() + Math.random().toString(36).slice(2, 6);
-  state.sentMessages = [{
-    message_id: localId,
-    receiver_id: receiverId,
-    content: content,
-    created_at: new Date().toISOString(),
-    status: 'active',
-    pending: true
-  }, ...state.sentMessages];
-
   DOM.sendContent.value = '';
   DOM.sendReceiver.value = '';
   selectedReceiverId = null;
   updateCharCounter();
-  renderSent();
-
-  const item = enqueueAction({
-    label: '傳送留言給 ' + receiverId,
-    run: () => apiSendMessage(receiverId, content),
-    onSuccess: () => {
-      updateLocalSentMessage(localId, { pending: false });
-    },
-    onFailure: err => {
-      updateLocalSentMessage(localId, { pending: false, failed: true, error: err.message });
-      showToast('留言傳送失敗：' + err.message, 'error');
-    }
-  });
-
-  const handedOff = await runProgressButton(
-    DOM.sendSubmit, runWithHandoff(item.settled, CONFIG.ACTION_HANDOFF_MS)
-  );
-
   switchParticipantView('sent');
-  showToast(handedOff ? '留言傳送中，可以繼續使用' : '留言已發送', handedOff ? 'info' : 'success');
-}
 
-function updateLocalSentMessage(localId, patch) {
-  const idx = state.sentMessages.findIndex(m => m.message_id === localId);
-  if (idx < 0) return;
-  state.sentMessages[idx] = Object.assign({}, state.sentMessages[idx], patch);
-  renderSent();
+  // The write lands in the local cache first, so the listener has already put
+  // the message on screen by the time this returns. If the network is down the
+  // SDK holds the write and sends it on reconnect, which is why there is no
+  // spinner and no retry button any more.
+  data.sendMessage(state.participantId, receiverId, content).catch(err => {
+    showToast('留言傳送失敗：' + err.message, 'error');
+  });
+  showToast('留言已發送', 'success');
 }
 
 // ─── Messaging — Inbox ────────────────────────────────────────────────────────
@@ -1558,18 +1298,14 @@ function renderInbox() {
   updateInboxBadge();
 }
 
+/**
+ * A live listener already keeps this current. The button stays because people
+ * expect one, and pressing it should visibly confirm that nothing is missing.
+ */
 async function refreshInbox() {
   await runProgressButton(DOM.inboxRefresh, (async () => {
-    try {
-      const data = checkApiResponse(await apiFetchInbox());
-      state.inboxMessages = data.messages || [];
-      state.messagingOpen = data.messaging_status === 'OPEN';
-      updateSendFormState();
-      renderInbox();
-      showToast('收件箱已更新', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
+    renderInbox();
+    showToast('收件箱已是最新', 'success');
   })());
 }
 
@@ -1577,29 +1313,10 @@ async function refreshInbox() {
 
 function sentStatusBadge(msg, isDeleted) {
   if (isDeleted) return '';
-  if (msg.failed) {
-    return `<button type="button" class="badge badge-failed" data-retry-id="${escapeHtml(msg.message_id)}">傳送失敗，按此重試</button>`;
-  }
   if (msg.pending) {
     return '<span class="badge badge-pending" style="margin-top:8px">傳送中…</span>';
   }
   return '<span class="badge badge-pill" style="margin-top:8px">正常</span>';
-}
-
-function retryFailedSentMessage(localId) {
-  const msg = state.sentMessages.find(m => m.message_id === localId);
-  if (!msg || !msg.failed) return;
-
-  updateLocalSentMessage(localId, { pending: true, failed: false, error: '' });
-  enqueueAction({
-    label: '重試傳送留言',
-    run: () => apiSendMessage(msg.receiver_id, msg.content),
-    onSuccess: () => updateLocalSentMessage(localId, { pending: false }),
-    onFailure: err => {
-      updateLocalSentMessage(localId, { pending: false, failed: true, error: err.message });
-      showToast('留言傳送失敗：' + err.message, 'error');
-    }
-  });
 }
 
 function renderSent() {
@@ -1612,8 +1329,7 @@ function renderSent() {
     const card = document.createElement('div');
     card.className = 'message-card' +
       (isDeleted ? ' deleted' : '') +
-      (msg.pending ? ' message-pending' : '') +
-      (msg.failed ? ' message-failed' : '');
+      (msg.pending ? ' message-pending' : '');
     card.dataset.messageId = msg.message_id;
 
     let deletedHtml = '';
@@ -1642,152 +1358,12 @@ function renderSent() {
 
 async function refreshSent() {
   await runProgressButton(DOM.sentRefresh, (async () => {
-    try {
-      const data = checkApiResponse(await apiFetchSent());
-      applySentMessages(data.sent_messages || [], data.revision || '');
-      renderSent();
-      showToast('已發送列表已更新', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
+    renderSent();
+    showToast('已發送列表已是最新', 'success');
   })());
 }
 
-// ─── Sent Watch ───────────────────────────────────────────────────────────────
-
-function stopSentWatch() {
-  if (sentWatchAbort) { sentWatchAbort.abort(); sentWatchAbort = null; }
-  if (sentWatchTimer) { clearTimeout(sentWatchTimer); sentWatchTimer = null; }
-  if (sentBackupTimer) { clearInterval(sentBackupTimer); sentBackupTimer = null; }
-}
-
-function shouldApplySentWatch(data) {
-  // The backend answers an unchanged poll without reading the sheet, so it
-  // omits message_count; treat that as "nothing to do" rather than a mismatch.
-  if (data.changed === false && data.revision === state.sentRevision) return false;
-  return data.changed === true ||
-    data.message_count !== state.sentMessages.length ||
-    data.revision !== state.sentRevision;
-}
-
-/**
- * A refresh from the server must not make a queued message disappear before the
- * backend has actually stored it.
- */
-function mergeLocalSentMessages(serverMessages) {
-  const local = state.sentMessages.filter(m => m.pending || m.failed);
-  if (!local.length) return serverMessages;
-
-  const key = m => m.receiver_id + '\u0001' + m.content;
-  const confirmed = new Set(serverMessages.map(key));
-  return [...local.filter(m => !confirmed.has(key(m))), ...serverMessages];
-}
-
-function applySentMessages(messages, revision) {
-  state.sentMessages = mergeLocalSentMessages(messages);
-  state.sentRevision = revision;
-  if (document.getElementById('view-sent')?.classList.contains('active')) {
-    renderSent();
-  }
-}
-
-async function runSentWatchLoop() {
-  if (!state.participantId || state.isAdmin) return;
-
-  sentWatchAbort = new AbortController();
-
-  try {
-    const data = checkApiResponse(await apiWatchSent(state.sentRevision, { signal: sentWatchAbort.signal }));
-    if (shouldApplySentWatch(data)) {
-      if (data.sent_messages && data.sent_messages.length > 0) {
-        applySentMessages(data.sent_messages, data.revision);
-      } else if (data.changed) {
-        const full = checkApiResponse(await apiFetchSent());
-        applySentMessages(full.sent_messages || [], full.revision || '');
-      }
-    }
-    if (data.messaging_status) {
-      state.messagingOpen = data.messaging_status === 'OPEN';
-      updateSendFormState();
-    }
-    sentWatchFailures = 0;
-  } catch (err) {
-    if (err.name !== 'AbortError') {
-      sentWatchFailures++;
-      console.warn('Sent watch error:', err.message);
-    }
-  }
-
-  const interval = getWatchInterval(
-    CONFIG.SENT_WATCH_INTERVAL, CONFIG.SENT_WATCH_INTERVAL_HIDDEN, sentWatchFailures
-  );
-  sentWatchTimer = setTimeout(runSentWatchLoop, interval);
-}
-
-function startSentWatch() {
-  stopSentWatch();
-  if (!state.participantId || state.isAdmin) return;
-
-  runSentWatchLoop();
-
-  sentBackupTimer = setInterval(async () => {
-    if (!state.participantId || state.isAdmin) return;
-    try {
-      const data = checkApiResponse(await apiFetchSent());
-      applySentMessages(data.sent_messages || [], data.revision || '');
-    } catch (_) { /* silent */ }
-  }, CONFIG.SENT_BACKUP_SYNC);
-}
-
-// ─── Trophy Watch (Participant — real-time results) ───────────────────────────
-
-function stopTrophyWatch() {
-  if (trophyWatchAbort) { trophyWatchAbort.abort(); trophyWatchAbort = null; }
-  if (trophyWatchTimer) { clearTimeout(trophyWatchTimer); trophyWatchTimer = null; }
-}
-
-async function runTrophyWatchLoop() {
-  if (!state.participantId || state.isAdmin) return;
-
-  trophyWatchAbort = new AbortController();
-
-  try {
-    const data = checkApiResponse(
-      await apiWatchTrophyStatus(state.trophy.trophyRevision, { signal: trophyWatchAbort.signal })
-    );
-    if (data.changed) {
-      applyTrophyWatchData(data, true);
-      if (data.voting_status === 'PUBLISHED' && !state.trophy.loaded) {
-        loadTrophyData(false);
-      }
-    }
-    trophyWatchFailures = 0;
-  } catch (err) {
-    if (err.name !== 'AbortError') {
-      trophyWatchFailures++;
-      console.warn('Trophy watch error:', err.message);
-    }
-  }
-
-  const interval = getWatchInterval(
-    CONFIG.TROPHY_WATCH_INTERVAL, CONFIG.TROPHY_WATCH_INTERVAL_HIDDEN, trophyWatchFailures
-  );
-  trophyWatchTimer = setTimeout(runTrophyWatchLoop, interval);
-}
-
-function startTrophyWatch() {
-  stopTrophyWatch();
-  if (!state.participantId || state.isAdmin) return;
-  runTrophyWatchLoop();
-}
-
 // ─── Admin Monitor ────────────────────────────────────────────────────────────
-
-function stopAdminWatch() {
-  if (adminWatchAbort) { adminWatchAbort.abort(); adminWatchAbort = null; }
-  if (adminWatchTimer) { clearTimeout(adminWatchTimer); adminWatchTimer = null; }
-  if (adminBackupTimer) { clearInterval(adminBackupTimer); adminBackupTimer = null; }
-}
 
 function getFilteredAdminMessages() {
   const filter = state.monitorViewFilter;
@@ -1848,98 +1424,29 @@ function renderAdminMessages() {
 }
 
 /**
- * Live picture of how much participant work is still waiting to reach the
- * backend, and how long the backend is taking to answer.
+ * There is no queue to report any more, so this panel now answers the question
+ * the admin actually has during the event: is anything happening right now.
  */
-function applyAdminLiveLoad(queue, responseMs) {
-  state.adminLoad = {
-    queued: queue ? queue.queued || 0 : 0,
-    online: queue ? queue.online || 0 : 0,
-    total: queue ? queue.total || 0 : state.participants.length,
-    responseMs: responseMs
-  };
-  renderAdminLiveLoad();
-}
-
 function renderAdminLiveLoad() {
-  const load = state.adminLoad;
-  if (!load) return;
+  const recentCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const recent = state.monitorMessages.filter(
+    m => m.status === 'active' && m.created_at > recentCutoff
+  ).length;
+  const voted = state.adminTrophy.submissions.filter(s => s.status === 'submitted').length;
 
   if (DOM.adminQueuePill) {
-    DOM.adminQueuePill.textContent = '排隊 ' + load.queued;
-    DOM.adminQueuePill.classList.toggle('hidden', load.queued === 0);
-    DOM.adminQueuePill.classList.toggle('badge-queue-busy', load.queued > 10);
+    DOM.adminQueuePill.textContent = '5 分鐘內 ' + recent + ' 則';
+    DOM.adminQueuePill.classList.toggle('hidden', recent === 0);
+    DOM.adminQueuePill.classList.toggle('badge-queue-busy', recent > 20);
   }
 
   if (DOM.adminLiveLoad) {
     DOM.adminLiveLoad.innerHTML = `
-      <div class="stat-card"><div class="stat-value">${load.queued}</div><div class="stat-label">排隊中</div></div>
-      <div class="stat-card"><div class="stat-value">${load.online} / ${load.total}</div><div class="stat-label">活躍人數</div></div>
-      <div class="stat-card"><div class="stat-value">${(load.responseMs / 1000).toFixed(1)}s</div><div class="stat-label">後端回應</div></div>
+      <div class="stat-card"><div class="stat-value">${recent}</div><div class="stat-label">近 5 分鐘留言</div></div>
+      <div class="stat-card"><div class="stat-value">${voted} / ${state.participants.length}</div><div class="stat-label">已完成投票</div></div>
+      <div class="stat-card"><div class="stat-value">即時</div><div class="stat-label">連線狀態</div></div>
     `;
   }
-}
-
-function shouldApplyAdminWatch(data) {
-  if (data.changed === false && data.revision === state.monitorRevision) return false;
-  return data.changed === true ||
-    data.message_count !== state.monitorMessages.length ||
-    data.revision !== state.monitorRevision;
-}
-
-function applyAdminMessages(messages, revision) {
-  state.monitorMessages = messages;
-  state.monitorRevision = revision;
-  if (DOM.adminMessagesPanel.classList.contains('active')) {
-    renderAdminMessages();
-  }
-}
-
-async function runAdminWatchLoop() {
-  if (!state.isAdmin) return;
-
-  adminWatchAbort = new AbortController();
-  const startedAt = Date.now();
-
-  try {
-    const data = checkApiResponse(await apiAdminWatch(state.monitorRevision));
-    applyAdminLiveLoad(data.queue, Date.now() - startedAt);
-    if (shouldApplyAdminWatch(data)) {
-      if (data.messages && data.messages.length > 0) {
-        applyAdminMessages(data.messages, data.revision);
-      } else if (data.changed) {
-        const full = checkApiResponse(await apiAdminFetch());
-        applyAdminMessages(full.messages || [], full.revision || '');
-      }
-    }
-    if (data.messaging_status !== undefined) {
-      state.messagingOpen = data.messaging_status === 'OPEN';
-    }
-    adminWatchFailures = 0;
-  } catch (err) {
-    adminWatchFailures++;
-    console.warn('Admin watch error:', err.message);
-  }
-
-  const interval = getWatchInterval(
-    CONFIG.ADMIN_WATCH_INTERVAL, CONFIG.ADMIN_WATCH_INTERVAL_HIDDEN, adminWatchFailures
-  );
-  adminWatchTimer = setTimeout(runAdminWatchLoop, interval);
-}
-
-function startAdminWatch() {
-  stopAdminWatch();
-  if (!state.isAdmin) return;
-
-  runAdminWatchLoop();
-
-  adminBackupTimer = setInterval(async () => {
-    if (!state.isAdmin) return;
-    try {
-      const data = checkApiResponse(await apiAdminFetch());
-      applyAdminMessages(data.messages || [], data.revision || '');
-    } catch (_) { /* silent */ }
-  }, CONFIG.ADMIN_BACKUP_SYNC);
 }
 
 async function handleAdminDelete(messageId, btn) {
@@ -1947,10 +1454,8 @@ async function handleAdminDelete(messageId, btn) {
 
   await runProgressButton(btn, (async () => {
     try {
-      checkApiResponse(await apiAdminDeleteMessage(messageId));
+      await data.retractMessage(messageId);
       showToast('留言已撤回', 'success');
-      const data = checkApiResponse(await apiAdminFetch());
-      applyAdminMessages(data.messages || [], data.revision || '');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1960,10 +1465,8 @@ async function handleAdminDelete(messageId, btn) {
 async function handleSetMessagingStatus(status, btn) {
   await runProgressButton(btn, (async () => {
     try {
-      const data = checkApiResponse(await apiSetMessagingStatus(status));
-      state.messagingOpen = (data.messaging_status || status) === 'OPEN';
+      await data.setMessagingStatus(status);
       showToast(status === 'OPEN' ? '留言功能已開啟' : '留言功能已關閉', 'success');
-      renderAdminDashboard();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -2040,30 +1543,6 @@ function updateTrophyTabBadge(show) {
     }
   } else if (badge) {
     badge.remove();
-  }
-}
-
-function applyTrophyWatchData(data, isNewPublish) {
-  const prevStatus = state.trophy.votingStatus;
-  state.trophy.votingStatus = data.voting_status;
-  state.trophy.showResults = !!data.show_results;
-  state.trophy.trophyRevision = data.revision || '';
-
-  if (data.my_awards && data.my_awards.length > 0) {
-    state.trophy.myAwards = data.my_awards;
-  } else if (data.changed && data.voting_status === 'PUBLISHED') {
-    state.trophy.myAwards = data.my_awards || [];
-  }
-
-  const justPublished = isNewPublish || (prevStatus !== 'PUBLISHED' && data.voting_status === 'PUBLISHED');
-
-  updateTrophyStatusBanner();
-  renderParticipantTrophyResults();
-  maybeShowPublishedModal(justPublished);
-
-  if (justPublished && state.trophy.loaded) {
-    state.trophy.editable = false;
-    state.trophy.readonly = true;
   }
 }
 
@@ -2182,58 +1661,20 @@ function renderTrophyTeammates() {
   });
 }
 
-async function loadTrophyData(force, options = {}) {
-  const silent = options.silent === true;
-  if (state.trophy.loading) return;
-  try {
-    state.trophy.loading = true;
-    if (!silent && (force || !state.trophy.loaded)) showLoading(true, 15);
-    const data = checkApiResponse(await apiTrophyBootstrap());
-    if (!silent) setLoadingPercent(92);
-    state.trophy.loaded = true;
-    state.trophy.votingStatus = data.voting_status;
-    state.trophy.trophies = filterValidTrophies(data.trophies || []);
-    state.trophy.teammates = data.teammates || [];
-    state.trophy.assignments = data.assignments || {};
-    state.trophy.readonly = data.readonly;
-    state.trophy.editable = data.editable;
-    state.trophy.submissionStatus = data.submission_status;
-    state.trophy.progress = data.progress || { assigned: 0, total: 0 };
-    state.trophy.myAwards = data.my_awards || [];
-    state.trophy.showResults = !!data.show_results;
-    state.trophy.trophyRevision = data.revision || '';
-
-    updateTrophyStatusBanner();
-    renderParticipantTrophyResults();
-    maybeShowPublishedModal(state.trophy.votingStatus === 'PUBLISHED');
-    updateTrophyProgress();
-    renderTrophyTeammates();
-    renderProfile();
-  } catch (err) {
-    showToast('載入 Trophy 資料失敗：' + err.message, 'error');
-  } finally {
-    state.trophy.loading = false;
-    if (!silent && !DOM.loadingOverlay.classList.contains('hidden')) finishLoading();
-  }
-}
-
 async function handleTrophySaveDraft() {
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
-  const item = enqueueAction({
-    label: '儲存 Trophy 草稿',
-    run: () => apiTrophySaveDraft(pairings),
-    onFailure: err => showToast('草稿儲存失敗：' + err.message, 'error')
-  });
-
-  const handedOff = await runProgressButton(
-    DOM.trophySaveDraft, runWithHandoff(item.settled, CONFIG.ACTION_HANDOFF_MS)
-  );
-  showToast(handedOff ? '草稿儲存中，可以繼續使用' : '草稿已儲存', handedOff ? 'info' : 'success');
+  await runProgressButton(DOM.trophySaveDraft, (async () => {
+    try {
+      await data.saveSubmission(state.participantId, pairings, false);
+      showToast('草稿已儲存', 'success');
+    } catch (err) {
+      showToast('草稿儲存失敗：' + err.message, 'error');
+    }
+  })());
 }
 
 async function handleTrophySubmitAll() {
-  const teammates = state.trophy.teammates;
-  const incomplete = teammates.filter(t => {
+  const incomplete = state.trophy.teammates.filter(t => {
     const ids = state.trophy.assignments[t.participant_id];
     return !ids || ids.length === 0;
   });
@@ -2244,74 +1685,20 @@ async function handleTrophySubmitAll() {
   }
 
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
-  const item = enqueueAction({
-    label: '提交 Trophy 投票',
-    run: () => apiTrophySubmit(pairings),
-    onSuccess: () => loadTrophyData(true, { silent: true }),
-    onFailure: err => {
+  await runProgressButton(DOM.trophySubmitAll, (async () => {
+    try {
+      await data.saveSubmission(state.participantId, pairings, true);
+      switchParticipantView('trophy-submitted');
+      showToast('投票已提交', 'success');
+    } catch (err) {
       showToast('投票提交失敗，請再試一次：' + err.message, 'error');
       switchParticipantView('trophy');
     }
-  });
-
-  const handedOff = await runProgressButton(
-    DOM.trophySubmitAll, runWithHandoff(item.settled, CONFIG.ACTION_HANDOFF_MS)
-  );
-
-  switchParticipantView('trophy-submitted');
-  showToast(handedOff ? '投票提交中，可以繼續使用' : '投票已提交', handedOff ? 'info' : 'success');
+  })());
 }
 
 // ─── Trophy (Admin) ───────────────────────────────────────────────────────────
 
-async function loadAdminTrophyData(options = {}) {
-  const silent = options.silent === true;
-  if (state.adminTrophy.loading) return;
-  try {
-    state.adminTrophy.loading = true;
-    if (!silent) showLoading(true, 0);
-    const overviewPromise = apiAdminTrophyOverview().then(data => {
-      setLoadingPercent(30);
-      return data;
-    });
-    const auditPromise = apiAdminTrophyAudit().then(data => {
-      setLoadingPercent(55);
-      return data;
-    });
-    const resultsPromise = apiAdminTrophyResults().then(data => {
-      setLoadingPercent(80);
-      return data;
-    });
-    const [overview, audit, results] = await Promise.all([
-      checkApiResponse(await overviewPromise),
-      checkApiResponse(await auditPromise),
-      checkApiResponse(await resultsPromise)
-    ]);
-    setLoadingPercent(95);
-
-    state.adminTrophy.overview = overview;
-    state.adminTrophy.auditVotes = audit.votes || [];
-    state.adminTrophy.profiles = results.profiles || [];
-    state.adminTrophy.trophySummary = results.trophy_summary || [];
-    state.adminTrophy.fallbackActivated = results.fallback_activated;
-
-    renderAdminTrophyStats();
-    renderAdminPendingVoters();
-    renderAdminFallbackBanner();
-    renderAuditTable();
-    renderProfiles();
-    renderTrophySummary();
-    populateAuditTrophyFilter();
-    updateAdminVotingButtons();
-    updateVotingStepper();
-    renderAdminDashboard();
-  } catch (err) {
-    showToast('載入 Trophy 管理資料失敗：' + err.message, 'error');
-  } finally {
-    state.adminTrophy.loading = false;
-    if (!silent) finishLoading();
-  }
-}
 
 function renderAdminTrophyStats() {
   const stats = state.adminTrophy.overview?.stats || {};
@@ -2523,11 +1910,8 @@ async function handleAdminVotingAction(status, btn) {
 
   await runProgressButton(btn, (async () => {
     try {
-      const data = checkApiResponse(await apiAdminSetVotingStatus(status));
-      state.adminTrophy.overview = Object.assign({}, state.adminTrophy.overview, data);
-      const label = VOTING_STATUS_LABELS[data.voting_status] || data.voting_status;
-      showToast('投票狀態已更新：' + label, 'success');
-      await loadAdminTrophyData();
+      await data.setVotingStatus(status);
+      showToast('投票狀態已更新：' + (VOTING_STATUS_LABELS[status] || status), 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -2537,9 +1921,13 @@ async function handleAdminVotingAction(status, btn) {
 async function handleAdminCalculate(btn) {
   await runProgressButton(btn, (async () => {
     try {
-      checkApiResponse(await apiAdminCalculate());
+      // The tally runs here rather than on a server, using the submissions the
+      // admin is already subscribed to, then writes one result per participant.
+      const outcome = data.computeResults(
+        state.participants, state.adminTrophy.trophies, state.adminTrophy.submissions
+      );
+      await data.writeResults(outcome.awarded, outcome.fallbackActivated);
       showToast('結果計算完成', 'success');
-      await loadAdminTrophyData();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -2565,17 +1953,43 @@ function initAdminParticipantCombobox() {
   });
 }
 
+/** Everything here comes from listeners the admin already has open. */
+function buildParticipantDetail(participantId, phoneNumber) {
+  const person = state.participants.find(p => p.participant_id === participantId) || {};
+  const submission = state.adminTrophy.submissions.find(s => s.participant_id === participantId);
+  const result = state.adminTrophy.results.find(r => r.participant_id === participantId);
+  const sent = state.monitorMessages.filter(m => m.sender_id === participantId);
+
+  return {
+    participant: {
+      participant_id: participantId,
+      group_id: person.group_id || '',
+      phone_number: phoneNumber
+    },
+    stats: {
+      sent_active: sent.filter(m => m.status === 'active').length,
+      sent_deleted: sent.filter(m => m.status === 'deleted').length,
+      received_active: state.monitorMessages.filter(
+        m => m.receiver_id === participantId && m.status === 'active'
+      ).length,
+      trophy_votes: submission ? submission.pairings.length : 0,
+      submission_status: submission ? submission.status : 'draft',
+      trophy_awards: result ? result.awards.length : 0
+    }
+  };
+}
+
 async function selectAdminParticipant(participantId) {
   state.adminParticipant.selectedId = participantId;
   DOM.adminParticipantSelect.value = participantId;
   DOM.adminParticipantDetail.classList.remove('hidden');
 
   try {
-    showLoading(true, 20);
-    const data = checkApiResponse(await apiAdminParticipantDetail(participantId));
+    showLoading(true, 30);
+    const phone = await data.fetchContact(participantId);
     setLoadingPercent(90);
-    state.adminParticipant.detail = data;
-    renderAdminParticipantDetail(data);
+    state.adminParticipant.detail = buildParticipantDetail(participantId, phone);
+    renderAdminParticipantDetail(state.adminParticipant.detail);
   } catch (err) {
     showToast('載入參加者資料失敗：' + err.message, 'error');
   } finally {
@@ -2583,11 +1997,15 @@ async function selectAdminParticipant(participantId) {
   }
 }
 
-function renderAdminParticipantDetail(data) {
-  const p = data.participant || {};
-  const stats = data.stats || {};
+function renderAdminParticipantDetail(detail) {
+  const p = detail.participant || {};
+  const stats = detail.stats || {};
 
   DOM.adminEditPhone.value = p.phone_number || '';
+  // The phone number is this person's Firebase password, and a browser cannot
+  // change someone else's password. set_participant_phone.py does that.
+  DOM.adminEditPhone.readOnly = true;
+  DOM.adminEditPhone.title = '電話號碼即登入密碼，需在電腦執行 set_participant_phone.py 更改';
   DOM.adminEditGroup.value = p.group_id || '';
 
   DOM.adminParticipantStats.innerHTML = `
@@ -2605,25 +2023,25 @@ async function refreshAdminParticipantDetail() {
   await selectAdminParticipant(state.adminParticipant.selectedId);
 }
 
+function deriveGroupId(participantId) {
+  const match = String(participantId || '').match(/^(\d)[A-F]$/i);
+  return match ? 'GROUP_' + match[1] : 'GROUP_STAFF';
+}
+
 async function handleAdminSaveParticipant() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) { showToast('請先選擇參加者', 'error'); return; }
 
-  const phone = normalizePhone(DOM.adminEditPhone.value);
   const groupId = DOM.adminEditGroup.value.trim();
-
-  if (!phone) { showToast('電話號碼不能為空', 'error'); return; }
+  if (!groupId) { showToast('分組不能為空', 'error'); return; }
 
   await runProgressButton(DOM.adminSaveParticipant, (async () => {
     try {
-      checkApiResponse(await apiAdminUpdateParticipant(pid, phone, groupId));
-      showToast('參加者資料已更新', 'success');
-      const idx = state.participants.findIndex(p => p.participant_id === pid);
-      if (idx >= 0) {
-        state.participants[idx].phone_number = phone;
-        state.participants[idx].group_id = groupId;
-      }
+      await data.updateParticipantGroup(pid, groupId);
+      const person = state.participants.find(p => p.participant_id === pid);
+      if (person) person.group_id = groupId;
       setParticipantsCache(state.participants);
+      showToast('分組已更新', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
       showToast(err.message, 'error');
@@ -2634,18 +2052,14 @@ async function handleAdminSaveParticipant() {
 async function handleAdminDeleteMessages() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) return;
-  if (!window.confirm('確定要撤回 ' + pid + ' 的所有已發留言嗎？')) return;
+  if (!window.confirm('確定要刪除 ' + pid + ' 的所有已發留言嗎？')) return;
 
   await runProgressButton(DOM.adminDeleteMessages, (async () => {
     try {
-      const data = checkApiResponse(await apiAdminDeleteParticipantRecords(pid, {
-        deleteMessages: true,
-        deleteTrophy: false,
-        deleteResults: false
-      }));
-      showToast('已撤回 ' + (data.messages_deleted || 0) + ' 則留言', 'success');
-      const full = checkApiResponse(await apiAdminFetch());
-      applyAdminMessages(full.messages || [], full.revision || '');
+      const removed = await data.clearParticipantRecords(pid, {
+        deleteMessages: true, deleteTrophy: false, deleteResults: false
+      });
+      showToast('已刪除 ' + removed + ' 則留言', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
       showToast(err.message, 'error');
@@ -2660,7 +2074,7 @@ async function handleAdminResetTrophy() {
 
   await runProgressButton(DOM.adminResetTrophy, (async () => {
     try {
-      checkApiResponse(await apiAdminResetParticipantVote(pid));
+      await data.resetParticipantVote(pid);
       showToast('Trophy 投票已重置', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
@@ -2676,14 +2090,10 @@ async function handleAdminDeleteAllRecords() {
 
   await runProgressButton(DOM.adminDeleteAllRecords, (async () => {
     try {
-      const data = checkApiResponse(await apiAdminDeleteParticipantRecords(pid, {
-        deleteMessages: true,
-        deleteTrophy: true,
-        deleteResults: true
-      }));
-      showToast('已刪除全部紀錄（留言 ' + (data.messages_deleted || 0) + ' 則）', 'success');
-      const full = checkApiResponse(await apiAdminFetch());
-      applyAdminMessages(full.messages || [], full.revision || '');
+      const removed = await data.clearParticipantRecords(pid, {
+        deleteMessages: true, deleteTrophy: true, deleteResults: true
+      });
+      showToast('已刪除 ' + removed + ' 項紀錄', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
       showToast(err.message, 'error');
@@ -2692,13 +2102,19 @@ async function handleAdminDeleteAllRecords() {
 }
 
 async function handleAdminBulkAutoGroup() {
-  if (!window.confirm('確定要依參加者編號自動修正全部分組嗎？\n（例如 1A→GROUP_1、STAFF→GROUP_STAFF）')) return;
+  if (!window.confirm('確定要依參加者編號自動修正全部分組嗎？\n（例如 1A→GROUP_1、其他→GROUP_STAFF）')) return;
 
   await runProgressButton(DOM.adminBulkAutoGroup, (async () => {
     try {
-      const data = checkApiResponse(await apiAdminBulkUpdateParticipants('auto_group'));
-      showToast(data.message || ('已修正 ' + (data.updated || 0) + ' 位參加者'), 'success');
-      await reloadParticipantsAfterBulk();
+      const assignments = {};
+      state.participants.forEach(p => {
+        assignments[p.participant_id] = deriveGroupId(p.participant_id);
+      });
+      const updated = await data.bulkSetGroups(assignments);
+      state.participants.forEach(p => { p.group_id = assignments[p.participant_id]; });
+      setParticipantsCache(state.participants);
+      showToast('已修正 ' + updated + ' 位參加者', 'success');
+      await afterBulkGroupChange();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -2715,9 +2131,13 @@ async function handleAdminBulkApplyGroup() {
 
   await runProgressButton(DOM.adminBulkApplyGroup, (async () => {
     try {
-      const data = checkApiResponse(await apiAdminBulkUpdateParticipants('set_group_id', groupId));
-      showToast(data.message || ('已套用到 ' + (data.updated || 0) + ' 位參加者'), 'success');
-      await reloadParticipantsAfterBulk();
+      const assignments = {};
+      state.participants.forEach(p => { assignments[p.participant_id] = groupId; });
+      const updated = await data.bulkSetGroups(assignments);
+      state.participants.forEach(p => { p.group_id = groupId; });
+      setParticipantsCache(state.participants);
+      showToast('已套用到 ' + updated + ' 位參加者', 'success');
+      await afterBulkGroupChange();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -2731,22 +2151,18 @@ async function handleAdminBulkDeleteAll() {
 
   await runProgressButton(DOM.adminBulkDeleteAll, (async () => {
     try {
-      const data = checkApiResponse(await apiAdminBulkDeleteAllRecords());
-      showToast(data.message || ('已處理 ' + (data.participants_processed || 0) + ' 位參加者'), 'success');
-      const full = checkApiResponse(await apiAdminFetch());
-      applyAdminMessages(full.messages || [], full.revision || '');
-      await reloadParticipantsAfterBulk();
+      const removed = await data.clearAllRecords();
+      showToast('已清除 ' + removed + ' 項紀錄，投票狀態已重設', 'success');
+      await refreshAdminParticipantDetail();
     } catch (err) {
       showToast(err.message, 'error');
     }
   })());
 }
 
-async function reloadParticipantsAfterBulk() {
-  const data = checkApiResponse(await apiBootstrap());
-  state.participants = data.participants || [];
-  setParticipantsCache(state.participants);
+async function afterBulkGroupChange() {
   initAdminParticipantCombobox();
+  refreshAdminTrophyViews();
   if (state.adminParticipant.selectedId) {
     await refreshAdminParticipantDetail();
   }
@@ -2781,14 +2197,14 @@ function switchParticipantView(viewName) {
   if (viewName === 'inbox') {
     markAllInboxRead();
   } else if (viewName === 'trophy') {
-    loadTrophyData(true);
+    renderTrophyTeammates();
+    updateTrophyStatusBanner();
   } else if (viewName === 'profile') {
     renderProfile();
   }
 }
 
-function switchAdminTab(tabName, options = {}) {
-  const skipLoad = options.skipLoad === true;
+function switchAdminTab(tabName) {
   document.querySelectorAll('.admin-bottom-nav .bottom-nav-item').forEach(btn => {
     const isActive = btn.dataset.adminTab === tabName;
     btn.classList.toggle('active', isActive);
@@ -2808,41 +2224,20 @@ function switchAdminTab(tabName, options = {}) {
     panel.classList.toggle('hidden', key !== tabName);
   });
 
+  // Every panel is fed by listeners that stay open for the whole session, so
+  // switching tabs only needs to draw what is already in memory.
   if (tabName === 'messages') {
-    apiAdminFetch().then(data => {
-      if (data.status === 'success') {
-        applyAdminMessages(data.messages || [], data.revision || '');
-      }
-    }).catch(() => {});
-    startAdminWatch();
-  } else if (tabName === 'voting') {
-    stopAdminWatch();
-    loadAdminTrophyData();
-  } else if (tabName === 'results') {
-    stopAdminWatch();
-    loadAdminTrophyData();
+    renderAdminMessages();
+  } else if (tabName === 'voting' || tabName === 'results') {
+    refreshAdminTrophyViews();
   } else if (tabName === 'settings') {
-    stopAdminWatch();
-    apiBootstrap().then(data => {
-      if (data.status === 'success') {
-        state.participants = data.participants || [];
-        setParticipantsCache(state.participants);
-      }
-      initAdminParticipantsPanel();
-      if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length);
-    }).catch(() => initAdminParticipantsPanel());
+    initAdminParticipantsPanel();
+    if (DOM.adminParticipantCount) {
+      DOM.adminParticipantCount.textContent = String(state.participants.length);
+    }
   } else if (tabName === 'dashboard') {
-    apiAdminFetch().then(data => {
-      if (data.status === 'success') {
-        state.monitorMessages = data.messages || [];
-        state.monitorRevision = data.revision || '';
-        renderAdminDashboard(data);
-      }
-    }).catch(() => renderAdminDashboard());
-    // Kept polling here too: the live load panel is only useful if it updates,
-    // and a single admin session costs the backend almost nothing.
-    startAdminWatch();
-    if (!skipLoad && !state.adminTrophy.overview) loadAdminTrophyData();
+    renderAdminDashboard();
+    renderAdminLiveLoad();
   }
 }
 
@@ -2874,11 +2269,6 @@ function bindEvents() {
 
   DOM.inboxRefresh.addEventListener('click', refreshInbox);
   DOM.sentRefresh.addEventListener('click', refreshSent);
-
-  DOM.sentList.addEventListener('click', (e) => {
-    const retryBtn = e.target.closest('[data-retry-id]');
-    if (retryBtn) retryFailedSentMessage(retryBtn.dataset.retryId);
-  });
 
   DOM.trophySaveDraft.addEventListener('click', handleTrophySaveDraft);
   DOM.trophySubmitAll.addEventListener('click', handleTrophySubmitAll);
@@ -2946,25 +2336,6 @@ function bindEvents() {
   DOM.auditSearch.addEventListener('input', renderAuditTable);
   DOM.auditTrophyFilter.addEventListener('change', renderAuditTable);
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) return;
-    if (state.isAdmin && DOM.adminMessagesPanel.classList.contains('active')) {
-      apiAdminFetch().then(data => {
-        if (data.status === 'success') {
-          applyAdminMessages(data.messages || [], data.revision || '');
-        }
-      }).catch(() => {});
-      startAdminWatch();
-    } else if (state.participantId && !state.isAdmin) {
-      apiFetchSent().then(data => {
-        if (data.status === 'success') {
-          applySentMessages(data.sent_messages || [], data.revision || '');
-        }
-      }).catch(() => {});
-      startSentWatch();
-      startTrophyWatch();
-    }
-  });
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -2980,30 +2351,22 @@ document.addEventListener('DOMContentLoaded', init);
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
- * DEPLOYMENT INSTRUCTIONS (README)
+ * OPERATIONS
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * 1. Create a Google Spreadsheet with these tabs and columns:
- *    - Participants: participant_id, phone_number, group_id
- *    - Messages: message_id, sender_id, receiver_id, content, created_at, status, deleted_at
- *    - Open: cell A2 = OPEN or CLOSE
- *    - Trophy: Trophy_id, Trophy_name
- *    - Trophy_log: Tmessage_id, sender_id, receiver_id, Trophy_id
- *    - Trophy_draft: Tmessage_id, sender_id, receiver_id, Trophy_id
- *    - Trophy_submissions: participant_id, submission_status, submitted_at, updated_at
- *    - Trophy_results: participant_id, Trophy_id, award_source, calculated_at
- *    - Voting: A2=voting_status, B2=allow_resubmit, C2=calculated_at, D2=published_at
+ * Backend: Firebase project tnit-6c48d (Firestore + Email/Password auth).
+ * Collections: participants, contacts, trophies, messages, submissions,
+ * results, config/messaging, config/voting.
  *
- * 2. Open Extensions > Apps Script, paste Code.gs, save and bind to spreadsheet
+ * Participants log in with their id and phone number, which maps to
+ * 1A -> 1a@tnit.local. Access is enforced by firestore.rules, not by this file.
  *
- * 3. Deploy > New deployment > Web app
- *    - Execute as: Me
- *    - Who has access: Anyone
- *
- * 4. Copy the deployment URL and set it in app.js:
- *    const API_URL = "https://script.google.com/macros/s/YOUR_ID/exec";
- *
- * 5. Push index.html, app.js, styles.css to GitHub Pages
+ * Scripts, all run from the repo root with the service account key:
+ *   migrate_to_firestore.py    push the sheet roster into Firebase
+ *   set_participant_phone.py   change one person's phone, i.e. their password
+ *   sync_participants.py       regenerate the public participants.json
+ *   deploy_firestore_rules.py  publish firestore.rules
+ *   test_firestore_rules.py    verify the rules still block what they should
  *
  * Admin login: participant_id = admin, phone = 23082026
  * ═══════════════════════════════════════════════════════════════════════════

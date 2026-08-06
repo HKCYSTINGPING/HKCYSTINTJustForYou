@@ -2,3 +2,16 @@
 .DS_Store
 *.pyc
 __pycache__/
+
+# Firebase service account keys grant full control of the project.
+# This repo is public, so a single accidental commit would hand it away.
+*serviceAccount*.json
+*service-account*.json
+*-firebase-adminsdk-*.json
+.firebase/
+
+# Local test scaffolding
+node_modules/
+package.json
+package-lock.json
+.test-phones.json

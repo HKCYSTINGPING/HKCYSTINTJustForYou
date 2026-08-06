@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// Access control for HKCYS TINT Just For You.
+//
+// Participants sign in with Firebase Email/Password where the address is
+// derived from the participant id (1A -> 1a@tnit.local) and the password is
+// their phone number. That gives every request a verified identity without
+// needing Cloud Functions, so these rules can be enforced by Google rather
+// than trusted to the frontend.
+//
+// Remember that rules are not filters: a query that could return one forbidden
+// document fails entirely, so client queries must carry a matching where().
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == 'admin@tnit.local';
+    }
+
+    function isParticipant() {
+      return signedIn() && !isAdmin();
+    }
+
+    function pid() {
+      return request.auth.token.email.split('@')[0].upper();
+    }
+
+    function messagingOpen() {
+      return get(/databases/$(database)/documents/config/messaging).data.status == 'OPEN';
+    }
+
+    function votingStatus() {
+      return get(/databases/$(database)/documents/config/voting).data.voting_status;
+    }
+
+    // Roster and trophy list: readable by everyone signed in, owned by admin.
+    match /participants/{participantId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Phone numbers double as login passwords, so they live apart from the
+    // roster that every participant can read.
+    match /contacts/{participantId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /trophies/{trophyId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /config/{document} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      // Inbox queries must filter on receiver_id, sent queries on sender_id.
+      allow read: if isAdmin() || (signedIn() &&
+        (resource.data.receiver_id == pid() || resource.data.sender_id == pid()));
+
+      allow create: if isParticipant()
+        && messagingOpen()
+        && request.resource.data.sender_id == pid()
+        && request.resource.data.receiver_id is string
+        && request.resource.data.receiver_id != pid()
+        && request.resource.data.status == 'active'
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        // The real 300 character limit is enforced in the UI. This is a wider
+        // abuse guard so that emoji, which the two engines count differently,
+        // can never trigger a confusing server-side rejection.
+        && request.resource.data.content.size() <= 500;
+
+      // Retracting marks a message deleted so it stays auditable. Removing it
+      // outright is the admin's clean-up tool between rehearsal and the event.
+      allow update, delete: if isAdmin();
+    }
+
+    // One document per participant holds that participant's whole ballot, so
+    // two people voting at the same time can never touch each other's rows.
+    match /submissions/{participantId} {
+      allow read: if isAdmin() || (signedIn() && participantId == pid());
+      allow write: if isAdmin() || (isParticipant()
+        && participantId == pid()
+        && votingStatus() == 'VOTING_OPEN');
+    }
+
+    match /results/{participantId} {
+      allow read: if isAdmin() || (signedIn()
+        && participantId == pid()
+        && votingStatus() == 'PUBLISHED');
+      allow write: if isAdmin();
+    }
+
+    // Anything not named above is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
