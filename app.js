@@ -91,6 +91,9 @@ let adminParticipantCombobox = null;
 // Every open Firestore listener, so signing out can close all of them.
 let subscriptions = [];
 let resultUnsubscribe = null;
+// Skip the first snapshot so login itself does not look like a status change.
+let votingStatusPrimed = false;
+let messagingStatusPrimed = false;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -510,6 +513,8 @@ function stopAllSubscriptions() {
   });
   subscriptions = [];
   resultUnsubscribe = null;
+  votingStatusPrimed = false;
+  messagingStatusPrimed = false;
 }
 
 function reportSubscriptionError(what) {
@@ -874,9 +879,17 @@ async function startParticipantSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeMessagingStatus(cb, err),
       status => {
+        const wasOpen = state.messagingOpen;
         state.messagingOpen = status === 'OPEN';
         updateSendFormState();
         updateCharCounter();
+        if (messagingStatusPrimed && wasOpen !== state.messagingOpen) {
+          showToast(
+            state.messagingOpen ? '留言功能已重新開放' : '留言功能已關閉',
+            state.messagingOpen ? 'success' : 'info'
+          );
+        }
+        messagingStatusPrimed = true;
       },
       '留言開關'
     ),
@@ -901,6 +914,7 @@ async function startParticipantSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeVotingConfig(cb, err),
       config => {
+        const prevStatus = state.trophy.votingStatus;
         state.votingConfig = config;
         state.trophy.votingStatus = config.voting_status;
         state.trophy.trophyRevision = config.published_at || config.calculated_at || config.voting_status;
@@ -910,6 +924,10 @@ async function startParticipantSubscriptions() {
         renderParticipantTrophyResults();
         renderTrophyTeammates();
         renderProfile();
+        if (votingStatusPrimed && prevStatus !== config.voting_status) {
+          notifyVotingStatusChange(config.voting_status);
+        }
+        votingStatusPrimed = true;
       },
       '投票狀態'
     ),
@@ -1547,7 +1565,7 @@ function updateTrophyTabBadge(show) {
 }
 
 function renderParticipantTrophyResults() {
-  const { votingStatus, myAwards, showResults } = state.trophy;
+  const { votingStatus, myAwards } = state.trophy;
   const isPublished = votingStatus === 'PUBLISHED';
 
   DOM.trophyResultsPanel.classList.toggle('hidden', !isPublished);
@@ -1559,21 +1577,68 @@ function renderParticipantTrophyResults() {
     DOM.trophyResultsPanel.classList.remove('trophy-results-live');
   }
 
-  DOM.trophyVotingSection.classList.toggle('hidden', isPublished);
+  // Voting-section visibility belongs to updateTrophyStatusBanner; flipping it
+  // here undid "closed" / "submitted" hides and left a disabled form on screen.
   updateTrophyTabBadge(isPublished);
+}
+
+const TROPHY_IDLE_COPY = {
+  DRAFT: {
+    title: '投票尚未開始',
+    body: '管理員開放投票後，你可以為隊友配對 Trophy'
+  },
+  VOTING_CLOSED: {
+    title: '投票已關閉',
+    body: '管理員已結束投票，請等候結果公布'
+  },
+  CALCULATED: {
+    title: '結果準備中',
+    body: '管理員正在整理結果，公布後會即時通知你'
+  }
+};
+
+function notifyVotingStatusChange(status) {
+  const messages = {
+    VOTING_OPEN: '投票已開放，可以開始配對 Trophy',
+    VOTING_CLOSED: '投票已關閉，請等候結果',
+    CALCULATED: '結果已計算，即將公布',
+    PUBLISHED: 'Trophy 結果已公布！',
+    DRAFT: '投票已重設為尚未開始'
+  };
+  const text = messages[status];
+  if (!text) return;
+  showToast(text, status === 'PUBLISHED' || status === 'VOTING_OPEN' ? 'success' : 'info');
+  if (status === 'PUBLISHED' || status === 'VOTING_CLOSED') {
+    updateTrophyTabBadge(status === 'PUBLISHED');
+  }
 }
 
 function updateTrophyStatusBanner() {
   const status = state.trophy.votingStatus;
   const label = VOTING_STATUS_LABELS[status] || status;
   const isDraft = status === 'DRAFT';
-  const isSubmitted = state.trophy.submissionStatus === 'submitted' && !state.trophy.editable;
+  const isPublished = status === 'PUBLISHED';
+  const isOpen = status === 'VOTING_OPEN';
+  // Only an open, editable ballot should show the pairing UI. A closed vote
+  // used to leave the form on screen with disabled chips, which felt like lag.
+  const showVoting = isOpen && state.trophy.editable && !isPublished;
+  const idle = TROPHY_IDLE_COPY[status];
+  const showIdle = !!idle && !isPublished;
 
   if (DOM.trophyNotOpen) {
-    DOM.trophyNotOpen.classList.toggle('hidden', !isDraft || state.trophy.showResults);
+    DOM.trophyNotOpen.classList.toggle('hidden', !showIdle);
+    if (showIdle) {
+      const title = DOM.trophyNotOpen.querySelector('h3');
+      const body = DOM.trophyNotOpen.querySelector('p');
+      if (title) title.textContent = idle.title;
+      if (body) body.textContent = idle.body;
+    }
   }
   if (DOM.trophyVotingSection) {
-    DOM.trophyVotingSection.classList.toggle('hidden', isDraft || state.trophy.showResults || isSubmitted);
+    DOM.trophyVotingSection.classList.toggle('hidden', !showVoting);
+  }
+  if (DOM.trophyActions) {
+    DOM.trophyActions.classList.toggle('hidden', !showVoting || state.trophy.teammates.length === 0);
   }
 
   if (DOM.trophyStatusBanner) {
@@ -1582,7 +1647,7 @@ function updateTrophyStatusBanner() {
     if (status === 'VOTING_OPEN') DOM.trophyStatusBanner.classList.add('status-banner-success');
     else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') DOM.trophyStatusBanner.classList.add('status-banner-warning');
     else if (status === 'PUBLISHED') DOM.trophyStatusBanner.classList.add('status-banner-success');
-    DOM.trophyStatusBanner.classList.toggle('hidden', isDraft && !state.trophy.showResults);
+    DOM.trophyStatusBanner.classList.toggle('hidden', isDraft || isPublished);
   }
 }
 
