@@ -1179,17 +1179,26 @@ async function startAdminSubscriptions() {
         refreshAdminTrophyViews();
       },
       '得獎結果'
-    ),
-    subscribeAndWait(
-      (cb, err) => data.subscribePresence(cb, err),
-      rows => {
-        state.presence = rows;
-        renderAdminLoginStatus();
-        renderAdminLiveLoad();
-      },
-      '登入狀況'
     )
   ]);
+
+  // Presence is additive. If the new rules are not published yet, the rest of
+  // the admin console must still open instead of failing the whole login.
+  track(data.subscribePresence(
+    rows => {
+      state.presence = rows;
+      renderAdminLoginStatus();
+      renderAdminLiveLoad();
+    },
+    err => {
+      console.warn('登入狀況 listener error:', err && err.message);
+      state.presence = [];
+      renderAdminLoginStatus();
+      if (err && err.code === 'permission-denied') {
+        showToast('登入狀況未啟用：請發布最新 firestore.rules', 'info');
+      }
+    }
+  ));
 }
 
 async function enterAdminDashboard() {
