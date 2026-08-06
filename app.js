@@ -27,7 +27,10 @@ const CONFIG = {
   // How often a logged-in participant refreshes their presence document.
   PRESENCE_HEARTBEAT_MS: 45000,
   // last_seen newer than this counts as currently online on the dashboard.
-  PRESENCE_ONLINE_MS: 120000
+  PRESENCE_ONLINE_MS: 120000,
+  // Admin message list: after the admin scrolls, pause live re-renders so they
+  // can read / hit 撤回 without the list jumping. Resume after this idle time.
+  ADMIN_MSG_SCROLL_RESUME_MS: 3000
 };
 
 const BAD_WORDS = [
@@ -54,9 +57,14 @@ const state = {
   isAdmin: false,
   monitorMessages: [],
   monitorViewFilter: 'all',
+  monitorGroupFilter: '',
   adminLoad: null,
   votingConfig: { voting_status: 'DRAFT', allow_resubmit: false, calculated_at: '', published_at: '' },
   knownMessageIds: new Set(),
+  adminMessagesBootstrapped: false,
+  adminMsgScrollPaused: false,
+  adminMsgPendingRender: false,
+  adminMsgScrollIdleTimer: null,
   trophy: {
     loaded: false,
     loading: false,
@@ -187,15 +195,18 @@ function cacheDOM() {
   DOM.adminLoginStatus = document.getElementById('admin-login-status');
   DOM.adminRecentActivity = document.getElementById('admin-recent-activity');
   DOM.adminQueuePill = document.getElementById('admin-queue-pill');
+  DOM.adminLiveBadge = document.getElementById('admin-live-badge');
   DOM.adminLiveLoad = document.getElementById('admin-live-load');
   DOM.adminSyncTime = document.getElementById('admin-sync-time');
   DOM.adminMsgCount = document.getElementById('admin-msg-count');
   DOM.adminMsgSearch = document.getElementById('admin-msg-search');
+  DOM.adminMsgGroupFilter = document.getElementById('admin-msg-group-filter');
   DOM.adminMessageList = document.getElementById('admin-message-list');
   DOM.adminMsgEmpty = document.getElementById('admin-msg-empty');
   DOM.adminEnableMsg = document.getElementById('admin-enable-msg');
   DOM.adminDisableMsg = document.getElementById('admin-disable-msg');
   DOM.adminMessagesPanel = document.getElementById('admin-messages-panel');
+  DOM.adminMain = document.querySelector('#screen-admin .app-main');
   DOM.adminTrophyPanel = document.getElementById('admin-trophy-panel');
   DOM.adminResultsPanel = document.getElementById('admin-results-panel');
   DOM.adminVotingStatusBadge = document.getElementById('admin-voting-status-badge');
@@ -1147,8 +1158,21 @@ async function startAdminSubscriptions() {
       (cb, err) => data.subscribeAllMessages(cb, err),
       messages => {
         state.monitorMessages = messages;
-        state.knownMessageIds = new Set(messages.map(m => m.message_id));
-        renderAdminMessages();
+        // First snapshot: mark everything known so the whole history does not
+        // flash as "new". Later snapshots keep knownMessageIds so brand-new
+        // rows can highlight when we actually render them.
+        if (!state.adminMessagesBootstrapped) {
+          state.knownMessageIds = new Set(messages.map(m => m.message_id));
+          state.adminMessagesBootstrapped = true;
+        }
+        // While the admin is reading mid-list, keep data fresh but do not
+        // rebuild the DOM (that jumps the scroll and steals 撤回 taps).
+        if (shouldHoldAdminMessageRender()) {
+          state.adminMsgPendingRender = true;
+          updateAdminMessagePauseUi();
+        } else {
+          renderAdminMessages();
+        }
         renderAdminDashboard();
         renderAdminLiveLoad();
       },
@@ -1274,6 +1298,14 @@ function handleLogout() {
   state.monitorMessages = [];
   state.presence = [];
   state.expandedLoginGroups = null;
+  state.knownMessageIds = new Set();
+  state.adminMessagesBootstrapped = false;
+  state.adminMsgScrollPaused = false;
+  state.adminMsgPendingRender = false;
+  clearTimeout(state.adminMsgScrollIdleTimer);
+  state.adminMsgScrollIdleTimer = null;
+  state.monitorViewFilter = 'all';
+  state.monitorGroupFilter = '';
   hideTrophyResultsModal();
   state.trophy = {
     loaded: false,
@@ -1464,12 +1496,149 @@ async function refreshSent() {
 
 // ─── Admin Monitor ────────────────────────────────────────────────────────────
 
+function isAdminMessagesTabActive() {
+  return !!DOM.adminMessagesPanel && !DOM.adminMessagesPanel.classList.contains('hidden');
+}
+
+function setMonitorViewFilter(filter) {
+  state.monitorViewFilter = filter;
+  document.querySelectorAll('.chip-filter').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filter);
+  });
+}
+
+function getParticipantGroupMap() {
+  const map = new Map();
+  state.participants.forEach(p => {
+    map.set(String(p.participant_id || '').toUpperCase(), p.group_id || '未分組');
+  });
+  return map;
+}
+
+function populateAdminMsgGroupFilter() {
+  const select = DOM.adminMsgGroupFilter;
+  if (!select) return;
+  const groups = [...new Set(state.participants.map(p => p.group_id || '未分組'))]
+    .sort(compareGroupLabels);
+  const signature = groups.join('\0');
+  if (select.dataset.groupsSignature === signature) {
+    // Keep the user's current choice without rebuilding the <select>.
+    state.monitorGroupFilter = select.value || '';
+    return;
+  }
+  select.dataset.groupsSignature = signature;
+  const prev = state.monitorGroupFilter || select.value || '';
+  select.innerHTML = '<option value="">全部組別</option>' + groups.map(g =>
+    `<option value="${escapeHtml(g)}">${escapeHtml(formatGroupLabel(g))}</option>`
+  ).join('');
+  select.value = groups.includes(prev) ? prev : '';
+  state.monitorGroupFilter = select.value;
+}
+
+function updateAdminMessagePauseUi() {
+  if (DOM.adminLiveBadge) {
+    if (state.adminMsgScrollPaused) {
+      DOM.adminLiveBadge.classList.add('badge-paused');
+      DOM.adminLiveBadge.innerHTML = '<span class="live-dot"></span> 暫停';
+    } else {
+      DOM.adminLiveBadge.classList.remove('badge-paused');
+      DOM.adminLiveBadge.innerHTML = '<span class="live-dot"></span> 即時';
+    }
+  }
+  if (DOM.adminSyncTime) {
+    if (state.adminMsgScrollPaused) {
+      DOM.adminSyncTime.textContent = state.adminMsgPendingRender
+        ? '滾動暫停中：有新留言，停 3 秒或撤回後繼續'
+        : '滾動暫停中：停 3 秒或撤回後繼續更新';
+    } else {
+      DOM.adminSyncTime.textContent = '上次同步：' + formatDateTime(new Date().toISOString());
+    }
+  }
+}
+
+/** True when the message list is scrolled away from the top. */
+function isAdminMessageListScrolled() {
+  return !!(DOM.adminMain && DOM.adminMain.scrollTop > 12);
+}
+
+function pauseAdminMessageRender() {
+  if (!isAdminMessagesTabActive()) return;
+  state.adminMsgScrollPaused = true;
+  updateAdminMessagePauseUi();
+  clearTimeout(state.adminMsgScrollIdleTimer);
+  state.adminMsgScrollIdleTimer = setTimeout(() => {
+    // Only resume if they are still idle near the same spot for 3s; if they
+    // scrolled again the timer was already reset.
+    resumeAdminMessageRender();
+  }, CONFIG.ADMIN_MSG_SCROLL_RESUME_MS);
+}
+
+/**
+ * Hold live list rebuilds while the admin is mid-scroll OR has scrolled away
+ * from the top (so a missed scroll event cannot yank the list under their finger).
+ */
+function shouldHoldAdminMessageRender() {
+  if (!isAdminMessagesTabActive()) return false;
+  if (state.adminMsgScrollPaused) return true;
+  if (isAdminMessageListScrolled()) {
+    pauseAdminMessageRender();
+    return true;
+  }
+  return false;
+}
+
+function resumeAdminMessageRender() {
+  clearTimeout(state.adminMsgScrollIdleTimer);
+  state.adminMsgScrollIdleTimer = null;
+  const wasPaused = state.adminMsgScrollPaused;
+  const hadPending = state.adminMsgPendingRender;
+  state.adminMsgScrollPaused = false;
+  state.adminMsgPendingRender = false;
+  updateAdminMessagePauseUi();
+  if (wasPaused && hadPending && isAdminMessagesTabActive()) {
+    renderAdminMessages();
+  }
+}
+
+function clearAdminMessagePause({ render = false } = {}) {
+  clearTimeout(state.adminMsgScrollIdleTimer);
+  state.adminMsgScrollIdleTimer = null;
+  state.adminMsgScrollPaused = false;
+  state.adminMsgPendingRender = false;
+  updateAdminMessagePauseUi();
+  if (render && isAdminMessagesTabActive()) renderAdminMessages();
+}
+
+function initAdminMessageScrollPause() {
+  if (!DOM.adminMain || DOM.adminMain.dataset.scrollPauseBound === '1') return;
+  DOM.adminMain.dataset.scrollPauseBound = '1';
+  const onInteract = () => {
+    if (!state.isAdmin || !isAdminMessagesTabActive()) return;
+    pauseAdminMessageRender();
+  };
+  DOM.adminMain.addEventListener('scroll', onInteract, { passive: true });
+  // Mobile browsers sometimes deliver touch / wheel before scrollTop updates.
+  DOM.adminMain.addEventListener('touchmove', onInteract, { passive: true });
+  DOM.adminMain.addEventListener('wheel', onInteract, { passive: true });
+}
+
 function getFilteredAdminMessages() {
   const filter = state.monitorViewFilter;
   const search = (DOM.adminMsgSearch?.value || '').trim().toUpperCase();
   let messages = state.monitorMessages;
   if (filter === 'active') messages = messages.filter(m => m.status === 'active');
   else if (filter === 'deleted') messages = messages.filter(m => m.status === 'deleted');
+
+  if (state.monitorGroupFilter) {
+    const groupMap = getParticipantGroupMap();
+    const target = state.monitorGroupFilter;
+    messages = messages.filter(m => {
+      const sg = groupMap.get(String(m.sender_id || '').toUpperCase());
+      const rg = groupMap.get(String(m.receiver_id || '').toUpperCase());
+      return sg === target || rg === target;
+    });
+  }
+
   if (search) {
     messages = messages.filter(m =>
       m.sender_id.toUpperCase().includes(search) ||
@@ -1481,10 +1650,16 @@ function getFilteredAdminMessages() {
 }
 
 function renderAdminMessages() {
+  populateAdminMsgGroupFilter();
   const messages = getFilteredAdminMessages();
+  const scrollTop = DOM.adminMain ? DOM.adminMain.scrollTop : 0;
   DOM.adminMsgEmpty.classList.toggle('hidden', messages.length > 0);
-  DOM.adminMsgCount.textContent = '共 ' + state.monitorMessages.length + ' 則';
-  DOM.adminSyncTime.textContent = '上次同步：' + formatDateTime(new Date().toISOString());
+  const shown = messages.length;
+  const total = state.monitorMessages.length;
+  DOM.adminMsgCount.textContent = shown === total
+    ? '共 ' + total + ' 則'
+    : '顯示 ' + shown + ' / ' + total + ' 則';
+  updateAdminMessagePauseUi();
 
   DOM.adminMessageList.innerHTML = '';
 
@@ -1520,6 +1695,11 @@ function renderAdminMessages() {
   DOM.adminMessageList.querySelectorAll('.admin-delete-btn').forEach(btn => {
     btn.addEventListener('click', () => handleAdminDelete(btn.dataset.id, btn));
   });
+
+  // Keep the admin's place if we rendered while they were mid-list (e.g. after 撤回).
+  if (DOM.adminMain && scrollTop > 0) {
+    DOM.adminMain.scrollTop = scrollTop;
+  }
 }
 
 /**
@@ -1561,6 +1741,15 @@ async function handleAdminDelete(messageId, btn) {
   await runProgressButton(btn, (async () => {
     try {
       await data.retractMessage(messageId);
+      const msg = state.monitorMessages.find(m => m.message_id === messageId);
+      if (msg) {
+        msg.status = 'deleted';
+        msg.deleted_at = new Date().toISOString();
+      }
+      // Jump to the withdrawn list so the admin can confirm the action, and
+      // resume live updates immediately (scroll pause is done).
+      setMonitorViewFilter('deleted');
+      clearAdminMessagePause({ render: true });
       showToast('留言已撤回', 'success');
     } catch (err) {
       showToast(err.message, 'error');
@@ -2492,6 +2681,8 @@ function switchAdminTab(tabName) {
   // Every panel is fed by listeners that stay open for the whole session, so
   // switching tabs only needs to draw what is already in memory.
   if (tabName === 'messages') {
+    clearAdminMessagePause();
+    populateAdminMsgGroupFilter();
     renderAdminMessages();
   } else if (tabName === 'voting' || tabName === 'results') {
     refreshAdminTrophyViews();
@@ -2568,15 +2759,28 @@ function bindEvents() {
 
   document.querySelectorAll('.chip-filter').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.chip-filter').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.monitorViewFilter = btn.dataset.filter;
-      renderAdminMessages();
+      setMonitorViewFilter(btn.dataset.filter);
+      // Changing filter counts as intentional interaction — flush any paused updates.
+      clearAdminMessagePause({ render: true });
     });
   });
 
   if (DOM.adminMsgSearch) {
-    DOM.adminMsgSearch.addEventListener('input', renderAdminMessages);
+    DOM.adminMsgSearch.addEventListener('input', () => {
+      if (state.adminMsgScrollPaused) {
+        // Searching should refresh the visible list from the latest data.
+        clearAdminMessagePause({ render: true });
+      } else {
+        renderAdminMessages();
+      }
+    });
+  }
+
+  if (DOM.adminMsgGroupFilter) {
+    DOM.adminMsgGroupFilter.addEventListener('change', () => {
+      state.monitorGroupFilter = DOM.adminMsgGroupFilter.value || '';
+      clearAdminMessagePause({ render: true });
+    });
   }
 
   DOM.adminEnableMsg.addEventListener('click', () => handleSetMessagingStatus('OPEN', DOM.adminEnableMsg));
@@ -2608,6 +2812,7 @@ function bindEvents() {
 function init() {
   cacheDOM();
   bindEvents();
+  initAdminMessageScrollPause();
   showSplashThenLogin();
   bootstrapApp();
 }

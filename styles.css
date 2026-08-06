@@ -710,6 +710,8 @@ textarea.input-field {
 .badge-pill { background: var(--primary-light); color: var(--text); }
 .badge-deleted { background: var(--danger-bg); color: var(--danger); }
 .badge-live { background: var(--success-bg); color: var(--success); font-size: 11px; }
+.badge-live.badge-paused { background: var(--warning-bg); color: var(--warning); }
+.badge-live.badge-paused .live-dot { background: var(--warning); animation: none; }
 
 .badge-source-round1 { background: var(--success-bg); color: var(--success); }
 .badge-source-fallback { background: var(--warning-bg); color: var(--secondary); }
@@ -1405,6 +1407,18 @@ textarea.input-field {
 .activity-item time { color: var(--text-muted); white-space: nowrap; }
 
 .search-bar { margin-bottom: var(--space-md); }
+
+.admin-msg-filters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-sm);
+}
+
+@media (min-width: 420px) {
+  .admin-msg-filters {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
 
 .admin-controls {
   margin-bottom: var(--space-md);

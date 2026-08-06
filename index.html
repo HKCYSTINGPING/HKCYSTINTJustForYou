@@ -357,8 +357,11 @@
 
       <!-- Messages -->
       <div id="admin-messages-panel" class="admin-panel hidden" data-admin-view="messages">
-        <div class="search-bar">
+        <div class="search-bar admin-msg-filters">
           <input type="search" id="admin-msg-search" class="input-field" placeholder="搜尋留言…" aria-label="搜尋留言">
+          <select id="admin-msg-group-filter" class="input-field" aria-label="按組別篩選">
+            <option value="">全部組別</option>
+          </select>
         </div>
         <div class="admin-controls">
           <div class="filter-chips" role="group" aria-label="篩選">
