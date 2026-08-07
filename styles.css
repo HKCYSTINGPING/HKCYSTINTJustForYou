@@ -1837,21 +1837,27 @@ textarea.input-field {
 }
 
 .vote-matrix-image-wrap {
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   background: var(--surface-warm);
+  width: 100%;
   max-width: 100%;
-  /* Whole matrix is one bitmap — pan moves every cell together. */
-  touch-action: pan-x pan-y;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  line-height: 0;
 }
 
 .vote-matrix-image {
   display: block;
+  /* Shrink to fit the modal once — no horizontal/vertical pan on the bitmap. */
   width: auto;
-  max-width: none;
   height: auto;
+  max-width: 100%;
+  max-height: min(58vh, 520px);
+  object-fit: contain;
+  object-position: center top;
   user-select: none;
   -webkit-user-drag: none;
   pointer-events: none;
