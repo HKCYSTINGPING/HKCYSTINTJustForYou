@@ -129,7 +129,7 @@ def build_workbook():
     ws = wb.create_sheet("Trophy_results")
     headers = ["participant_id", "Trophy_id", "award_source", "calculated_at"]
     style_header(ws, headers)
-    add_note(ws, 3, "說明：管理員計算結果後寫入。award_source = round1（全組最高票）或 fallback（保底配對）。")
+    add_note(ws, 3, "說明：管理員計算結果後寫入。award_source = round1（組內最高票）。")
 
     # ── Voting ──
     ws = wb.create_sheet("Voting")

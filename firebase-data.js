@@ -359,8 +359,7 @@ export function subscribeAllResults(onData, onError) {
 
 /**
  * Tally awards per group: each trophy goes to whoever holds the highest vote
- * count inside their own group (ties included). Anyone still empty afterwards
- * gets the trophy(s) they came closest on. Nobody finishes empty handed.
+ * count inside their own group (ties included). No consolation / fallback awards.
  */
 export function computeResults(participants, trophies, submissions) {
   const voteCounts = new Map();
@@ -376,7 +375,6 @@ export function computeResults(participants, trophies, submissions) {
 
   const countFor = (participantId, trophyId) => voteCounts.get(key(participantId, trophyId)) || 0;
   const awarded = new Map(participants.map(p => [p.participant_id, []]));
-  let fallbackActivated = false;
 
   const byGroup = new Map();
   participants.forEach(p => {
@@ -402,37 +400,6 @@ export function computeResults(participants, trophies, submissions) {
         });
       });
     });
-
-    members.forEach(p => {
-      const mine = awarded.get(p.participant_id);
-      if (mine.length > 0) return;
-      fallbackActivated = true;
-
-      let personalBest = -1;
-      trophies.forEach(trophy => {
-        personalBest = Math.max(personalBest, countFor(p.participant_id, trophy.trophy_id));
-      });
-
-      trophies.forEach(trophy => {
-        const count = countFor(p.participant_id, trophy.trophy_id);
-        if (count !== personalBest) return;
-        mine.push({
-          trophy_id: trophy.trophy_id,
-          trophy_name: trophy.trophy_name,
-          award_source: 'fallback',
-          vote_count: count
-        });
-      });
-
-      if (mine.length === 0 && trophies.length > 0) {
-        mine.push({
-          trophy_id: trophies[0].trophy_id,
-          trophy_name: trophies[0].trophy_name,
-          award_source: 'fallback',
-          vote_count: 0
-        });
-      }
-    });
   });
 
   const trophySummary = trophies.map(trophy => {
@@ -441,9 +408,7 @@ export function computeResults(participants, trophies, submissions) {
       .filter(entry => entry.vote_count > 0)
       .sort((a, b) => b.vote_count - a.vote_count);
     const winners = participants
-      .filter(p => awarded.get(p.participant_id).some(
-        a => a.trophy_id === trophy.trophy_id && a.award_source === 'round1'
-      ))
+      .filter(p => awarded.get(p.participant_id).some(a => a.trophy_id === trophy.trophy_id))
       .map(p => ({ participant_id: p.participant_id, vote_count: countFor(p.participant_id, trophy.trophy_id) }));
     return {
       trophy_id: trophy.trophy_id,
@@ -460,10 +425,10 @@ export function computeResults(participants, trophies, submissions) {
     vote_count: awarded.get(p.participant_id).reduce((sum, a) => sum + (a.vote_count || 0), 0)
   }));
 
-  return { awarded, profiles, trophySummary, fallbackActivated };
+  return { awarded, profiles, trophySummary };
 }
 
-export async function writeResults(awarded, fallbackActivated) {
+export async function writeResults(awarded) {
   const operations = [];
   awarded.forEach((awards, participantId) => {
     operations.push(batch => batch.set(doc(db, 'results', participantId), {
@@ -475,7 +440,7 @@ export async function writeResults(awarded, fallbackActivated) {
   await commitAll(operations);
   await setDoc(doc(db, 'config', 'voting'), {
     voting_status: 'CALCULATED',
-    fallback_activated: !!fallbackActivated,
+    fallback_activated: false,
     calculated_at: serverTimestamp()
   }, { merge: true });
 }

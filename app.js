@@ -89,7 +89,6 @@ const state = {
     auditVotes: [],
     profiles: [],
     trophySummary: [],
-    fallbackActivated: false,
     trophies: [],
     submissions: [],
     results: [],
@@ -225,7 +224,6 @@ function cacheDOM() {
 
   DOM.adminTrophyStats = document.getElementById('admin-trophy-stats');
   DOM.adminPendingVoters = document.getElementById('admin-pending-voters');
-  DOM.adminFallbackBanner = document.getElementById('admin-fallback-banner');
   DOM.adminOpenVoting = document.getElementById('admin-open-voting');
   DOM.adminCloseVoting = document.getElementById('admin-close-voting');
   DOM.adminCalculate = document.getElementById('admin-calculate');
@@ -1186,7 +1184,9 @@ function ensureResultSubscription() {
   resultUnsubscribe = track(data.subscribeMyResult(
     state.participantId,
     result => {
-      state.trophy.myAwards = result ? result.awards : [];
+      state.trophy.myAwards = result
+        ? (result.awards || []).filter(a => a.award_source !== 'fallback')
+        : [];
       renderParticipantTrophyResults();
       maybeShowPublishedModal(true);
     },
@@ -1276,17 +1276,19 @@ function refreshAdminTrophyViews() {
   const stored = state.adminTrophy.results;
   state.adminTrophy.profiles = stored.length > 0
     ? stored
-      .map(r => ({
-        participant_id: r.participant_id,
-        trophies: r.awards,
-        vote_count: r.awards.reduce((sum, a) => sum + (a.vote_count || 0), 0)
-      }))
+      .map(r => {
+        const trophies = (r.awards || []).filter(a => a.award_source !== 'fallback');
+        return {
+          participant_id: r.participant_id,
+          trophies,
+          vote_count: trophies.reduce((sum, a) => sum + (a.vote_count || 0), 0)
+        };
+      })
       .sort((a, b) => a.participant_id.localeCompare(b.participant_id))
     : projection.profiles;
 
   renderAdminTrophyStats();
   renderAdminPendingVoters();
-  renderAdminFallbackBanner();
   renderAuditTable();
   renderProfiles();
   renderTrophySummary();
@@ -1334,7 +1336,6 @@ async function startAdminSubscriptions() {
       (cb, err) => data.subscribeVotingConfig(cb, err),
       config => {
         state.votingConfig = config;
-        state.adminTrophy.fallbackActivated = !!config.fallback_activated;
         refreshAdminTrophyViews();
       },
       '投票狀態'
@@ -1938,11 +1939,6 @@ function filterValidTrophies(trophies) {
   return (trophies || []).filter(t => /^T\d+$/i.test(String(t.trophy_id || '').trim()));
 }
 
-function renderAwardSourceBadge(source) {
-  const isFallback = source === 'fallback';
-  return `<span class="badge ${isFallback ? 'badge-source-fallback' : 'badge-source-round1'}">${isFallback ? '保底配對' : '全組最高票'}</span>`;
-}
-
 function buildAwardsHtml(awards) {
   if (!awards || awards.length === 0) {
     return '<p class="trophy-results-empty">暫未獲得 Trophy，請稍後再查看</p>';
@@ -1950,7 +1946,6 @@ function buildAwardsHtml(awards) {
   return awards.map(a => `
     <div class="trophy-result-item">
       <div class="trophy-result-name">${escapeHtml(a.trophy_name)}</div>
-      ${renderAwardSourceBadge(a.award_source)}
     </div>
   `).join('');
 }
@@ -2528,11 +2523,10 @@ function renderVoteMatrixImage(options) {
   } = options;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-  // Cell metrics scale with the small-type ×1.5 bump so canvas text stays readable.
-  const colW = Math.max(60, ...columns.map(c => String(c).length * 14 + 24), 60);
-  const labelW = Math.max(78, ...rows.map(r => String(r).length * 14 + 24), String(corner).length * 12 + 18);
-  const rowH = 51;
-  const pad = 12;
+  const colW = Math.max(40, ...columns.map(c => String(c).length * 9 + 16), 40);
+  const labelW = Math.max(52, ...rows.map(r => String(r).length * 9 + 16), String(corner).length * 8 + 12);
+  const rowH = 34;
+  const pad = 10;
   const width = labelW + columns.length * colW + pad * 2;
   const height = rowH * (rows.length + 1) + pad * 2;
 
@@ -2554,14 +2548,14 @@ function renderVoteMatrixImage(options) {
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     if (!text) return;
     ctx.fillStyle = opts.muted ? '#A89888' : (opts.strong ? '#4A403A' : '#7A6E64');
-    ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 16.5}px "Canva Handwriting Style TC", "PingFang TC", sans-serif`;
+    ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 11}px "Canva Handwriting Style TC", "PingFang TC", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(text), x + w / 2, y + h / 2 + 0.5);
   };
 
   // Corner + column headers
-  drawCell(pad, pad, labelW, rowH, '#F5EDE3', corner, { bold: true, size: 15, muted: true });
+  drawCell(pad, pad, labelW, rowH, '#F5EDE3', corner, { bold: true, size: 10, muted: true });
   columns.forEach((label, c) => {
     const focused = c === focusCol;
     drawCell(
@@ -2571,7 +2565,7 @@ function renderVoteMatrixImage(options) {
       rowH,
       focused ? '#F5E6C0' : '#F5EDE3',
       label,
-      { bold: true, size: 16.5, strong: focused }
+      { bold: true, size: 11, strong: focused }
     );
   });
 
@@ -2584,7 +2578,7 @@ function renderVoteMatrixImage(options) {
       rowH,
       rowFocused ? '#F5E6C0' : '#FFFCF7',
       label,
-      { bold: true, size: 16.5, strong: true }
+      { bold: true, size: 11, strong: true }
     );
     columns.forEach((_, c) => {
       const isSelf = !!(selfCell[r] && selfCell[r][c]);
@@ -2605,7 +2599,7 @@ function renderVoteMatrixImage(options) {
           bold: isHot && !isSelf,
           strong: isHot && !isSelf,
           muted: isSelf || !val,
-          size: String(val).length > 3 ? 15 : 16.5
+          size: String(val).length > 3 ? 10 : 11
         }
       );
     });
@@ -2641,19 +2635,13 @@ function buildGroupWinnersHtml(group) {
   const profilesById = new Map(
     (state.adminTrophy.profiles || []).map(p => [p.participant_id, p])
   );
-  const status = state.adminTrophy.overview?.voting_status || 'DRAFT';
-  const showFallback = status === 'CALCULATED' || status === 'PUBLISHED';
 
   const rows = memberIds.map(id => {
-    const awards = (profilesById.get(id)?.trophies || []).filter(a => {
-      if ((a.vote_count || 0) > 0) return true;
-      return showFallback && a.award_source === 'fallback';
-    });
+    const awards = (profilesById.get(id)?.trophies || []).filter(a => (a.vote_count || 0) > 0);
     const trophiesHtml = awards.length
       ? awards.map(a => {
           const votes = a.vote_count || 0;
-          const tag = a.award_source === 'fallback' ? ' · 保底' : '';
-          return `<span class="vote-matrix-winner-trophy">${escapeHtml(a.trophy_name)}（${votes}票${tag}）</span>`;
+          return `<span class="vote-matrix-winner-trophy">${escapeHtml(a.trophy_name)}（${votes}票）</span>`;
         }).join('')
       : '<span class="vote-matrix-winner-empty">暫未勝出</span>';
     return `
@@ -2667,7 +2655,7 @@ function buildGroupWinnersHtml(group) {
   return `
     <div class="vote-matrix-winners">
       <h3 class="vote-matrix-winners-title">勝出結果</h3>
-      <p class="vote-matrix-winners-note">按組內最高票（與正式計獎相同）；平票可多人同時勝出</p>
+      <p class="vote-matrix-winners-note">按組內最高票；平票可多人同時勝出；未達最高票者不會得獎</p>
       <div class="vote-matrix-winners-list">${rows}</div>
     </div>
   `;
@@ -2807,23 +2795,6 @@ function renderAdminLoginStatus() {
   });
 }
 
-function renderAdminFallbackBanner() {
-  const activated = state.adminTrophy.fallbackActivated;
-  const votingStatus = state.adminTrophy.overview?.voting_status;
-  if (votingStatus !== 'CALCULATED' && votingStatus !== 'PUBLISHED') {
-    DOM.adminFallbackBanner.classList.add('hidden');
-    return;
-  }
-  DOM.adminFallbackBanner.classList.remove('hidden');
-  if (activated) {
-    DOM.adminFallbackBanner.textContent = '已啟用【保底配對】機制，部分參加者透過個人最高票數獲得 Trophy。';
-    DOM.adminFallbackBanner.className = 'status-banner status-banner-warning';
-  } else {
-    DOM.adminFallbackBanner.textContent = '所有參賽者均於第一輪全組競爭中獲得 Trophy。';
-    DOM.adminFallbackBanner.className = 'status-banner status-banner-success';
-  }
-}
-
 function populateAuditTrophyFilter() {
   const trophies = new Map();
   state.adminTrophy.auditVotes.forEach(v => {
@@ -2875,11 +2846,8 @@ function renderAuditTable() {
 function renderProfiles() {
   DOM.profilesList.innerHTML = state.adminTrophy.profiles.map(profile => {
     const trophies = (profile.trophies || []).map(t => {
-      const badgeClass = t.award_source === 'fallback' ? 'badge-source-fallback' : 'badge-source-round1';
-      const badgeLabel = t.award_source === 'fallback' ? '保底配對' : '全組最高票';
       return `<li class="profile-trophy-item">
         <span>${escapeHtml(t.trophy_name)} (${t.vote_count} 票)</span>
-        <span class="badge ${badgeClass}">${badgeLabel}</span>
       </li>`;
     }).join('');
 
@@ -2983,7 +2951,7 @@ async function handleAdminCalculate(btn) {
       const outcome = data.computeResults(
         state.participants, state.adminTrophy.trophies, state.adminTrophy.submissions
       );
-      await data.writeResults(outcome.awarded, outcome.fallbackActivated);
+      await data.writeResults(outcome.awarded);
       showToast('結果計算完成', 'success');
     } catch (err) {
       showToast(err.message, 'error');
@@ -3031,7 +2999,9 @@ function buildParticipantDetail(participantId, phoneNumber) {
       ).length,
       trophy_votes: submission ? submission.pairings.length : 0,
       submission_status: submission ? submission.status : 'draft',
-      trophy_awards: result ? result.awards.length : 0
+      trophy_awards: result
+        ? (result.awards || []).filter(a => a.award_source !== 'fallback').length
+        : 0
     }
   };
 }
