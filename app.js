@@ -2014,21 +2014,13 @@ const TROPHY_IDLE_COPY = {
   DRAFT: {
     title: '投票尚未開始',
     body: '管理員開放投票後，你可以為隊友配對 Trophy'
-  },
-  VOTING_CLOSED: {
-    title: '投票已關閉',
-    body: '管理員已結束投票，請等候結果公布'
-  },
-  CALCULATED: {
-    title: '結果準備中',
-    body: '管理員正在整理結果，公布後會即時通知你'
   }
 };
 
 function notifyVotingStatusChange(status) {
   const messages = {
     VOTING_OPEN: '投票已開放，可以開始配對 Trophy',
-    VOTING_CLOSED: '投票已關閉，請等候結果',
+    VOTING_CLOSED: '投票已關閉；你仍可查看自己投咗咩',
     CALCULATED: '結果已計算，即將公布',
     PUBLISHED: 'Trophy 結果已公布！',
     DRAFT: '投票已重設為尚未開始'
@@ -2046,12 +2038,11 @@ function updateTrophyStatusBanner() {
   const label = VOTING_STATUS_LABELS[status] || status;
   const isDraft = status === 'DRAFT';
   const isPublished = status === 'PUBLISHED';
-  const isOpen = status === 'VOTING_OPEN';
-  // Only an open, editable ballot should show the pairing UI. A closed vote
-  // used to leave the form on screen with disabled chips, which felt like lag.
-  const showVoting = isOpen && state.trophy.editable && !isPublished;
+  // Once voting has started, keep the ballot visible (readonly when locked)
+  // so participants can always review what they cast.
+  const showVoting = !isDraft;
   const idle = TROPHY_IDLE_COPY[status];
-  const showIdle = !!idle && !isPublished;
+  const showIdle = isDraft && !!idle;
 
   if (DOM.trophyNotOpen) {
     DOM.trophyNotOpen.classList.toggle('hidden', !showIdle);
@@ -2064,9 +2055,13 @@ function updateTrophyStatusBanner() {
   }
   if (DOM.trophyVotingSection) {
     DOM.trophyVotingSection.classList.toggle('hidden', !showVoting);
+    DOM.trophyVotingSection.classList.toggle('is-readonly', showVoting && !state.trophy.editable);
   }
   if (DOM.trophyActions) {
-    DOM.trophyActions.classList.toggle('hidden', !showVoting || state.trophy.teammates.length === 0);
+    DOM.trophyActions.classList.toggle(
+      'hidden',
+      !state.trophy.editable || state.trophy.teammates.length === 0
+    );
   }
 
   if (DOM.trophyStatusBanner) {
@@ -2075,7 +2070,7 @@ function updateTrophyStatusBanner() {
     if (status === 'VOTING_OPEN') DOM.trophyStatusBanner.classList.add('status-banner-success');
     else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') DOM.trophyStatusBanner.classList.add('status-banner-warning');
     else if (status === 'PUBLISHED') DOM.trophyStatusBanner.classList.add('status-banner-success');
-    DOM.trophyStatusBanner.classList.toggle('hidden', isDraft || isPublished);
+    DOM.trophyStatusBanner.classList.toggle('hidden', isDraft);
   }
 }
 
