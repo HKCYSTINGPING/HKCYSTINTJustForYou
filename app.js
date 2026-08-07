@@ -2220,7 +2220,15 @@ async function handleTrophySaveDraft() {
 }
 
 async function handleTrophySubmitAll() {
-  const incomplete = state.trophy.teammates.filter(t => {
+  const teammates = state.trophy.teammates;
+  const trophies = filterValidTrophies(state.trophy.trophies);
+
+  if (trophies.length < teammates.length) {
+    showToast('Trophy 數量少於隊友人數，無法為每位隊友各配至少一個', 'error');
+    return;
+  }
+
+  const incomplete = teammates.filter(t => {
     const ids = state.trophy.assignments[t.participant_id];
     return !ids || ids.length === 0;
   });
