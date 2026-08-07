@@ -89,6 +89,8 @@ def main():
                         help="同時投票嘅 worker 線程數（預設 10）")
     parser.add_argument("--wave", type=float, default=10.0,
                         help="每人隨機延遲 0～wave 秒先交票（預設 10）")
+    parser.add_argument("--rounds", type=int, default=1,
+                        help="連續模擬幾輪（每輪先清空再投，預設 1）")
     parser.add_argument("--clear-first", action="store_true", default=True)
     args = parser.parse_args()
 
@@ -104,11 +106,17 @@ def main():
     participants = []
     for doc in db.collection("participants").stream():
         data = doc.to_dict() or {}
+        group_id = data.get("group_id") or ""
+        if "STAFF" in str(group_id).upper():
+            continue
         participants.append({
             "participant_id": data.get("participant_id") or doc.id,
-            "group_id": data.get("group_id") or "",
+            "group_id": group_id,
         })
     participants.sort(key=lambda p: (p["group_id"], p["participant_id"]))
+
+    if not participants:
+        raise SystemExit("冇非 Staff 參加者可以模擬投票")
 
     trophies = []
     for doc in db.collection("trophies").stream():
@@ -122,7 +130,7 @@ def main():
     for p in participants:
         by_group[p["group_id"]].append(p["participant_id"])
 
-    print(f"參加者 {len(participants)} 人，獎項 {len(trophies)} 個")
+    print(f"參加者 {len(participants)} 人（已排除 Staff），獎項 {len(trophies)} 個")
     print(f"將用 {args.workers} 條線程、每人隨機 0–{args.wave:.0f}s 延遲交票")
     print()
     print("請而家打開 Admin → 投票：")
@@ -130,77 +138,83 @@ def main():
     print("  admin / 23082026")
     print()
 
-    for sec in range(args.countdown, 0, -1):
-        print(f"  {sec} 秒後開始…", flush=True)
-        time.sleep(1)
+    rounds = max(1, int(getattr(args, "rounds", 1)))
+    for round_i in range(1, rounds + 1):
+        if rounds > 1:
+            print()
+            print(f"════ 第 {round_i}/{rounds} 輪 ════")
+        for sec in range(args.countdown if round_i == 1 else min(3, args.countdown), 0, -1):
+            print(f"  {sec} 秒後開始…", flush=True)
+            time.sleep(1)
 
-    # Reset voting board, keep messaging / presence alone unless wiping votes.
-    deleted_sub = clear_collection(db, "submissions") if args.clear_first else 0
-    deleted_res = clear_collection(db, "results") if args.clear_first else 0
-    db.collection("config").document("voting").set({
-        "voting_status": "VOTING_OPEN",
-        "allow_resubmit": True,
-        "calculated_at": "",
-        "published_at": "",
-        "fallback_activated": False,
-    }, merge=True)
-    print(f"已清空投票／結果（submissions={deleted_sub}, results={deleted_res}），投票已 OPEN")
-    print("開始併發投票：")
+        deleted_sub = clear_collection(db, "submissions") if args.clear_first else 0
+        deleted_res = clear_collection(db, "results") if args.clear_first else 0
+        db.collection("config").document("voting").set({
+            "voting_status": "VOTING_OPEN",
+            "allow_resubmit": True,
+            "calculated_at": "",
+            "published_at": "",
+            "fallback_activated": False,
+        }, merge=True)
+        print(f"已清空投票／結果（submissions={deleted_sub}, results={deleted_res}），投票已 OPEN")
+        print("開始併發投票（只有 Group 1–6，Staff 唔投）：")
 
-    print_lock = threading.Lock()
-    done = {"n": 0}
-    multi_trophy_voters = []
-    t0 = time.time()
+        print_lock = threading.Lock()
+        done = {"n": 0}
+        multi_trophy_voters = []
+        t0 = time.time()
 
-    def submit_one(person):
-        delay = random.uniform(0, max(0.05, args.wave))
-        time.sleep(delay)
-        voter_id = person["participant_id"]
-        teammates = [pid for pid in by_group[person["group_id"]] if pid != voter_id]
-        pairings = ballot_for(voter_id, teammates, trophies)
-        db.collection("submissions").document(voter_id).set({
-            "participant_id": voter_id,
-            "status": "submitted",
-            "pairings": pairings,
-            "updated_at": firestore.SERVER_TIMESTAMP,
-            "submitted_at": firestore.SERVER_TIMESTAMP,
-        })
-        recv_counts = Counter(p["receiver_id"] for p in pairings)
-        stacked = sum(1 for _, n in recv_counts.items() if n > 1)
-        with print_lock:
-            done["n"] += 1
-            i = done["n"]
-            stack_note = ""
-            if stacked:
-                multi_trophy_voters.append(voter_id)
-                fav = recv_counts.most_common(1)[0]
-                stack_note = f" · {fav[0]} 獲 {fav[1]} 個 Trophy"
-            print(
-                f"  [{i:02d}/{len(participants)}] +{delay:4.1f}s  "
-                f"{voter_id} ({person['group_id']}) · {len(pairings)} 票{stack_note}",
-                flush=True,
-            )
-        return voter_id
+        def submit_one(person):
+            delay = random.uniform(0, max(0.05, args.wave))
+            time.sleep(delay)
+            voter_id = person["participant_id"]
+            teammates = [pid for pid in by_group[person["group_id"]] if pid != voter_id]
+            pairings = ballot_for(voter_id, teammates, trophies)
+            db.collection("submissions").document(voter_id).set({
+                "participant_id": voter_id,
+                "status": "submitted",
+                "pairings": pairings,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+                "submitted_at": firestore.SERVER_TIMESTAMP,
+            })
+            recv_counts = Counter(p["receiver_id"] for p in pairings)
+            stacked = sum(1 for _, n in recv_counts.items() if n > 1)
+            with print_lock:
+                done["n"] += 1
+                i = done["n"]
+                stack_note = ""
+                if stacked:
+                    multi_trophy_voters.append(voter_id)
+                    fav = recv_counts.most_common(1)[0]
+                    stack_note = f" · {fav[0]} 獲 {fav[1]} 個 Trophy"
+                print(
+                    f"  [{i:02d}/{len(participants)}] +{delay:4.1f}s  "
+                    f"{voter_id} ({person['group_id']}) · {len(pairings)} 票{stack_note}",
+                    flush=True,
+                )
+            return voter_id
 
-    errors = []
-    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-        futures = [pool.submit(submit_one, person) for person in participants]
-        for fut in as_completed(futures):
-            try:
-                fut.result()
-            except Exception as err:
-                errors.append(str(err))
-                with print_lock:
-                    print(f"  ERROR: {err}", flush=True)
+        errors = []
+        with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+            futures = [pool.submit(submit_one, person) for person in participants]
+            for fut in as_completed(futures):
+                try:
+                    fut.result()
+                except Exception as err:
+                    errors.append(str(err))
+                    with print_lock:
+                        print(f"  ERROR: {err}", flush=True)
 
-    elapsed = time.time() - t0
-    submitted = len(list(db.collection("submissions").stream()))
+        elapsed = time.time() - t0
+        submitted = len(list(db.collection("submissions").stream()))
+        print()
+        print(f"完成第 {round_i} 輪：{submitted}/{len(participants)} 人已提交，用時 {elapsed:.1f}s")
+        print(f"其中 {len(multi_trophy_voters)} 人將多於一個 Trophy 配畀同一隊友")
+        if errors:
+            print(f"錯誤 {len(errors)} 宗")
+
     print()
-    print(f"完成：{submitted}/{len(participants)} 人已提交，用時 {elapsed:.1f}s")
-    print(f"其中 {len(multi_trophy_voters)} 人將多於一個 Trophy 配畀同一隊友")
-    if errors:
-        print(f"錯誤 {len(errors)} 宗")
-    print("Admin「已完成投票」同組別 matrix 應會即時跳動。")
+    print(f"全部 {rounds} 輪完成。Admin「已完成投票」同組別 matrix 應會即時跳動。")
 
 
 if __name__ == "__main__":
