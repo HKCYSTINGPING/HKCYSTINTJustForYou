@@ -2176,11 +2176,16 @@ function renderTrophyTeammates() {
         ${disabled ? 'disabled' : ''}>${escapeHtml(trophy.trophy_name)}</button>`;
     }).join('');
 
+    const initials = tid.slice(0, 2);
+    // Short seat ids (e.g. 1B) match the avatar text — don't print them twice.
+    const nameLabel = tid.length > 2
+      ? escapeHtml(tid)
+      : '';
     card.innerHTML = `
       <div class="trophy-card-header">
         <div class="trophy-card-name">
-          <span class="trophy-card-avatar">${escapeHtml(tid.slice(0, 2))}</span>
-          ${escapeHtml(tid)}
+          <span class="trophy-card-avatar">${escapeHtml(initials)}</span>
+          ${nameLabel}
         </div>
         ${selected.length > 0 ? `<span class="assigned-count">${selected.length} 個獎項</span>` : ''}
       </div>
