@@ -2553,7 +2553,7 @@ function renderVoteMatrixImage(options) {
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     if (!text) return;
     ctx.fillStyle = opts.muted ? '#A89888' : (opts.strong ? '#4A403A' : '#7A6E64');
-    ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 11}px "Noto Sans TC", "PingFang TC", sans-serif`;
+    ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 11}px "Canva Handwriting Style TC", "PingFang TC", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(text), x + w / 2, y + h / 2 + 0.5);

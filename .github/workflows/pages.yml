@@ -29,11 +29,12 @@ jobs:
 
       - name: Prepare site
         run: |
-          mkdir _site
+          mkdir -p _site/fonts
           cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json .nojekyll _site/
+          cp fonts/CanvaHandwritingStyleTC.woff2 _site/fonts/
           # A missing module would only surface as a blank page in someone's
           # browser, so fail the deploy here instead.
-          for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json; do
+          for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json fonts/CanvaHandwritingStyleTC.woff2; do
             test -s "_site/$f" || { echo "缺少 $f"; exit 1; }
           done
 
