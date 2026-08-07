@@ -2963,9 +2963,6 @@ function bindEvents() {
   DOM.adminBulkAutoGroup.addEventListener('click', handleAdminBulkAutoGroup);
   DOM.adminBulkApplyGroup.addEventListener('click', handleAdminBulkApplyGroup);
   DOM.adminBulkDeleteAll.addEventListener('click', handleAdminBulkDeleteAll);
-  DOM.adminEditPhone.addEventListener('input', () => {
-    DOM.adminEditPhone.value = normalizePhone(DOM.adminEditPhone.value);
-  });
 
   DOM.auditSearch.addEventListener('input', renderAuditTable);
   DOM.auditTrophyFilter.addEventListener('change', renderAuditTable);
