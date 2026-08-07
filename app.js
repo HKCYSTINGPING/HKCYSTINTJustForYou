@@ -2629,6 +2629,45 @@ function buildMatrixPeopleBarHtml(members, focusId) {
   `;
 }
 
+/** Per-person list of trophies received (with vote counts), shown under the matrix. */
+function buildMatrixReceivedSummaryHtml(members, counts, trophies, focusId) {
+  if (!members.length) return '';
+  const trophyList = trophies || [];
+
+  const rows = members.map(id => {
+    const got = trophyList
+      .map(t => {
+        const n = counts.get(t.trophy_id + '\0' + id) || 0;
+        if (!n) return null;
+        const name = t.trophy_name || t.trophy_id;
+        return { id: t.trophy_id, name, n };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.n - a.n || a.id.localeCompare(b.id));
+
+    const detail = got.length
+      ? got.map(g =>
+          `<span class="matrix-summary-trophy"><span class="matrix-summary-tid">${escapeHtml(g.id)}</span> ${escapeHtml(g.name)} <span class="matrix-summary-count">×${g.n}</span></span>`
+        ).join('')
+      : '<span class="matrix-summary-none">尚未獲提名</span>';
+
+    return `
+      <div class="matrix-summary-row${focusId === id ? ' is-focus' : ''}">
+        <div class="matrix-summary-id">${escapeHtml(id)}</div>
+        <div class="matrix-summary-trophies">${detail}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="matrix-received-summary">
+      <h3 class="matrix-summary-title">每人獲提名</h3>
+      <p class="matrix-summary-hint">下面列出每位參加者而家攞到邊啲 Trophy（×數字＝票數）</p>
+      <div class="matrix-summary-list">${rows}</div>
+    </div>
+  `;
+}
+
 function buildGroupNominationMatrixHtml(group) {
   const members = group.members.map(m => m.participant_id);
   const trophies = state.adminTrophy.trophies || [];
@@ -2655,13 +2694,16 @@ function buildGroupNominationMatrixHtml(group) {
     <div class="vote-matrix-image-wrap">
       <img class="vote-matrix-image" src="${src}" alt="組別提名總覽" draggable="false">
     </div>
+    ${buildMatrixReceivedSummaryHtml(members, counts, trophies, null)}
   `;
 }
 
 function buildGroupBallotMatrixHtml(group, focusId) {
   const members = group.members.map(m => m.participant_id);
+  const trophies = state.adminTrophy.trophies || [];
   if (!members.length) return '<p class="group-vote-matrix-empty">此組沒有參加者</p>';
 
+  const counts = buildNominationCountMap(members);
   const ballots = buildBallotMap(members);
   const values = members.map(sender => {
     const rowMap = ballots.get(sender) || new Map();
@@ -2690,6 +2732,7 @@ function buildGroupBallotMatrixHtml(group, focusId) {
     <div class="vote-matrix-image-wrap">
       <img class="vote-matrix-image" src="${src}" alt="${escapeHtml(focusId)} 的選票矩陣" draggable="false">
     </div>
+    ${buildMatrixReceivedSummaryHtml(members, counts, trophies, focusId)}
   `;
 }
 
