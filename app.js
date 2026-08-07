@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    HKCYSTINTJustForYou — Frontend Application
    Sections: Configuration, State, DOM, Utilities, Data, Combobox,
-             Messaging, Admin Monitor, Trophy, Init
+             Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
 import * as data from './firebase-data.js';
@@ -1925,7 +1925,7 @@ async function handleSetMessagingStatus(status, btn) {
   })());
 }
 
-// ─── Trophy (Participant) ─────────────────────────────────────────────────────
+// ─── 獎項 (Participant) ─────────────────────────────────────────────────────
 
 const VOTING_STATUS_LABELS = {
   DRAFT: '投票尚未開始',
@@ -1941,7 +1941,7 @@ function filterValidTrophies(trophies) {
 
 function buildAwardsHtml(awards) {
   if (!awards || awards.length === 0) {
-    return '<p class="trophy-results-empty">暫未獲得 Trophy，請稍後再查看</p>';
+    return '<p class="trophy-results-empty">暫未獲得獎項，請稍後再查看</p>';
   }
   return awards.map(a => `
     <div class="trophy-result-item">
@@ -1970,7 +1970,7 @@ function maybeShowPublishedModal(isNewPublish) {
   if (state.trophy.resultsModalRevision === state.trophy.trophyRevision) return;
   showTrophyResultsModal(state.trophy.myAwards);
   if (isNewPublish) {
-    showToast('Trophy 結果已公布！', 'success');
+    showToast('獎項結果已公布！', 'success');
     updateTrophyTabBadge(true);
   }
 }
@@ -1998,7 +1998,7 @@ function renderParticipantTrophyResults() {
 
   DOM.trophyResultsPanel.classList.toggle('hidden', !isPublished);
   if (isPublished) {
-    DOM.trophyResultsTitle.textContent = '你的 Trophy 結果';
+    DOM.trophyResultsTitle.textContent = '你的獎項結果';
     DOM.trophyResultsList.innerHTML = buildAwardsHtml(myAwards);
     DOM.trophyResultsPanel.classList.add('trophy-results-live');
   } else {
@@ -2013,16 +2013,16 @@ function renderParticipantTrophyResults() {
 const TROPHY_IDLE_COPY = {
   DRAFT: {
     title: '投票尚未開始',
-    body: '管理員開放投票後，你可以為隊友配對 Trophy'
+    body: '管理員開放投票後，你可以為隊友配對獎項'
   }
 };
 
 function notifyVotingStatusChange(status) {
   const messages = {
-    VOTING_OPEN: '投票已開放，可以開始配對 Trophy',
+    VOTING_OPEN: '投票已開放，可以開始配對獎項',
     VOTING_CLOSED: '投票已關閉；你仍可查看自己投咗咩',
     CALCULATED: '結果已計算，即將公布',
-    PUBLISHED: 'Trophy 結果已公布！',
+    PUBLISHED: '獎項結果已公布！',
     DRAFT: '投票已重設為尚未開始'
   };
   const text = messages[status];
@@ -2182,7 +2182,7 @@ function renderTrophyTeammates() {
           <span class="trophy-card-avatar">${escapeHtml(tid.slice(0, 2))}</span>
           ${escapeHtml(tid)}
         </div>
-        ${selected.length > 0 ? `<span class="assigned-count">${selected.length} 個 Trophy</span>` : ''}
+        ${selected.length > 0 ? `<span class="assigned-count">${selected.length} 個獎項</span>` : ''}
       </div>
       <div class="trophy-chips">${chips}</div>
     `;
@@ -2213,7 +2213,7 @@ async function handleTrophySubmitAll() {
   const trophies = filterValidTrophies(state.trophy.trophies);
 
   if (trophies.length < teammates.length) {
-    showToast('Trophy 數量少於隊友人數，無法為每位隊友各配至少一個', 'error');
+    showToast('獎項數量少於隊友人數，無法為每位隊友各配至少一個', 'error');
     return;
   }
 
@@ -2223,7 +2223,7 @@ async function handleTrophySubmitAll() {
   });
 
   if (incomplete.length > 0) {
-    showToast('請為每位隊友至少配對一個 Trophy', 'error');
+    showToast('請為每位隊友至少配對一個獎項', 'error');
     return;
   }
 
@@ -2231,7 +2231,7 @@ async function handleTrophySubmitAll() {
   for (const ids of Object.values(state.trophy.assignments)) {
     for (const trophyId of ids || []) {
       if (used.has(trophyId)) {
-        showToast('每個 Trophy 只能配對一位隊友', 'error');
+        showToast('每個獎項只能配對一位隊友', 'error');
         return;
       }
       used.add(trophyId);
@@ -2251,7 +2251,7 @@ async function handleTrophySubmitAll() {
   })());
 }
 
-// ─── Trophy (Admin) ───────────────────────────────────────────────────────────
+// ─── 獎項 (Admin) ───────────────────────────────────────────────────────────
 
 
 function renderAdminTrophyStats() {
@@ -2260,7 +2260,7 @@ function renderAdminTrophyStats() {
   DOM.adminTrophyStats.innerHTML = `
     <div class="stat-card"><div class="stat-value">${stats.completed_voters || 0}/${stats.total_participants || 0}</div><div class="stat-label">已完成投票</div></div>
     <div class="stat-card"><div class="stat-value">${stats.total_votes || 0}</div><div class="stat-label">總投票數</div></div>
-    <div class="stat-card"><div class="stat-value">${stats.trophy_count || 0}</div><div class="stat-label">Trophy 種類</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.trophy_count || 0}</div><div class="stat-label">獎項種類</div></div>
     <div class="stat-card"><div class="stat-value">${VOTING_STATUS_LABELS[votingStatus] || votingStatus}</div><div class="stat-label">投票狀態</div></div>
   `;
 }
@@ -2449,8 +2449,8 @@ function renderVoteMatrixModal() {
   }
   if (DOM.voteMatrixModalSubtitle) {
     DOM.voteMatrixModalSubtitle.textContent = focusId
-      ? '列／欄＝參加者，格內＝Trophy（邊個投邊個）'
-      : '列＝Trophy，欄＝參加者，格內＝獲提名次數';
+      ? '列／欄＝參加者，格內＝獎項（邊個投邊個）'
+      : '列＝獎項，欄＝參加者，格內＝獲提名次數';
   }
   if (DOM.voteMatrixModalToolbar) {
     DOM.voteMatrixModalToolbar.classList.toggle('hidden', !focusId);
@@ -2660,7 +2660,7 @@ function buildGroupNominationMatrixHtml(group) {
   const members = group.members.map(m => m.participant_id);
   const trophies = state.adminTrophy.trophies || [];
   if (!members.length) return '<p class="group-vote-matrix-empty">此組沒有參加者</p>';
-  if (!trophies.length) return '<p class="group-vote-matrix-empty">尚未載入 Trophy 清單</p>';
+  if (!trophies.length) return '<p class="group-vote-matrix-empty">尚未載入獎項清單</p>';
 
   const counts = buildNominationCountMap(members);
   const values = trophies.map(t => members.map(id => {
@@ -2795,7 +2795,7 @@ function populateAuditTrophyFilter() {
   state.adminTrophy.auditVotes.forEach(v => {
     trophies.set(v.trophy_id, v.trophy_name);
   });
-  DOM.auditTrophyFilter.innerHTML = '<option value="">全部 Trophy</option>';
+  DOM.auditTrophyFilter.innerHTML = '<option value="">全部獎項</option>';
   trophies.forEach((name, id) => {
     const opt = document.createElement('option');
     opt.value = id;
@@ -2851,7 +2851,7 @@ function renderProfiles() {
         <span>${escapeHtml(profile.participant_id)}</span>
         <span class="chip chip-secondary">${profile.vote_count || 0} 票</span>
       </div>
-      <ul class="profile-trophy-list">${trophies || '<li>尚未獲得 Trophy</li>'}</ul>
+      <ul class="profile-trophy-list">${trophies || '<li>尚未獲得獎項</li>'}</ul>
     </div>`;
   }).join('');
 }
@@ -3034,9 +3034,9 @@ function renderAdminParticipantDetail(detail) {
     <div class="stat-card"><div class="stat-value">${stats.sent_active || 0}</div><div class="stat-label">有效已發留言</div></div>
     <div class="stat-card"><div class="stat-value">${stats.sent_deleted || 0}</div><div class="stat-label">已撤回留言</div></div>
     <div class="stat-card"><div class="stat-value">${stats.received_active || 0}</div><div class="stat-label">收件箱留言</div></div>
-    <div class="stat-card"><div class="stat-value">${stats.trophy_votes || 0}</div><div class="stat-label">Trophy 投票數</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.trophy_votes || 0}</div><div class="stat-label">獎項投票數</div></div>
     <div class="stat-card"><div class="stat-value">${stats.submission_status === 'submitted' ? '已提交' : '草稿'}</div><div class="stat-label">投票狀態</div></div>
-    <div class="stat-card"><div class="stat-value">${stats.trophy_awards || 0}</div><div class="stat-label">獲得 Trophy</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.trophy_awards || 0}</div><div class="stat-label">獲得獎項</div></div>
   `;
 }
 
@@ -3092,12 +3092,12 @@ async function handleAdminDeleteMessages() {
 async function handleAdminResetTrophy() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) return;
-  if (!window.confirm('確定要重置 ' + pid + ' 的 Trophy 投票嗎？')) return;
+  if (!window.confirm('確定要重置 ' + pid + ' 的獎項投票嗎？')) return;
 
   await runProgressButton(DOM.adminResetTrophy, (async () => {
     try {
       await data.resetParticipantVote(pid);
-      showToast('Trophy 投票已重置', 'success');
+      showToast('獎項投票已重置', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
       showToast(err.message, 'error');
@@ -3108,7 +3108,7 @@ async function handleAdminResetTrophy() {
 async function handleAdminDeleteAllRecords() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) return;
-  if (!window.confirm('確定要刪除 ' + pid + ' 的所有紀錄嗎？\n包括：已發留言、Trophy 投票、結果。\n此操作無法復原！')) return;
+  if (!window.confirm('確定要刪除 ' + pid + ' 的所有紀錄嗎？\n包括：已發留言、獎項投票、結果。\n此操作無法復原！')) return;
 
   await runProgressButton(DOM.adminDeleteAllRecords, (async () => {
     try {
@@ -3168,7 +3168,7 @@ async function handleAdminBulkApplyGroup() {
 
 async function handleAdminBulkDeleteAll() {
   const count = state.participants.length;
-  if (!window.confirm('確定要刪除全部 ' + count + ' 位參加者的所有紀錄嗎？\n包括：已發留言、Trophy 投票、結果。\n此操作無法復原！')) return;
+  if (!window.confirm('確定要刪除全部 ' + count + ' 位參加者的所有紀錄嗎？\n包括：已發留言、獎項投票、結果。\n此操作無法復原！')) return;
   if (!window.confirm('再次確認：真的要清除所有參加者的全部紀錄嗎？')) return;
 
   await runProgressButton(DOM.adminBulkDeleteAll, (async () => {

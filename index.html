@@ -138,7 +138,7 @@
           </button>
           <button type="button" class="home-card" data-nav="trophy">
             <span class="home-card-icon">🏆</span>
-            <span class="home-card-label">Trophy 配對</span>
+            <span class="home-card-label">獎項配對</span>
             <span class="home-card-desc">為隊友投票</span>
           </button>
           <button type="button" class="home-card" data-nav="sent">
@@ -227,20 +227,20 @@
         </div>
       </div>
 
-      <!-- Trophy -->
+      <!-- 獎項 -->
       <div id="view-trophy" class="app-view hidden" data-view="trophy">
         <div id="trophy-status-banner" class="status-banner hidden" role="status"></div>
 
         <div id="trophy-not-open" class="empty-state empty-illustration hidden">
           <div class="illustration-circle">🏆</div>
           <h3>投票尚未開始</h3>
-          <p>管理員開放投票後，你可以為隊友配對 Trophy（每位隊友至少一個；每個 Trophy 只能配一位）</p>
+          <p>管理員開放投票後，你可以為隊友配對獎項（每位隊友至少一個；每個獎項只能配一位）</p>
         </div>
 
         <div id="trophy-results-panel" class="trophy-results-panel card hidden" aria-live="polite">
           <div class="trophy-results-header">
             <span class="trophy-results-icon">🏆</span>
-            <h3 id="trophy-results-title">你的 Trophy 結果</h3>
+            <h3 id="trophy-results-title">你的獎項結果</h3>
           </div>
           <div id="trophy-results-list" class="trophy-results-list"></div>
         </div>
@@ -274,7 +274,7 @@
         </div>
       </div>
 
-      <!-- Trophy Submitted -->
+      <!-- 獎項提交成功 -->
       <div id="view-trophy-submitted" class="app-view hidden" data-view="trophy-submitted">
         <div class="success-state">
           <div class="success-illustration">✅</div>
@@ -308,7 +308,7 @@
       </button>
       <button type="button" class="bottom-nav-item" data-tab="trophy" role="tab" aria-selected="false">
         <span class="bottom-nav-icon">🏆</span>
-        <span class="bottom-nav-label">Trophy</span>
+        <span class="bottom-nav-label">獎項</span>
       </button>
       <button type="button" class="bottom-nav-item" data-tab="profile" role="tab" aria-selected="false">
         <span class="bottom-nav-icon">👤</span>
@@ -458,20 +458,20 @@
         <nav class="sub-tab-nav" role="tablist" aria-label="結果檢視">
           <button type="button" class="sub-tab-btn active" data-result-tab="audit">投票審計</button>
           <button type="button" class="sub-tab-btn" data-result-tab="profiles">個人檔案</button>
-          <button type="button" class="sub-tab-btn" data-result-tab="summary">Trophy 摘要</button>
+          <button type="button" class="sub-tab-btn" data-result-tab="summary">獎項摘要</button>
         </nav>
 
         <div id="result-audit" class="result-panel active">
           <div class="audit-filters">
             <input type="search" id="audit-search" class="input-field" placeholder="搜尋參加者…" aria-label="搜尋參加者">
-            <select id="audit-trophy-filter" class="input-field" aria-label="篩選 Trophy">
-              <option value="">全部 Trophy</option>
+            <select id="audit-trophy-filter" class="input-field" aria-label="篩選獎項">
+              <option value="">全部獎項</option>
             </select>
           </div>
           <div id="audit-cards" class="audit-cards"></div>
           <div class="table-wrap hidden">
             <table id="audit-table" class="data-table">
-              <thead><tr><th>投票者</th><th>接收者</th><th>Trophy</th></tr></thead>
+              <thead><tr><th>投票者</th><th>接收者</th><th>獎項</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -571,7 +571,7 @@
                   <span class="btn-progress-bar" aria-hidden="true"></span>
                 </button>
                 <button type="button" id="admin-reset-trophy" class="btn btn-danger btn-sm btn-progress">
-                  <span class="btn-label">重置 Trophy 投票</span>
+                  <span class="btn-label">重置獎項投票</span>
                   <span class="btn-progress-bar" aria-hidden="true"></span>
                 </button>
                 <button type="button" id="admin-delete-all-records" class="btn btn-danger btn-sm btn-progress">
