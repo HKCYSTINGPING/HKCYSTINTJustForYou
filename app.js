@@ -2528,11 +2528,11 @@ function renderVoteMatrixImage(options) {
   } = options;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-  // Cell metrics ×1.5 to match the global type scale.
+  // Cell metrics scale with the small-type ×1.5 bump so canvas text stays readable.
   const colW = Math.max(60, ...columns.map(c => String(c).length * 14 + 24), 60);
   const labelW = Math.max(78, ...rows.map(r => String(r).length * 14 + 24), String(corner).length * 12 + 18);
   const rowH = 51;
-  const pad = 15;
+  const pad = 12;
   const width = labelW + columns.length * colW + pad * 2;
   const height = rowH * (rows.length + 1) + pad * 2;
 
