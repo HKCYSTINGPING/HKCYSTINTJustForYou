@@ -555,6 +555,112 @@ textarea.input-field {
   pointer-events: none;
 }
 
+/* ─── Input with action (numpad) ─────────────────────────────────────────── */
+
+.input-with-action {
+  position: relative;
+}
+
+.input-with-action-field {
+  padding-right: 52px !important;
+}
+
+.input-action-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-fast), background var(--duration-fast);
+}
+
+.input-action-btn:hover,
+.input-action-btn:focus-visible {
+  color: var(--text);
+  background: var(--primary-light);
+  outline: none;
+}
+
+.input-action-btn[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--primary-light);
+}
+
+.numpad-panel {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  animation: numpadReveal var(--duration-normal) var(--ease-out);
+}
+
+@keyframes numpadReveal {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.numpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+}
+
+.numpad-key {
+  font-family: var(--font);
+  font-size: var(--fs-subtitle);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-warm);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-height: var(--touch-min);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast), transform var(--duration-fast), border-color var(--duration-fast);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.numpad-key:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+}
+
+.numpad-key:active {
+  transform: scale(0.97);
+  background: var(--primary);
+}
+
+.numpad-key-action {
+  color: var(--text-secondary);
+}
+
+.numpad-key-done {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.numpad-key-done:hover,
+.numpad-key-done:active {
+  background: var(--primary);
+}
+
 /* ─── Combobox ──────────────────────────────────────────────────────────── */
 
 .combobox-wrapper { position: relative; }

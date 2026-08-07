@@ -79,9 +79,46 @@
 
         <div class="form-group">
           <label for="login-phone">密碼</label>
-          <input type="text" id="login-phone" class="input-field" autocomplete="current-password"
-            autocapitalize="characters" placeholder="與參加者編號相同" aria-describedby="phone-hint">
-          <p id="phone-hint" class="form-hint">一般參加者請輸入與編號相同的密碼；Staff 請輸入電話號碼</p>
+          <div class="input-with-action" id="login-phone-wrap">
+            <input type="text" id="login-phone" class="input-field input-with-action-field" autocomplete="current-password"
+              autocapitalize="characters" placeholder="與參加者編號相同" aria-describedby="phone-hint"
+              inputmode="text">
+            <button type="button" id="login-numpad-toggle" class="input-action-btn" aria-label="開啟數字鍵盤"
+              aria-expanded="false" aria-controls="login-numpad">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="3" y="3" width="5" height="5" rx="1"/>
+                <rect x="10" y="3" width="5" height="5" rx="1"/>
+                <rect x="17" y="3" width="5" height="5" rx="1"/>
+                <rect x="3" y="10" width="5" height="5" rx="1"/>
+                <rect x="10" y="10" width="5" height="5" rx="1"/>
+                <rect x="17" y="10" width="5" height="5" rx="1"/>
+                <rect x="3" y="17" width="5" height="5" rx="1"/>
+                <rect x="10" y="17" width="12" height="5" rx="1"/>
+              </svg>
+            </button>
+          </div>
+          <div id="login-numpad" class="numpad-panel hidden" role="group" aria-label="數字鍵盤">
+            <div class="numpad-grid">
+              <button type="button" class="numpad-key" data-key="1">1</button>
+              <button type="button" class="numpad-key" data-key="2">2</button>
+              <button type="button" class="numpad-key" data-key="3">3</button>
+              <button type="button" class="numpad-key" data-key="4">4</button>
+              <button type="button" class="numpad-key" data-key="5">5</button>
+              <button type="button" class="numpad-key" data-key="6">6</button>
+              <button type="button" class="numpad-key" data-key="7">7</button>
+              <button type="button" class="numpad-key" data-key="8">8</button>
+              <button type="button" class="numpad-key" data-key="9">9</button>
+              <button type="button" class="numpad-key numpad-key-action" data-key="backspace" aria-label="刪除">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+                  <path d="M18 9l-6 6"/><path d="M12 9l6 6"/>
+                </svg>
+              </button>
+              <button type="button" class="numpad-key" data-key="0">0</button>
+              <button type="button" class="numpad-key numpad-key-done" data-key="done">完成</button>
+            </div>
+          </div>
+          <p id="phone-hint" class="form-hint">一般參加者請輸入與編號相同的密碼；Staff 請輸入電話號碼。可點右側按鈕使用數字鍵盤。</p>
         </div>
 
         <div id="login-status-banner" class="status-banner hidden" role="status"></div>

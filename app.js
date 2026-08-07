@@ -136,6 +136,8 @@ function cacheDOM() {
   DOM.loginForm = document.getElementById('login-form');
   DOM.loginParticipant = document.getElementById('login-participant');
   DOM.loginPhone = document.getElementById('login-phone');
+  DOM.loginNumpadToggle = document.getElementById('login-numpad-toggle');
+  DOM.loginNumpad = document.getElementById('login-numpad');
   DOM.loginSubmit = document.getElementById('login-submit');
   DOM.loginDropdown = document.getElementById('login-dropdown');
   DOM.loginComboboxToggle = document.getElementById('login-combobox-toggle');
@@ -267,6 +269,7 @@ function showScreen(name) {
   DOM.screenAdmin.classList.toggle('hidden', name !== 'admin');
   document.body.classList.toggle('participant-active', name === 'participant');
   document.body.classList.toggle('admin-active', name === 'admin');
+  if (name !== 'login') setLoginNumpadOpen(false);
 }
 
 let loadingTickTimer = null;
@@ -905,6 +908,47 @@ function updateLoginStatusBanner() {
   }
 }
 
+function isLoginNumpadOpen() {
+  return DOM.loginNumpad && !DOM.loginNumpad.classList.contains('hidden');
+}
+
+function setLoginNumpadOpen(open) {
+  if (!DOM.loginNumpad || !DOM.loginNumpadToggle) return;
+  DOM.loginNumpad.classList.toggle('hidden', !open);
+  DOM.loginNumpadToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  DOM.loginNumpadToggle.setAttribute('aria-label', open ? '關閉數字鍵盤' : '開啟數字鍵盤');
+  if (open) {
+    DOM.loginPhone.inputMode = 'none';
+    DOM.loginPhone.focus({ preventScroll: true });
+  } else {
+    DOM.loginPhone.inputMode = 'text';
+  }
+}
+
+function toggleLoginNumpad() {
+  setLoginNumpadOpen(!isLoginNumpadOpen());
+}
+
+function applyLoginPhoneValue(value) {
+  DOM.loginPhone.value = String(value || '').toUpperCase();
+  DOM.loginPhone.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function handleLoginNumpadKey(key) {
+  if (key === 'done') {
+    setLoginNumpadOpen(false);
+    return;
+  }
+
+  const current = String(DOM.loginPhone.value || '');
+  if (key === 'backspace') {
+    applyLoginPhoneValue(current.slice(0, -1));
+  } else if (/^\d$/.test(key)) {
+    applyLoginPhoneValue(current + key);
+  }
+  DOM.loginPhone.focus({ preventScroll: true });
+}
+
 async function handleLogin(e) {
   e.preventDefault();
   const rawId = DOM.loginParticipant.value.trim();
@@ -1426,6 +1470,7 @@ function handleLogout() {
   };
   DOM.loginParticipant.value = '';
   DOM.loginPhone.value = '';
+  setLoginNumpadOpen(false);
   showScreen('login');
   updateLoginStatusBanner();
   bootstrapApp();
@@ -2880,6 +2925,19 @@ function bindEvents() {
   DOM.loginPhone.addEventListener('input', () => {
     DOM.loginPhone.value = String(DOM.loginPhone.value || '').toUpperCase();
   });
+
+  if (DOM.loginNumpadToggle && DOM.loginNumpad) {
+    DOM.loginNumpadToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleLoginNumpad();
+    });
+    DOM.loginNumpad.addEventListener('click', (e) => {
+      const keyBtn = e.target.closest('[data-key]');
+      if (!keyBtn || !DOM.loginNumpad.contains(keyBtn)) return;
+      e.preventDefault();
+      handleLoginNumpadKey(keyBtn.dataset.key);
+    });
+  }
 
   DOM.sendForm.addEventListener('submit', handleSendMessage);
   DOM.sendContent.addEventListener('input', updateCharCounter);
