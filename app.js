@@ -921,8 +921,8 @@ function isLoginNativeNumpad() {
 }
 
 /**
- * Toggle the system numeric keyboard via inputmode. Mobile browsers only
- * refresh the keyboard after blur + focus, so we bounce focus when enabling.
+ * Toggle the system numeric keyboard via inputmode. Always focus the password
+ * field when enabling so Staff do not need to tap the text field first.
  */
 function setLoginNativeNumpad(enabled) {
   if (!DOM.loginPhone || !DOM.loginNumpadToggle) return;
@@ -932,16 +932,24 @@ function setLoginNativeNumpad(enabled) {
   DOM.loginNumpadToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
   DOM.loginNumpadToggle.setAttribute(
     'aria-label',
-    enabled ? '切換文字鍵盤' : '切換數字鍵盤'
+    enabled ? '切換文字鍵盤' : '開啟數字鍵盤'
   );
   DOM.loginNumpadToggle.classList.toggle('is-active', enabled);
+  DOM.loginNumpadToggle.title = enabled ? '切換文字鍵盤' : '開啟數字鍵盤';
 
   if (!enabled) return;
 
-  // Force the OS keyboard to rebuild with the new inputmode.
+  // Mobile browsers only show / rebuild the keyboard after a focus cycle.
+  // Blur first, then focus on the next ticks so a cold tap on the button
+  // still pops the numpad without touching the text field.
   DOM.loginPhone.blur();
   requestAnimationFrame(() => {
     DOM.loginPhone.focus({ preventScroll: true });
+    setTimeout(() => {
+      if (document.activeElement !== DOM.loginPhone) {
+        DOM.loginPhone.focus({ preventScroll: true });
+      }
+    }, 30);
   });
 }
 
@@ -3272,9 +3280,23 @@ function bindEvents() {
   });
 
   if (DOM.loginNumpadToggle) {
+    // Keep the button from stealing focus on touch; otherwise iOS may never
+    // open the keyboard until the user taps the text field separately.
+    DOM.loginNumpadToggle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+    });
     DOM.loginNumpadToggle.addEventListener('click', (e) => {
       e.preventDefault();
-      toggleLoginNativeNumpad();
+      // If already on numpad, still re-focus so the keyboard pops without
+      // tapping the field. Second intentional toggle-off: press again while
+      // focused after a short path — use toggle for mode switch.
+      if (!isLoginNativeNumpad()) {
+        setLoginNativeNumpad(true);
+      } else if (document.activeElement === DOM.loginPhone) {
+        setLoginNativeNumpad(false);
+      } else {
+        setLoginNativeNumpad(true);
+      }
     });
   }
 
