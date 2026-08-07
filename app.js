@@ -1102,7 +1102,9 @@ async function startParticipantSubscriptions() {
       (cb, err) => data.subscribeMySubmission(pid, cb, err),
       submission => {
         state.trophy.submissionStatus = submission ? submission.status : 'draft';
-        state.trophy.assignments = submission ? data.pairingsToAssignments(submission.pairings) : {};
+        state.trophy.assignments = enforceUniqueTrophyAssignments(
+          submission ? data.pairingsToAssignments(submission.pairings) : {}
+        );
         state.trophy.loaded = true;
         recalcTrophyPermissions();
         recalcTrophyProgress();
@@ -2051,6 +2053,35 @@ function recalcTrophyProgress() {
   updateTrophyProgress();
 }
 
+/** Each trophy may be paired to at most one teammate. */
+function findTrophyHolder(trophyId, exceptTeammateId) {
+  const assignments = state.trophy.assignments || {};
+  for (const [receiverId, ids] of Object.entries(assignments)) {
+    if (exceptTeammateId && receiverId === exceptTeammateId) continue;
+    if ((ids || []).includes(trophyId)) return receiverId;
+  }
+  return null;
+}
+
+function enforceUniqueTrophyAssignments(assignments) {
+  const cleaned = {};
+  const seen = new Set();
+  Object.keys(assignments || {}).sort().forEach(receiverId => {
+    cleaned[receiverId] = [];
+    (assignments[receiverId] || []).forEach(trophyId => {
+      if (!trophyId || seen.has(trophyId)) return;
+      seen.add(trophyId);
+      cleaned[receiverId].push(trophyId);
+    });
+  });
+  return cleaned;
+}
+
+function trophyNameById(trophyId) {
+  const trophy = (state.trophy.trophies || []).find(t => t.trophy_id === trophyId);
+  return trophy ? trophy.trophy_name : trophyId;
+}
+
 function toggleTrophyAssignment(teammateId, trophyId) {
   if (!state.trophy.editable) return;
   const assignments = state.trophy.assignments;
@@ -2060,6 +2091,14 @@ function toggleTrophyAssignment(teammateId, trophyId) {
   if (idx >= 0) {
     assignments[teammateId].splice(idx, 1);
   } else {
+    const holder = findTrophyHolder(trophyId, teammateId);
+    if (holder) {
+      showToast(
+        '「' + trophyNameById(trophyId) + '」已配對畀 ' + holder + '，請先取消再改',
+        'error'
+      );
+      return;
+    }
     assignments[teammateId].push(trophyId);
   }
   recalcTrophyProgress();
@@ -2081,9 +2120,19 @@ function renderTrophyTeammates() {
 
     const chips = validTrophies.map(trophy => {
       const isSelected = selected.includes(trophy.trophy_id);
-      return `<button type="button" class="trophy-chip${isSelected ? ' selected' : ''}"
+      const holder = findTrophyHolder(trophy.trophy_id, tid);
+      const isTaken = !!holder && !isSelected;
+      const classes = 'trophy-chip'
+        + (isSelected ? ' selected' : '')
+        + (isTaken ? ' taken' : '');
+      const disabled = !editable || isTaken;
+      const title = isTaken
+        ? ('已配對畀 ' + holder)
+        : escapeHtml(trophy.trophy_name);
+      return `<button type="button" class="${classes}"
         data-teammate="${escapeHtml(tid)}" data-trophy="${escapeHtml(trophy.trophy_id)}"
-        ${!editable ? 'disabled' : ''}>${escapeHtml(trophy.trophy_name)}</button>`;
+        title="${title}"
+        ${disabled ? 'disabled' : ''}>${escapeHtml(trophy.trophy_name)}</button>`;
     }).join('');
 
     card.innerHTML = `
@@ -2125,8 +2174,19 @@ async function handleTrophySubmitAll() {
   });
 
   if (incomplete.length > 0) {
-    showToast('請為每位隊友至少分配一個 Trophy', 'error');
+    showToast('請為每位隊友至少配對一個 Trophy', 'error');
     return;
+  }
+
+  const used = new Set();
+  for (const ids of Object.values(state.trophy.assignments)) {
+    for (const trophyId of ids || []) {
+      if (used.has(trophyId)) {
+        showToast('每個 Trophy 只能配對一位隊友', 'error');
+        return;
+      }
+      used.add(trophyId);
+    }
   }
 
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);

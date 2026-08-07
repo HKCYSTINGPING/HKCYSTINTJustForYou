@@ -57,10 +57,14 @@ async function run() {
     const cards = await voter.$$('#trophy-teammates .trophy-card');
     check('見到同組隊友', cards.length === 5, cards.length + ' 位');
 
-    // Each tap re-renders the list, so the previous handles go stale; select
-    // fresh by position every time.
+    // Each trophy may only be paired once, so pick the first free chip on
+    // every card. Taps re-render the list, so query fresh each time.
     for (let i = 0; i < cards.length; i++) {
-      await voter.click(`#trophy-teammates .trophy-card:nth-of-type(${i + 1}) .trophy-chip`);
+      const free = await voter.$(
+        `#trophy-teammates .trophy-card:nth-of-type(${i + 1}) .trophy-chip:not(.selected):not(.taken):not([disabled])`
+      );
+      if (!free) throw new Error('找不到可配對嘅 Trophy chip（card ' + (i + 1) + '）');
+      await free.click();
     }
     const progress = await voter.textContent('#trophy-progress-text');
     check('進度反映已分配人數', progress.trim() === '5/5', progress.trim());
