@@ -1745,17 +1745,6 @@ textarea.input-field {
 .voter-check { font-weight: 700; width: 16px; }
 .voter-status-label { margin-left: auto; font-weight: 600; }
 
-.group-vote-matrix-wrap {
-  padding: 0 8px 10px;
-}
-
-.group-vote-matrix-hint {
-  margin: 0 0 6px;
-  font-size: 10px;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
 .group-vote-matrix-empty {
   margin: 0;
   padding: 4px 2px 8px;
@@ -1763,10 +1752,11 @@ textarea.input-field {
   color: var(--text-muted);
 }
 
-.group-vote-matrix {
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  background: var(--surface-warm);
+.group-vote-matrix-hint {
+  margin: 0 0 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 .vote-matrix-modal-card {
@@ -1810,75 +1800,53 @@ textarea.input-field {
   flex: 1;
 }
 
-.vote-matrix-table {
-  font-size: 10px;
-}
-
-.vote-matrix-table th,
-.vote-matrix-table td {
-  padding: 4px 6px;
-  text-align: center;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border-light);
-  border-right: 1px solid var(--border-light);
-}
-
-.vote-matrix-table th:last-child,
-.vote-matrix-table td:last-child {
-  border-right: none;
-}
-
-.vote-matrix-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.vote-matrix-table tbody th[scope="row"] {
-  text-align: left;
-  font-weight: 700;
-  background: var(--surface-warm);
-  position: sticky;
-  left: 0;
-  z-index: 1;
+.vote-matrix-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .matrix-person-btn {
   margin: 0;
-  padding: 0;
-  border: none;
-  background: none;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
   font: inherit;
+  font-size: 11px;
   font-weight: 700;
   color: var(--secondary);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.matrix-person-btn:hover {
-  color: var(--text);
-}
-
-.matrix-cell-hot {
-  font-weight: 700;
-  color: var(--text);
-  background: color-mix(in srgb, var(--primary) 18%, transparent);
-}
-
-.matrix-cell-self {
-  color: var(--text-muted);
-  background: var(--border-light);
-}
-
-.vote-matrix-table tr.is-focus-row th,
-.vote-matrix-table tr.is-focus-row td {
-  background: color-mix(in srgb, var(--primary) 22%, transparent);
-}
-
-.vote-matrix-table th.is-focus {
-  color: var(--text);
+.matrix-person-btn:hover,
+.matrix-person-btn.is-active {
   background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.vote-matrix-image-wrap {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--surface-warm);
+  max-width: 100%;
+  /* Whole matrix is one bitmap — pan moves every cell together. */
+  touch-action: pan-x pan-y;
+}
+
+.vote-matrix-image {
+  display: block;
+  width: auto;
+  max-width: none;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 /* Results */

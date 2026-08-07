@@ -2503,6 +2503,124 @@ function buildBallotMap(memberIds) {
   return map;
 }
 
+/**
+ * Paint the whole matrix as one bitmap so mobile pan/zoom cannot desync
+ * sticky header / first-column cells the way HTML tables do.
+ */
+function renderVoteMatrixImage(options) {
+  const {
+    corner = '',
+    columns = [],
+    rows = [],
+    values = [],
+    hot = [],
+    selfCell = [],
+    focusRow = -1,
+    focusCol = -1
+  } = options;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const colW = Math.max(40, ...columns.map(c => String(c).length * 9 + 16), 40);
+  const labelW = Math.max(52, ...rows.map(r => String(r).length * 9 + 16), String(corner).length * 8 + 12);
+  const rowH = 34;
+  const pad = 10;
+  const width = labelW + columns.length * colW + pad * 2;
+  const height = rowH * (rows.length + 1) + pad * 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(width * dpr);
+  canvas.height = Math.ceil(height * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#FFFCF7';
+  ctx.fillRect(0, 0, width, height);
+
+  const drawCell = (x, y, w, h, bg, text, opts = {}) => {
+    ctx.fillStyle = bg;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#EFE4D2';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    if (!text) return;
+    ctx.fillStyle = opts.muted ? '#A89888' : (opts.strong ? '#4A403A' : '#7A6E64');
+    ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 11}px "Noto Sans TC", "PingFang TC", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(text), x + w / 2, y + h / 2 + 0.5);
+  };
+
+  // Corner + column headers
+  drawCell(pad, pad, labelW, rowH, '#F5EDE3', corner, { bold: true, size: 10, muted: true });
+  columns.forEach((label, c) => {
+    const focused = c === focusCol;
+    drawCell(
+      pad + labelW + c * colW,
+      pad,
+      colW,
+      rowH,
+      focused ? '#F5E6C0' : '#F5EDE3',
+      label,
+      { bold: true, size: 11, strong: focused }
+    );
+  });
+
+  rows.forEach((label, r) => {
+    const rowFocused = r === focusRow;
+    drawCell(
+      pad,
+      pad + rowH + r * rowH,
+      labelW,
+      rowH,
+      rowFocused ? '#F5E6C0' : '#FFFCF7',
+      label,
+      { bold: true, size: 11, strong: true }
+    );
+    columns.forEach((_, c) => {
+      const isSelf = !!(selfCell[r] && selfCell[r][c]);
+      const isHot = !!(hot[r] && hot[r][c]);
+      const val = (values[r] && values[r][c]) || '';
+      let bg = '#FFFCF7';
+      if (isSelf) bg = '#EFE4D2';
+      else if (rowFocused || c === focusCol) bg = 'rgba(233, 196, 106, 0.22)';
+      else if (isHot) bg = 'rgba(233, 196, 106, 0.18)';
+      drawCell(
+        pad + labelW + c * colW,
+        pad + rowH + r * rowH,
+        colW,
+        rowH,
+        bg,
+        isSelf ? '—' : val,
+        {
+          bold: isHot && !isSelf,
+          strong: isHot && !isSelf,
+          muted: isSelf || !val,
+          size: String(val).length > 3 ? 10 : 11
+        }
+      );
+    });
+  });
+
+  // Outer border
+  ctx.strokeStyle = '#EFE4D2';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(pad + 0.5, pad + 0.5, width - pad * 2 - 1, height - pad * 2 - 1);
+
+  return canvas.toDataURL('image/png');
+}
+
+function buildMatrixPeopleBarHtml(members, focusId) {
+  return `
+    <div class="vote-matrix-people" role="group" aria-label="選擇參加者">
+      ${members.map(id => `
+        <button type="button" class="matrix-person-btn${focusId === id ? ' is-active' : ''}"
+          data-member-id="${escapeHtml(id)}">${escapeHtml(id)}</button>
+      `).join('')}
+    </div>
+  `;
+}
+
 function buildGroupNominationMatrixHtml(group) {
   const members = group.members.map(m => m.participant_id);
   const trophies = state.adminTrophy.trophies || [];
@@ -2510,24 +2628,24 @@ function buildGroupNominationMatrixHtml(group) {
   if (!trophies.length) return '<p class="group-vote-matrix-empty">尚未載入 Trophy 清單</p>';
 
   const counts = buildNominationCountMap(members);
-  const head = members.map(id =>
-    `<th scope="col"><button type="button" class="matrix-person-btn" data-member-id="${escapeHtml(id)}">${escapeHtml(id)}</button></th>`
-  ).join('');
-
-  const rows = trophies.map(t => {
-    const cells = members.map(id => {
-      const n = counts.get(t.trophy_id + '\0' + id) || 0;
-      return `<td class="${n > 0 ? 'matrix-cell-hot' : ''}">${n || ''}</td>`;
-    }).join('');
-    return `<tr><th scope="row">${escapeHtml(t.trophy_id)}</th>${cells}</tr>`;
-  }).join('');
+  const values = trophies.map(t => members.map(id => {
+    const n = counts.get(t.trophy_id + '\0' + id) || 0;
+    return n ? String(n) : '';
+  }));
+  const hot = values.map(row => row.map(v => !!v));
+  const src = renderVoteMatrixImage({
+    corner: '',
+    columns: members,
+    rows: trophies.map(t => t.trophy_id),
+    values,
+    hot
+  });
 
   return `
-    <div class="table-wrap group-vote-matrix">
-      <table class="data-table vote-matrix-table">
-        <thead><tr><th scope="col"></th>${head}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+    ${buildMatrixPeopleBarHtml(members, null)}
+    <p class="group-vote-matrix-hint">撳人名睇獨立選票 · 下圖係定影，左右移動唔會錯位</p>
+    <div class="vote-matrix-image-wrap">
+      <img class="vote-matrix-image" src="${src}" alt="組別提名總覽" draggable="false">
     </div>
   `;
 }
@@ -2537,27 +2655,32 @@ function buildGroupBallotMatrixHtml(group, focusId) {
   if (!members.length) return '<p class="group-vote-matrix-empty">此組沒有參加者</p>';
 
   const ballots = buildBallotMap(members);
-  const head = members.map(id =>
-    `<th scope="col" class="${id === focusId ? 'is-focus' : ''}">${escapeHtml(id)}</th>`
-  ).join('');
-
-  // Show every voter as a row so admin can see who→whom; highlight focus row.
-  const rows = members.map(sender => {
+  const values = members.map(sender => {
     const rowMap = ballots.get(sender) || new Map();
-    const cells = members.map(receiver => {
-      if (sender === receiver) return '<td class="matrix-cell-self">—</td>';
-      const trophy = rowMap.get(receiver);
-      return `<td class="${trophy ? 'matrix-cell-hot' : ''}">${trophy ? escapeHtml(trophy) : ''}</td>`;
-    }).join('');
-    return `<tr class="${sender === focusId ? 'is-focus-row' : ''}"><th scope="row">${escapeHtml(sender)}</th>${cells}</tr>`;
-  }).join('');
+    return members.map(receiver => {
+      if (sender === receiver) return '';
+      return rowMap.get(receiver) || '';
+    });
+  });
+  const hot = values.map(row => row.map(v => !!v));
+  const selfCell = members.map((sender, r) => members.map((receiver, c) => r === c));
+  const focusRow = members.indexOf(focusId);
+  const src = renderVoteMatrixImage({
+    corner: '投\\被',
+    columns: members,
+    rows: members,
+    values,
+    hot,
+    selfCell,
+    focusRow,
+    focusCol: focusRow
+  });
 
   return `
-    <div class="table-wrap group-vote-matrix">
-      <table class="data-table vote-matrix-table">
-        <thead><tr><th scope="col">投票者 \\ 被投</th>${head}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+    ${buildMatrixPeopleBarHtml(members, focusId)}
+    <p class="group-vote-matrix-hint">撳人名切換焦點 · 下圖係定影，左右移動唔會錯位</p>
+    <div class="vote-matrix-image-wrap">
+      <img class="vote-matrix-image" src="${src}" alt="${escapeHtml(focusId)} 的選票矩陣" draggable="false">
     </div>
   `;
 }
