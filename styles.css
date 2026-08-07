@@ -382,6 +382,42 @@ body.admin-active { background: var(--bg); }
 
 .home-card-icon { font-size: 2rem; line-height: 1; }
 
+.icon-trophy {
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  background: url("assets/trophy.png") center / contain no-repeat;
+  vertical-align: -0.12em;
+  flex-shrink: 0;
+}
+
+.home-card-icon.icon-trophy {
+  width: 2rem;
+  height: 2rem;
+  vertical-align: middle;
+}
+
+.bottom-nav-icon.icon-trophy {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.trophy-results-icon.icon-trophy {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.illustration-circle .icon-trophy {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.audit-card-trophy .icon-trophy {
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.25em;
+}
+
 .home-card-label {
   font-size: var(--fs-subtitle);
   font-weight: 700;
@@ -1209,7 +1245,15 @@ textarea.input-field {
   font-weight: 600;
 }
 
-.trophy-result-name::before { content: "🏆 "; }
+.trophy-result-name::before {
+  content: "";
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: 0.35em;
+  vertical-align: -0.18em;
+  background: url("assets/trophy.png") center / contain no-repeat;
+}
 
 .trophy-results-empty {
   color: var(--text-muted);

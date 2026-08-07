@@ -2836,7 +2836,7 @@ function renderAuditTable() {
       : filtered.map(v => `
         <div class="audit-card">
           <div class="audit-card-route">${escapeHtml(v.sender_id)} → ${escapeHtml(v.receiver_id)}</div>
-          <div class="audit-card-trophy">🏆 ${escapeHtml(v.trophy_name)}</div>
+          <div class="audit-card-trophy"><span class="icon-trophy" aria-hidden="true"></span>${escapeHtml(v.trophy_name)}</div>
           ${v.submitted_at ? `<div class="audit-card-time">${formatDateTime(v.submitted_at)}</div>` : ''}
         </div>
       `).join('');
