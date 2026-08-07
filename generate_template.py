@@ -95,12 +95,14 @@ def build_workbook():
     headers = ["Trophy_id", "Trophy_name"]
     style_header(ws, headers)
     trophies = [
-        ["T01", "最佳隊友"],
-        ["T02", "最有趣"],
-        ["T03", "最可靠"],
-        ["T04", "最創意"],
-        ["T05", "最熱心"],
-        ["T06", "最穩陣"],
+        ["T01", "氣球人"],
+        ["T02", "破冰人"],
+        ["T03", "和事佬"],
+        ["T04", "真好人"],
+        ["T05", "組爸媽繼承人"],
+        ["T06", "關鍵人物"],
+        ["T07", "潛行者"],
+        ["T08", "頭頭是道"],
     ]
     for r, row in enumerate(trophies, 2):
         for c, val in enumerate(row, 1):
