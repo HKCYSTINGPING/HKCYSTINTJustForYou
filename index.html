@@ -352,6 +352,27 @@
     </div>
   </div>
 
+  <!-- Admin vote matrix popup -->
+  <div id="vote-matrix-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="vote-matrix-modal-title">
+    <div class="modal-card glass-card vote-matrix-modal-card">
+      <div class="vote-matrix-modal-header">
+        <div>
+          <h2 id="vote-matrix-modal-title">投票總覽</h2>
+          <p id="vote-matrix-modal-subtitle" class="vote-matrix-modal-subtitle"></p>
+        </div>
+        <button type="button" id="vote-matrix-modal-close" class="btn btn-ghost btn-icon" aria-label="關閉">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="vote-matrix-modal-toolbar" class="vote-matrix-modal-toolbar hidden">
+        <button type="button" id="vote-matrix-modal-back" class="btn btn-secondary btn-sm">返回總覽</button>
+      </div>
+      <div id="vote-matrix-modal-body" class="vote-matrix-modal-body"></div>
+    </div>
+  </div>
+
   <!-- ═══ ADMIN APP ═══ -->
   <section id="screen-admin" class="screen screen-app hidden" aria-label="管理員控制台">
     <header class="app-header admin-header">

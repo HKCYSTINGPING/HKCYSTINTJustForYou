@@ -95,9 +95,8 @@ const state = {
     results: [],
     // Which group cards the admin has opened; survives live re-renders.
     expandedGroups: null,
-    // When set, that group's card shows the person×person ballot matrix
-    // focused on this voter id instead of the trophy nomination counts.
-    matrixFocusByGroup: {}
+    // Open vote-matrix popup: { groupLabel, focusId } or null.
+    matrixModal: null
   },
   adminParticipant: {
     selectedId: null,
@@ -181,6 +180,13 @@ function cacheDOM() {
   DOM.trophyResultsModal = document.getElementById('trophy-results-modal');
   DOM.trophyResultsModalList = document.getElementById('trophy-results-modal-list');
   DOM.trophyResultsModalClose = document.getElementById('trophy-results-modal-close');
+  DOM.voteMatrixModal = document.getElementById('vote-matrix-modal');
+  DOM.voteMatrixModalTitle = document.getElementById('vote-matrix-modal-title');
+  DOM.voteMatrixModalSubtitle = document.getElementById('vote-matrix-modal-subtitle');
+  DOM.voteMatrixModalToolbar = document.getElementById('vote-matrix-modal-toolbar');
+  DOM.voteMatrixModalBack = document.getElementById('vote-matrix-modal-back');
+  DOM.voteMatrixModalBody = document.getElementById('vote-matrix-modal-body');
+  DOM.voteMatrixModalClose = document.getElementById('vote-matrix-modal-close');
   DOM.trophyProgressText = document.getElementById('trophy-progress-text');
   DOM.trophyProgressFill = document.getElementById('trophy-progress-fill');
   DOM.trophyTeammates = document.getElementById('trophy-teammates');
@@ -1447,7 +1453,7 @@ function handleLogout() {
   state.presence = [];
   state.expandedLoginGroups = null;
   state.adminTrophy.expandedGroups = null;
-  state.adminTrophy.matrixFocusByGroup = {};
+  state.adminTrophy.matrixModal = null;
   state.knownMessageIds = new Set();
   state.adminMessagesBootstrapped = false;
   state.adminMsgScrollPaused = false;
@@ -2265,8 +2271,8 @@ function renderAdminTrophyStats() {
 /**
  * Shared group cards used by voting progress and login status on the dashboard.
  * doneKey marks members who are "complete" (voted / logged in).
- * When voteMatrix is true (voting panel), expanded cards show nomination /
- * ballot tables instead of only the member checklist.
+ * When voteMatrix is true (voting panel), heading / member taps open a popup
+ * matrix card instead of embedding the table in the group card.
  */
 function renderGroupStatusCards(options) {
   const {
@@ -2304,7 +2310,7 @@ function renderGroupStatusCards(options) {
     ));
   }
   const expanded = expandedSetRef.get();
-  const focusByGroup = voteMatrix ? state.adminTrophy.matrixFocusByGroup : null;
+  const modal = voteMatrix ? state.adminTrophy.matrixModal : null;
 
   const cards = groups.map(group => {
     const doneCount = group.members.filter(m => m[doneKey]).length;
@@ -2312,7 +2318,7 @@ function renderGroupStatusCards(options) {
     const heading = group.display_label || formatGroupLabel(label);
     const isOpen = expanded.has(label);
     const isStaff = /STAFF/i.test(label);
-    const focusId = focusByGroup ? (focusByGroup[label] || null) : null;
+    const focusId = modal && modal.groupLabel === label ? modal.focusId : null;
 
     const membersHtml = group.members.map(m => {
       const classes = `voter-member ${m[doneKey] ? 'voter-done' : 'voter-pending'}${focusId === m.participant_id ? ' is-focus' : ''}`;
@@ -2324,33 +2330,19 @@ function renderGroupStatusCards(options) {
       if (!voteMatrix) {
         return `<div class="${classes}">${inner}</div>`;
       }
-      return `<button type="button" class="${classes}" data-member-id="${escapeHtml(m.participant_id)}">${inner}</button>`;
+      return `<button type="button" class="${classes}" data-member-id="${escapeHtml(m.participant_id)}" title="睇獨立選票">${inner}</button>`;
     }).join('');
-
-    let detailHtml = `<div class="group-voter-members">${membersHtml}</div>`;
-    if (voteMatrix) {
-      const matrixHtml = focusId
-        ? buildGroupBallotMatrixHtml(group, focusId)
-        : buildGroupNominationMatrixHtml(group);
-      detailHtml = `
-        <div class="group-voter-members">${membersHtml}</div>
-        <div class="group-vote-matrix-wrap">
-          <p class="group-vote-matrix-hint">${focusId
-            ? `獨立選票：列＝投票者、欄＝被投者、格＝Trophy（目前：${escapeHtml(focusId)}）· 再撳標題返回總覽`
-            : '總覽：列＝Trophy、欄＝參加者、格＝獲提名次數 · 撳人名睇邊個投邊個'}</p>
-          ${matrixHtml}
-        </div>
-      `;
-    }
 
     return `
       <div class="group-voter-card${isOpen ? ' is-open' : ''}${isStaff ? ' is-staff' : ''}" data-group="${escapeHtml(label)}">
-        <button type="button" class="group-voter-header" aria-expanded="${isOpen ? 'true' : 'false'}">
+        <button type="button" class="group-voter-header" aria-expanded="${isOpen ? 'true' : 'false'}"${voteMatrix ? ' title="睇組別投票總覽"' : ''}>
           <span class="group-voter-chevron" aria-hidden="true"></span>
           <h4>${escapeHtml(heading)}</h4>
           <span class="group-voter-count">${doneCount}/${group.members.length}</span>
         </button>
-        <div class="group-voter-body"${isOpen ? '' : ' hidden'}>${detailHtml}</div>
+        <div class="group-voter-body"${isOpen ? '' : ' hidden'}>
+          <div class="group-voter-members">${membersHtml}</div>
+        </div>
       </div>
     `;
   }).join('');
@@ -2365,18 +2357,21 @@ function renderGroupStatusCards(options) {
       const card = btn.closest('.group-voter-card');
       const groupLabel = card?.dataset.group;
       if (!groupLabel || !expanded) return;
-      const open = expanded.has(groupLabel);
-      if (open) {
-        expanded.delete(groupLabel);
-        if (focusByGroup) delete focusByGroup[groupLabel];
-      } else {
-        expanded.add(groupLabel);
-        if (focusByGroup) delete focusByGroup[groupLabel];
-      }
+
       if (voteMatrix) {
-        renderGroupStatusCards(options);
+        openVoteMatrixModal(groupLabel, null);
+        if (!expanded.has(groupLabel)) {
+          expanded.add(groupLabel);
+          card.classList.add('is-open');
+          btn.setAttribute('aria-expanded', 'true');
+          card.querySelector('.group-voter-body')?.classList.remove('hidden');
+        }
         return;
       }
+
+      const open = expanded.has(groupLabel);
+      if (open) expanded.delete(groupLabel);
+      else expanded.add(groupLabel);
       card.classList.toggle('is-open', !open);
       btn.setAttribute('aria-expanded', open ? 'false' : 'true');
       card.querySelector('.group-voter-body')?.classList.toggle('hidden', open);
@@ -2384,31 +2379,99 @@ function renderGroupStatusCards(options) {
   });
 
   if (voteMatrix) {
-    const selectMember = (groupLabel, memberId) => {
-      if (!groupLabel || !memberId || !focusByGroup) return;
-      if (!expanded.has(groupLabel)) expanded.add(groupLabel);
-      focusByGroup[groupLabel] = focusByGroup[groupLabel] === memberId ? null : memberId;
-      renderGroupStatusCards(options);
-    };
-
     container.querySelectorAll('.voter-member[data-member-id]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const card = btn.closest('.group-voter-card');
-        selectMember(card?.dataset.group, btn.dataset.memberId);
-      });
-    });
-
-    container.querySelectorAll('.matrix-person-btn[data-member-id]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const card = btn.closest('.group-voter-card');
-        selectMember(card?.dataset.group, btn.dataset.memberId);
+        const groupLabel = card?.dataset.group;
+        if (!groupLabel) return;
+        if (!expanded.has(groupLabel)) {
+          expanded.add(groupLabel);
+          card.classList.add('is-open');
+          card.querySelector('.group-voter-header')?.setAttribute('aria-expanded', 'true');
+          card.querySelector('.group-voter-body')?.classList.remove('hidden');
+        }
+        openVoteMatrixModal(groupLabel, btn.dataset.memberId);
       });
     });
   }
+}
+
+function findAdminVotingGroup(groupLabel) {
+  const groups = state.adminTrophy.overview?.group_voting_status || [];
+  return groups.find(g => g.group_label === groupLabel) || null;
+}
+
+function openVoteMatrixModal(groupLabel, focusId) {
+  state.adminTrophy.matrixModal = {
+    groupLabel,
+    focusId: focusId || null
+  };
+  renderVoteMatrixModal();
+  // Sync focus highlight on member chips without rebuilding the whole grid.
+  if (DOM.adminPendingVoters) {
+    DOM.adminPendingVoters.querySelectorAll('.voter-member[data-member-id]').forEach(btn => {
+      const card = btn.closest('.group-voter-card');
+      const on = card?.dataset.group === groupLabel && btn.dataset.memberId === focusId;
+      btn.classList.toggle('is-focus', !!on);
+    });
+  }
+}
+
+function closeVoteMatrixModal() {
+  state.adminTrophy.matrixModal = null;
+  if (DOM.voteMatrixModal) {
+    DOM.voteMatrixModal.classList.add('hidden');
+  }
+  document.body.classList.remove('modal-open');
+  if (DOM.adminPendingVoters) {
+    DOM.adminPendingVoters.querySelectorAll('.voter-member.is-focus').forEach(btn => {
+      btn.classList.remove('is-focus');
+    });
+  }
+}
+
+function renderVoteMatrixModal() {
+  const modal = state.adminTrophy.matrixModal;
+  if (!modal || !DOM.voteMatrixModal) return;
+
+  const group = findAdminVotingGroup(modal.groupLabel);
+  if (!group) {
+    closeVoteMatrixModal();
+    return;
+  }
+
+  const heading = group.display_label || formatGroupLabel(group.group_label);
+  const focusId = modal.focusId;
+
+  if (DOM.voteMatrixModalTitle) {
+    DOM.voteMatrixModalTitle.textContent = focusId
+      ? heading + ' · ' + focusId
+      : heading + ' · 投票總覽';
+  }
+  if (DOM.voteMatrixModalSubtitle) {
+    DOM.voteMatrixModalSubtitle.textContent = focusId
+      ? '列／欄＝參加者，格內＝Trophy（邊個投邊個）'
+      : '列＝Trophy，欄＝參加者，格內＝獲提名次數';
+  }
+  if (DOM.voteMatrixModalToolbar) {
+    DOM.voteMatrixModalToolbar.classList.toggle('hidden', !focusId);
+  }
+  if (DOM.voteMatrixModalBody) {
+    DOM.voteMatrixModalBody.innerHTML = focusId
+      ? buildGroupBallotMatrixHtml(group, focusId)
+      : buildGroupNominationMatrixHtml(group);
+
+    DOM.voteMatrixModalBody.querySelectorAll('.matrix-person-btn[data-member-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openVoteMatrixModal(modal.groupLabel, btn.dataset.memberId);
+      });
+    });
+  }
+
+  DOM.voteMatrixModal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
 }
 
 /** How many submitted/draft nominations each member received per trophy. */
@@ -2516,6 +2579,7 @@ function renderAdminPendingVoters() {
     emptyPendingTitle: '尚未完成投票',
     voteMatrix: true
   });
+  if (state.adminTrophy.matrixModal) renderVoteMatrixModal();
 }
 
 function buildLoginStatusGroups() {
@@ -3110,6 +3174,22 @@ function bindEvents() {
   DOM.trophyResultsModal.addEventListener('click', (e) => {
     if (e.target === DOM.trophyResultsModal) hideTrophyResultsModal();
   });
+
+  if (DOM.voteMatrixModalClose) {
+    DOM.voteMatrixModalClose.addEventListener('click', closeVoteMatrixModal);
+  }
+  if (DOM.voteMatrixModalBack) {
+    DOM.voteMatrixModalBack.addEventListener('click', () => {
+      const modal = state.adminTrophy.matrixModal;
+      if (!modal) return;
+      openVoteMatrixModal(modal.groupLabel, null);
+    });
+  }
+  if (DOM.voteMatrixModal) {
+    DOM.voteMatrixModal.addEventListener('click', (e) => {
+      if (e.target === DOM.voteMatrixModal) closeVoteMatrixModal();
+    });
+  }
 
   if (DOM.trophySubmittedHome) {
     DOM.trophySubmittedHome.addEventListener('click', () => switchParticipantView('home'));
