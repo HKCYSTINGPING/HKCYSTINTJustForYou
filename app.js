@@ -256,10 +256,6 @@ function normalizeId(id) {
   return s === 'ADMIN' ? CONFIG.ADMIN_ID : s;
 }
 
-function normalizePhone(phone) {
-  return String(phone || '').replace(/\D/g, '');
-}
-
 function isAdminLogin(participantId) {
   return String(participantId || '').trim().toLowerCase() === 'admin';
 }
