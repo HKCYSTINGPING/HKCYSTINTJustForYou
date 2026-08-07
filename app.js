@@ -2528,10 +2528,11 @@ function renderVoteMatrixImage(options) {
   } = options;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-  const colW = Math.max(40, ...columns.map(c => String(c).length * 9 + 16), 40);
-  const labelW = Math.max(52, ...rows.map(r => String(r).length * 9 + 16), String(corner).length * 8 + 12);
-  const rowH = 34;
-  const pad = 10;
+  // Cell metrics ×1.5 to match the global type scale.
+  const colW = Math.max(60, ...columns.map(c => String(c).length * 14 + 24), 60);
+  const labelW = Math.max(78, ...rows.map(r => String(r).length * 14 + 24), String(corner).length * 12 + 18);
+  const rowH = 51;
+  const pad = 15;
   const width = labelW + columns.length * colW + pad * 2;
   const height = rowH * (rows.length + 1) + pad * 2;
 
@@ -2553,14 +2554,14 @@ function renderVoteMatrixImage(options) {
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     if (!text) return;
     ctx.fillStyle = opts.muted ? '#A89888' : (opts.strong ? '#4A403A' : '#7A6E64');
-    ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 11}px "Canva Handwriting Style TC", "PingFang TC", sans-serif`;
+    ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 16.5}px "Canva Handwriting Style TC", "PingFang TC", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(text), x + w / 2, y + h / 2 + 0.5);
   };
 
   // Corner + column headers
-  drawCell(pad, pad, labelW, rowH, '#F5EDE3', corner, { bold: true, size: 10, muted: true });
+  drawCell(pad, pad, labelW, rowH, '#F5EDE3', corner, { bold: true, size: 15, muted: true });
   columns.forEach((label, c) => {
     const focused = c === focusCol;
     drawCell(
@@ -2570,7 +2571,7 @@ function renderVoteMatrixImage(options) {
       rowH,
       focused ? '#F5E6C0' : '#F5EDE3',
       label,
-      { bold: true, size: 11, strong: focused }
+      { bold: true, size: 16.5, strong: focused }
     );
   });
 
@@ -2583,7 +2584,7 @@ function renderVoteMatrixImage(options) {
       rowH,
       rowFocused ? '#F5E6C0' : '#FFFCF7',
       label,
-      { bold: true, size: 11, strong: true }
+      { bold: true, size: 16.5, strong: true }
     );
     columns.forEach((_, c) => {
       const isSelf = !!(selfCell[r] && selfCell[r][c]);
@@ -2604,7 +2605,7 @@ function renderVoteMatrixImage(options) {
           bold: isHot && !isSelf,
           strong: isHot && !isSelf,
           muted: isSelf || !val,
-          size: String(val).length > 3 ? 10 : 11
+          size: String(val).length > 3 ? 15 : 16.5
         }
       );
     });
