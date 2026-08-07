@@ -358,17 +358,17 @@ export function subscribeAllResults(onData, onError) {
 }
 
 /**
- * Ports the tally from the old backend unchanged: every trophy goes to whoever
- * holds the highest vote count for it, ties included, and anyone still without
- * a trophy afterwards receives the one they came closest on. Nobody finishes
- * the night empty handed.
+ * Tally awards per group: each trophy goes to whoever holds the highest vote
+ * count inside their own group (ties included). Anyone still empty afterwards
+ * gets the trophy(s) they came closest on. Nobody finishes empty handed.
  */
 export function computeResults(participants, trophies, submissions) {
   const voteCounts = new Map();
   const key = (receiver, trophy) => receiver + '|' + trophy;
 
   submissions.forEach(submission => {
-    submission.pairings.forEach(pair => {
+    (submission.pairings || []).forEach(pair => {
+      if (!pair || !pair.receiver_id || !pair.trophy_id) return;
       const k = key(pair.receiver_id, pair.trophy_id);
       voteCounts.set(k, (voteCounts.get(k) || 0) + 1);
     });
@@ -378,52 +378,61 @@ export function computeResults(participants, trophies, submissions) {
   const awarded = new Map(participants.map(p => [p.participant_id, []]));
   let fallbackActivated = false;
 
-  trophies.forEach(trophy => {
-    let best = 0;
-    participants.forEach(p => {
-      best = Math.max(best, countFor(p.participant_id, trophy.trophy_id));
-    });
-    if (best <= 0) return;
-    participants.forEach(p => {
-      if (countFor(p.participant_id, trophy.trophy_id) !== best) return;
-      awarded.get(p.participant_id).push({
-        trophy_id: trophy.trophy_id,
-        trophy_name: trophy.trophy_name,
-        award_source: 'round1',
-        vote_count: best
-      });
-    });
+  const byGroup = new Map();
+  participants.forEach(p => {
+    const group = p.group_id || '未分組';
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group).push(p);
   });
 
-  participants.forEach(p => {
-    const mine = awarded.get(p.participant_id);
-    if (mine.length > 0) return;
-    fallbackActivated = true;
-
-    let personalBest = -1;
+  byGroup.forEach(members => {
     trophies.forEach(trophy => {
-      personalBest = Math.max(personalBest, countFor(p.participant_id, trophy.trophy_id));
-    });
-
-    trophies.forEach(trophy => {
-      const count = countFor(p.participant_id, trophy.trophy_id);
-      if (count !== personalBest) return;
-      mine.push({
-        trophy_id: trophy.trophy_id,
-        trophy_name: trophy.trophy_name,
-        award_source: 'fallback',
-        vote_count: count
+      let best = 0;
+      members.forEach(p => {
+        best = Math.max(best, countFor(p.participant_id, trophy.trophy_id));
+      });
+      if (best <= 0) return;
+      members.forEach(p => {
+        if (countFor(p.participant_id, trophy.trophy_id) !== best) return;
+        awarded.get(p.participant_id).push({
+          trophy_id: trophy.trophy_id,
+          trophy_name: trophy.trophy_name,
+          award_source: 'round1',
+          vote_count: best
+        });
       });
     });
 
-    if (mine.length === 0 && trophies.length > 0) {
-      mine.push({
-        trophy_id: trophies[0].trophy_id,
-        trophy_name: trophies[0].trophy_name,
-        award_source: 'fallback',
-        vote_count: 0
+    members.forEach(p => {
+      const mine = awarded.get(p.participant_id);
+      if (mine.length > 0) return;
+      fallbackActivated = true;
+
+      let personalBest = -1;
+      trophies.forEach(trophy => {
+        personalBest = Math.max(personalBest, countFor(p.participant_id, trophy.trophy_id));
       });
-    }
+
+      trophies.forEach(trophy => {
+        const count = countFor(p.participant_id, trophy.trophy_id);
+        if (count !== personalBest) return;
+        mine.push({
+          trophy_id: trophy.trophy_id,
+          trophy_name: trophy.trophy_name,
+          award_source: 'fallback',
+          vote_count: count
+        });
+      });
+
+      if (mine.length === 0 && trophies.length > 0) {
+        mine.push({
+          trophy_id: trophies[0].trophy_id,
+          trophy_name: trophies[0].trophy_name,
+          award_source: 'fallback',
+          vote_count: 0
+        });
+      }
+    });
   });
 
   const trophySummary = trophies.map(trophy => {
