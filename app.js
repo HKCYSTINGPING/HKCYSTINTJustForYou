@@ -3072,7 +3072,7 @@ function renderAdminParticipantDetail(detail) {
   // change someone else's password. set_participant_phone.py does that.
   DOM.adminEditPhone.readOnly = true;
   DOM.adminEditPhone.title = '電話號碼即登入密碼，需在電腦執行 set_participant_phone.py 更改';
-  DOM.adminEditGroup.value = p.group_id || '';
+  populateAdminEditGroupSelect(p.group_id || '');
 
   const submissionTone = stats.submission_status === 'submitted' ? 'tone-published' : 'tone-draft';
   DOM.adminParticipantStats.innerHTML = `
@@ -3090,8 +3090,42 @@ async function refreshAdminParticipantDetail() {
   await selectAdminParticipant(state.adminParticipant.selectedId);
 }
 
+/** Standard group options for settings dropdowns, plus any live extras. */
+function listEditableGroupIds(selectedId) {
+  const groups = new Set([
+    'GROUP_1', 'GROUP_2', 'GROUP_3', 'GROUP_4', 'GROUP_5', 'GROUP_6', 'GROUP_STAFF'
+  ]);
+  state.participants.forEach(p => {
+    if (p.group_id) groups.add(p.group_id);
+  });
+  if (selectedId) groups.add(selectedId);
+  return [...groups].sort(compareGroupLabels);
+}
+
+function populateGroupSelect(selectEl, selectedId) {
+  if (!selectEl) return;
+  const groups = listEditableGroupIds(selectedId);
+  const prev = selectedId || selectEl.value || '';
+  selectEl.innerHTML = groups.map(g =>
+    `<option value="${escapeHtml(g)}">${escapeHtml(formatGroupLabel(g))}</option>`
+  ).join('');
+  if (prev && groups.includes(prev)) {
+    selectEl.value = prev;
+  } else if (groups.length) {
+    selectEl.value = groups[0];
+  }
+}
+
+function populateAdminEditGroupSelect(selectedId) {
+  populateGroupSelect(DOM.adminEditGroup, selectedId);
+}
+
+function populateAdminBulkGroupSelect() {
+  populateGroupSelect(DOM.adminBulkGroup, DOM.adminBulkGroup?.value || 'GROUP_1');
+}
+
 function deriveGroupId(participantId) {
-  const match = String(participantId || '').match(/^(\d)[A-F]$/i);
+  const match = String(participantId || '').match(/^(\d)[A-H]$/i);
   return match ? 'GROUP_' + match[1] : 'GROUP_STAFF';
 }
 
@@ -3255,6 +3289,7 @@ async function afterBulkGroupChange() {
 
 function initAdminParticipantsPanel() {
   initAdminParticipantCombobox();
+  populateAdminBulkGroupSelect();
   if (state.adminParticipant.selectedId) {
     refreshAdminParticipantDetail();
   }
