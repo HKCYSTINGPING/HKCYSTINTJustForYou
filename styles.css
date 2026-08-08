@@ -119,6 +119,9 @@ body.admin-active { background: var(--bg); }
 }
 
 .screen-app {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   padding-top: var(--safe-top);
   padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom));
   max-width: var(--max-width);
