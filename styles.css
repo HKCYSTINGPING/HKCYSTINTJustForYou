@@ -1136,6 +1136,62 @@ textarea.input-field {
   margin: 0 0 var(--space-sm);
 }
 
+.profile-login-id {
+  margin: var(--space-sm) 0 0;
+}
+
+.profile-rename-card {
+  margin-bottom: var(--space-md);
+}
+
+.profile-rename-card .section-title {
+  margin-bottom: var(--space-xs);
+}
+
+.home-card-staff {
+  grid-column: 1 / -1;
+}
+
+.staff-facilitator-panel .card {
+  margin-bottom: var(--space-md);
+}
+
+.staff-group-title {
+  font-size: var(--fs-subtitle);
+  font-weight: 700;
+  margin: 0 0 var(--space-sm);
+}
+
+.admin-group-overrides {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.admin-group-override-card {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--surface);
+}
+
+.admin-group-override-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.admin-group-override-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-caption);
+  color: var(--text);
+  margin-bottom: var(--space-xs);
+}
+
 .profile-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
