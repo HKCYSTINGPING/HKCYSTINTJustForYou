@@ -532,6 +532,34 @@ export async function clearAllRecords() {
   return operations.length;
 }
 
+/**
+ * Clears every ballot and computed award, but leaves messages alone.
+ * If the lifecycle had already moved past voting, step it back to
+ * VOTING_CLOSED so admins can reopen or recalculate from a clean slate.
+ */
+export async function resetAllVotes() {
+  const operations = [];
+  for (const name of ['submissions', 'results']) {
+    const snapshot = await getDocs(collection(db, name));
+    snapshot.docs.forEach(d => operations.push(batch => batch.delete(d.ref)));
+  }
+  await commitAll(operations);
+
+  const votingRef = doc(db, 'config', 'voting');
+  const snap = await getDoc(votingRef);
+  const status = ((snap.exists() && snap.data()) || {}).voting_status || 'DRAFT';
+  const patch = {
+    calculated_at: '',
+    published_at: '',
+    fallback_activated: false
+  };
+  if (status === 'CALCULATED' || status === 'PUBLISHED') {
+    patch.voting_status = 'VOTING_CLOSED';
+  }
+  await setDoc(votingRef, patch, { merge: true });
+  return operations.length;
+}
+
 export async function resetParticipantVote(participantId) {
   await commitAll([
     batch => batch.delete(doc(db, 'submissions', participantId)),

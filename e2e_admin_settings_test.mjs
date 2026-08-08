@@ -50,6 +50,15 @@ async function run() {
     await page.click('.bottom-nav-item[data-admin-tab="settings"]');
     await page.waitForSelector('#admin-participants-panel:not(.hidden)', { timeout: 10000 });
 
+    check(
+      '有「重置全部參加者投票」掣',
+      await page.locator('#admin-bulk-reset-votes').count() === 1
+    );
+    check(
+      '有「刪除全部參加者紀錄」掣',
+      await page.locator('#admin-bulk-delete-all').count() === 1
+    );
+
     // Drive the same entry point the combobox uses, without depending on
     // dropdown timing.
     await page.evaluate((id) => {
