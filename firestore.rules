@@ -30,18 +30,83 @@ service cloud.firestore {
       return request.auth.token.email.split('@')[0].upper();
     }
 
-    function messagingOpen() {
+    // Seat roster ids look like 1A…6H. Everyone else (WILL, PHOEBE, …) is Staff.
+    function isSeatId(id) {
+      return id.matches('^[0-9][A-H]$');
+    }
+
+    function isStaffPerson() {
+      return isParticipant() && !isSeatId(pid());
+    }
+
+    function participantDoc(id) {
+      return get(/databases/$(database)/documents/participants/$(id));
+    }
+
+    function myGroupId() {
+      return participantDoc(pid()).data.group_id;
+    }
+
+    function isNumberedGroup(groupId) {
+      return groupId is string && groupId.matches('^GROUP_[0-9]+$');
+    }
+
+    // Staff moved into a numbered group may facilitate that group only.
+    function isFacilitatorOf(groupId) {
+      return isStaffPerson()
+        && isNumberedGroup(groupId)
+        && myGroupId() == groupId;
+    }
+
+    function messagingOpenGlobal() {
       return get(/databases/$(database)/documents/config/messaging).data.status == 'OPEN';
     }
 
-    function votingStatus() {
+    function groupDoc(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId));
+    }
+
+    function groupMessagingOpen(groupId) {
+      return !groupDoc(groupId).exists()
+        || !('messaging_status' in groupDoc(groupId).data)
+        || groupDoc(groupId).data.messaging_status != 'CLOSE';
+    }
+
+    // Admin global CLOSE is a master kill-switch; group CLOSE is an override.
+    function messagingOpenFor(groupId) {
+      return messagingOpenGlobal() && groupMessagingOpen(groupId);
+    }
+
+    function globalVotingStatus() {
       return get(/databases/$(database)/documents/config/voting).data.voting_status;
     }
 
-    // Roster and trophy list: readable by everyone signed in, owned by admin.
+    function votingStatusFor(groupId) {
+      return groupDoc(groupId).exists()
+        && ('voting_status' in groupDoc(groupId).data)
+        && groupDoc(groupId).data.voting_status is string
+        ? groupDoc(groupId).data.voting_status
+        : globalVotingStatus();
+    }
+
+    function myVotingStatus() {
+      return votingStatusFor(myGroupId());
+    }
+
+    // Roster: readable by everyone signed in. Admin may edit freely; each
+    // participant may only change their own display_name.
     match /participants/{participantId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isParticipant()
+        && participantId == pid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['display_name'])
+        && request.resource.data.display_name is string
+        && request.resource.data.display_name.size() <= 40
+        && request.resource.data.participant_id == resource.data.participant_id
+        && request.resource.data.group_id == resource.data.group_id
+      );
     }
 
     // Phone numbers double as login passwords, so they live apart from the
@@ -60,13 +125,40 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Per-group display name + messaging/voting overrides. Facilitators may
+    // only touch the numbered group they currently belong to.
+    match /groups/{groupId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() || (
+        isFacilitatorOf(groupId)
+        && request.resource.data.group_id == groupId
+        && (!('display_name' in request.resource.data)
+          || (request.resource.data.display_name is string
+            && request.resource.data.display_name.size() <= 40))
+        && (!('messaging_status' in request.resource.data)
+          || request.resource.data.messaging_status in ['OPEN', 'CLOSE'])
+        && (!('voting_status' in request.resource.data)
+          || request.resource.data.voting_status in
+            ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'])
+      );
+      allow delete: if isAdmin();
+    }
+
     match /messages/{messageId} {
-      // Inbox queries must filter on receiver_id, sent queries on sender_id.
-      allow read: if isAdmin() || (signedIn() &&
-        (resource.data.receiver_id == pid() || resource.data.sender_id == pid()));
+      // Inbox / sent queries filter on receiver_id or sender_id. Staff
+      // facilitators query thread_group_id == their group for intra-group mail.
+      allow read: if isAdmin() || (signedIn() && (
+        resource.data.receiver_id == pid()
+        || resource.data.sender_id == pid()
+        || (
+          resource.data.thread_group_id is string
+          && resource.data.thread_group_id != ''
+          && isFacilitatorOf(resource.data.thread_group_id)
+        )
+      ));
 
       allow create: if isParticipant()
-        && messagingOpen()
+        && messagingOpenFor(participantDoc(pid()).data.group_id)
         && request.resource.data.sender_id == pid()
         && request.resource.data.receiver_id is string
         && request.resource.data.receiver_id != pid()
@@ -76,27 +168,52 @@ service cloud.firestore {
         // The real 300 character limit is enforced in the UI. This is a wider
         // abuse guard so that emoji, which the two engines count differently,
         // can never trigger a confusing server-side rejection.
-        && request.resource.data.content.size() <= 500;
+        && request.resource.data.content.size() <= 500
+        && request.resource.data.sender_group_id == participantDoc(pid()).data.group_id
+        && (
+          request.resource.data.thread_group_id == ''
+          || (
+            request.resource.data.thread_group_id == request.resource.data.sender_group_id
+            && request.resource.data.thread_group_id
+              == participantDoc(request.resource.data.receiver_id).data.group_id
+          )
+        );
 
       // Retracting marks a message deleted so it stays auditable. Removing it
       // outright is the admin's clean-up tool between rehearsal and the event.
-      allow update, delete: if isAdmin();
+      // Facilitators may retract / restore intra-group threads they monitor.
+      allow update: if isAdmin() || (
+        isFacilitatorOf(resource.data.thread_group_id)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'deleted_at'])
+        && request.resource.data.status in ['active', 'deleted']
+      );
+      allow delete: if isAdmin();
     }
 
     // One document per participant holds that participant's whole ballot, so
     // two people voting at the same time can never touch each other's rows.
     match /submissions/{participantId} {
-      allow read: if isAdmin() || (signedIn() && participantId == pid());
+      allow read: if isAdmin()
+        || (signedIn() && participantId == pid())
+        || (
+          isFacilitatorOf(participantDoc(participantId).data.group_id)
+        );
       allow write: if isAdmin() || (isParticipant()
         && participantId == pid()
-        && votingStatus() == 'VOTING_OPEN');
+        && myVotingStatus() == 'VOTING_OPEN');
     }
 
     match /results/{participantId} {
-      allow read: if isAdmin() || (signedIn()
-        && participantId == pid()
-        && votingStatus() == 'PUBLISHED');
-      allow write: if isAdmin();
+      allow read: if isAdmin()
+        || (
+          signedIn()
+          && participantId == pid()
+          && myVotingStatus() == 'PUBLISHED'
+        )
+        || isFacilitatorOf(participantDoc(participantId).data.group_id);
+      allow write: if isAdmin()
+        || isFacilitatorOf(participantDoc(participantId).data.group_id);
     }
 
     // Login presence: each participant may only touch their own document.

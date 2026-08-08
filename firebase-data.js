@@ -155,7 +155,9 @@ function messageFromDoc(snapshot) {
     content: data.content || '',
     created_at: toIso(data.created_at),
     status: data.status || 'active',
-    deleted_at: toIso(data.deleted_at)
+    deleted_at: toIso(data.deleted_at),
+    sender_group_id: data.sender_group_id || '',
+    thread_group_id: data.thread_group_id || ''
   };
 }
 
@@ -208,16 +210,34 @@ export function subscribeAllMessages(onData, onError) {
   }, onError);
 }
 
-export function sendMessage(senderId, receiverId, content) {
+export function sendMessage(senderId, receiverId, content, groupMeta = {}) {
   const ref = doc(collection(db, 'messages'));
+  const senderGroupId = String(groupMeta.senderGroupId || '').trim();
+  const receiverGroupId = String(groupMeta.receiverGroupId || '').trim();
+  const threadGroupId = senderGroupId && senderGroupId === receiverGroupId
+    ? senderGroupId
+    : '';
   return setDoc(ref, {
     sender_id: senderId,
     receiver_id: receiverId,
     content,
     status: 'active',
     created_at: serverTimestamp(),
-    deleted_at: ''
+    deleted_at: '',
+    sender_group_id: senderGroupId,
+    thread_group_id: threadGroupId
   });
+}
+
+/** Intra-group messages for a Staff facilitator monitoring one group. */
+export function subscribeGroupThreadMessages(groupId, onData, onError) {
+  const q = query(
+    collection(db, 'messages'),
+    where('thread_group_id', '==', groupId)
+  );
+  return onSnapshot(q, snapshot => {
+    onData(snapshot.docs.map(messageFromDoc).sort(newestFirst));
+  }, onError);
 }
 
 export function retractMessage(messageId) {
@@ -248,15 +268,18 @@ export function setMessagingStatus(status) {
   }, { merge: true });
 }
 
+function votingConfigFromData(data) {
+  return {
+    voting_status: data.voting_status || 'DRAFT',
+    allow_resubmit: !!data.allow_resubmit,
+    calculated_at: toIso(data.calculated_at),
+    published_at: toIso(data.published_at)
+  };
+}
+
 export function subscribeVotingConfig(onData, onError) {
   return onSnapshot(doc(db, 'config', 'voting'), snapshot => {
-    const data = snapshot.data() || {};
-    onData({
-      voting_status: data.voting_status || 'DRAFT',
-      allow_resubmit: !!data.allow_resubmit,
-      calculated_at: toIso(data.calculated_at),
-      published_at: toIso(data.published_at)
-    });
+    onData(votingConfigFromData(snapshot.data() || {}));
   }, onError);
 }
 
@@ -271,6 +294,55 @@ export async function setVotingStatus(votingStatus, allowResubmit) {
     patch.allow_resubmit = true;
   }
   await setDoc(doc(db, 'config', 'voting'), patch, { merge: true });
+}
+
+/** Per-group display names and messaging / voting overrides. */
+export function subscribeGroups(onData, onError) {
+  return onSnapshot(collection(db, 'groups'), snapshot => {
+    const map = {};
+    snapshot.docs.forEach(d => {
+      const raw = d.data() || {};
+      map[d.id] = {
+        group_id: raw.group_id || d.id,
+        display_name: String(raw.display_name || '').trim(),
+        messaging_status: raw.messaging_status === 'CLOSE' ? 'CLOSE' : 'OPEN',
+        voting_status: raw.voting_status || '',
+        allow_resubmit: !!raw.allow_resubmit,
+        calculated_at: toIso(raw.calculated_at),
+        published_at: toIso(raw.published_at)
+      };
+    });
+    onData(map);
+  }, onError);
+}
+
+export function setGroupDisplayName(groupId, displayName) {
+  return setDoc(doc(db, 'groups', groupId), {
+    group_id: groupId,
+    display_name: String(displayName || '').trim()
+  }, { merge: true });
+}
+
+export function setGroupMessagingStatus(groupId, status) {
+  return setDoc(doc(db, 'groups', groupId), {
+    group_id: groupId,
+    messaging_status: status === 'CLOSE' ? 'CLOSE' : 'OPEN'
+  }, { merge: true });
+}
+
+export async function setGroupVotingStatus(groupId, votingStatus, allowResubmit) {
+  const patch = {
+    group_id: groupId,
+    voting_status: votingStatus
+  };
+  if (allowResubmit !== undefined) patch.allow_resubmit = !!allowResubmit;
+  if (votingStatus === 'PUBLISHED') patch.published_at = serverTimestamp();
+  if (votingStatus === 'VOTING_OPEN') {
+    patch.published_at = '';
+    patch.allow_resubmit = true;
+  }
+  if (votingStatus === 'CALCULATED') patch.calculated_at = serverTimestamp();
+  await setDoc(doc(db, 'groups', groupId), patch, { merge: true });
 }
 
 // ─── Trophies ───────────────────────────────────────────────────────────────
@@ -435,7 +507,7 @@ export function computeResults(participants, trophies, submissions) {
   return { awarded, profiles, trophySummary };
 }
 
-export async function writeResults(awarded) {
+export async function writeResults(awarded, options = {}) {
   const operations = [];
   awarded.forEach((awards, participantId) => {
     operations.push(batch => batch.set(doc(db, 'results', participantId), {
@@ -445,6 +517,10 @@ export async function writeResults(awarded) {
     }));
   });
   await commitAll(operations);
+  if (options.groupId) {
+    await setGroupVotingStatus(options.groupId, 'CALCULATED');
+    return;
+  }
   await setDoc(doc(db, 'config', 'voting'), {
     voting_status: 'CALCULATED',
     fallback_activated: false,
@@ -452,15 +528,42 @@ export async function writeResults(awarded) {
   }, { merge: true });
 }
 
+/** One-shot reads for Staff facilitators (collection listens are admin-only). */
+export async function fetchSubmissionsForParticipants(participantIds) {
+  const ids = [...new Set((participantIds || []).filter(Boolean))];
+  const rows = await Promise.all(ids.map(async id => {
+    const snapshot = await getDoc(doc(db, 'submissions', id));
+    return snapshot.exists() ? submissionFromDoc(snapshot) : {
+      participant_id: id,
+      status: 'draft',
+      pairings: [],
+      updated_at: '',
+      submitted_at: ''
+    };
+  }));
+  return rows;
+}
+
 // ─── Admin: participants and contacts ───────────────────────────────────────
 
 export function subscribeParticipants(onData, onError) {
   return onSnapshot(collection(db, 'participants'), snapshot => {
-    onData(snapshot.docs.map(d => ({
-      participant_id: (d.data() || {}).participant_id || d.id,
-      group_id: (d.data() || {}).group_id || ''
-    })).sort((a, b) => a.participant_id.localeCompare(b.participant_id)));
+    onData(snapshot.docs.map(d => {
+      const raw = d.data() || {};
+      return {
+        participant_id: raw.participant_id || d.id,
+        group_id: raw.group_id || '',
+        display_name: String(raw.display_name || '').trim()
+      };
+    }).sort((a, b) => a.participant_id.localeCompare(b.participant_id)));
   }, onError);
+}
+
+export function updateParticipantDisplayName(participantId, displayName) {
+  // Only touch display_name so security rules can require hasOnly(['display_name']).
+  return updateDoc(doc(db, 'participants', participantId), {
+    display_name: String(displayName || '').trim()
+  });
 }
 
 export async function fetchContact(participantId) {

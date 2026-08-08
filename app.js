@@ -53,6 +53,8 @@ const BAD_WORDS = [
 const state = {
   participantId: null,
   participants: [],
+  // group_id -> { display_name, messaging_status, voting_status, ... }
+  groupMeta: {},
   inboxMessages: [],
   sentMessages: [],
   messagingOpen: true,
@@ -60,6 +62,9 @@ const state = {
   monitorMessages: [],
   monitorViewFilter: 'all',
   monitorGroupFilter: '',
+  staffMonitorMessages: [],
+  staffMonitorBootstrapped: false,
+  staffKnownMessageIds: new Set(),
   adminLoad: null,
   votingConfig: { voting_status: 'DRAFT', allow_resubmit: false, calculated_at: '', published_at: '' },
   knownMessageIds: new Set(),
@@ -99,7 +104,11 @@ const state = {
     selectedId: null,
     detail: null
   },
-  presence: []
+  presence: [],
+  staffGroup: {
+    submissions: [],
+    results: []
+  }
 };
 
 let adminParticipantCombobox = null;
@@ -193,7 +202,27 @@ function cacheDOM() {
   DOM.profileAvatar = document.getElementById('profile-avatar');
   DOM.profileName = document.getElementById('profile-name');
   DOM.profileGroup = document.getElementById('profile-group');
+  DOM.profileLoginId = document.getElementById('profile-login-id');
+  DOM.profileDisplayName = document.getElementById('profile-display-name');
+  DOM.profileSaveName = document.getElementById('profile-save-name');
   DOM.profileStats = document.getElementById('profile-stats');
+  DOM.homeStaffCard = document.getElementById('home-staff-card');
+  DOM.staffFacilitatorPanel = document.getElementById('staff-facilitator-panel');
+  DOM.staffGroupTitle = document.getElementById('staff-group-title');
+  DOM.staffGroupStatus = document.getElementById('staff-group-status');
+  DOM.staffGroupNameInput = document.getElementById('staff-group-name');
+  DOM.staffSaveGroupName = document.getElementById('staff-save-group-name');
+  DOM.staffEnableMsg = document.getElementById('staff-enable-msg');
+  DOM.staffDisableMsg = document.getElementById('staff-disable-msg');
+  DOM.staffVotingBadge = document.getElementById('staff-voting-badge');
+  DOM.staffOpenVoting = document.getElementById('staff-open-voting');
+  DOM.staffCloseVoting = document.getElementById('staff-close-voting');
+  DOM.staffCalculate = document.getElementById('staff-calculate');
+  DOM.staffPublish = document.getElementById('staff-publish');
+  DOM.staffMessageList = document.getElementById('staff-message-list');
+  DOM.staffMsgEmpty = document.getElementById('staff-msg-empty');
+  DOM.staffMsgCount = document.getElementById('staff-msg-count');
+  DOM.adminGroupOverrides = document.getElementById('admin-group-overrides');
 
   DOM.adminLogout = document.getElementById('admin-logout');
   DOM.adminDashboardPanel = document.getElementById('admin-dashboard-panel');
@@ -638,10 +667,92 @@ function compareGroupLabels(a, b) {
 }
 
 function formatGroupLabel(label) {
+  const meta = state.groupMeta[label];
+  if (meta && meta.display_name) return meta.display_name;
   const m = String(label || '').match(/^GROUP_(\d+)$/i);
   if (m) return 'Group ' + m[1];
   if (/STAFF/i.test(label)) return 'Staff';
   return label || '未分組';
+}
+
+/** Seat ids are 1A…6H. Named people (WILL, …) are Staff. */
+function isSeatParticipantId(participantId) {
+  return /^[0-9][A-H]$/i.test(String(participantId || '').trim());
+}
+
+function isStaffPerson(pOrId) {
+  const id = typeof pOrId === 'string'
+    ? pOrId
+    : (pOrId && pOrId.participant_id) || '';
+  return !!id && !isSeatParticipantId(id) && !isAdminLogin(id);
+}
+
+function isNumberedGroupId(groupId) {
+  return /^GROUP_\d+$/i.test(String(groupId || '').trim());
+}
+
+/** Staff who have been moved into a numbered group facilitate that group. */
+function getFacilitatorGroupId(participantId = state.participantId) {
+  if (!isStaffPerson(participantId)) return '';
+  const p = findParticipantById(participantId);
+  const groupId = p ? p.group_id : '';
+  return isNumberedGroupId(groupId) ? groupId : '';
+}
+
+function isGroupFacilitator(participantId = state.participantId) {
+  return !!getFacilitatorGroupId(participantId);
+}
+
+function displayNameOf(pOrId) {
+  const p = typeof pOrId === 'string' ? findParticipantById(pOrId) : pOrId;
+  if (!p) return typeof pOrId === 'string' ? pOrId : '';
+  return (p.display_name || '').trim() || p.participant_id || '';
+}
+
+/** Shown in lists: "小明（1A）" so login ids stay discoverable. */
+function displayLabelOf(pOrId) {
+  const p = typeof pOrId === 'string' ? findParticipantById(pOrId) : pOrId;
+  if (!p) return typeof pOrId === 'string' ? pOrId : '';
+  const id = p.participant_id || '';
+  const name = (p.display_name || '').trim();
+  return name && name !== id ? `${name}（${id}）` : id;
+}
+
+function myGroupId() {
+  const p = findParticipantById(state.participantId);
+  return (p && p.group_id) || '';
+}
+
+function groupMessagingOpen(groupId) {
+  const meta = state.groupMeta[groupId];
+  if (!meta) return true;
+  return meta.messaging_status !== 'CLOSE';
+}
+
+/** Global CLOSE is a master kill-switch; group CLOSE is a local override. */
+function isMessagingOpenForGroup(groupId) {
+  return !!state.messagingOpen && groupMessagingOpen(groupId);
+}
+
+function isMessagingOpenForMe() {
+  return isMessagingOpenForGroup(myGroupId());
+}
+
+function effectiveVotingConfigForGroup(groupId) {
+  const meta = state.groupMeta[groupId];
+  if (meta && meta.voting_status) {
+    return {
+      voting_status: meta.voting_status,
+      allow_resubmit: !!meta.allow_resubmit,
+      calculated_at: meta.calculated_at || '',
+      published_at: meta.published_at || ''
+    };
+  }
+  return state.votingConfig;
+}
+
+function effectiveVotingConfigForMe() {
+  return effectiveVotingConfigForGroup(myGroupId());
 }
 
 /**
@@ -724,7 +835,9 @@ function createCombobox(config) {
       const id = typeof item === 'string' ? item : item.participant_id;
       if (comboState.excludeIds.includes(id)) return false;
       if (!q) return true;
-      return id.toUpperCase().includes(q);
+      const label = getLabel(item).toUpperCase();
+      const name = typeof item === 'string' ? '' : String(item.display_name || '').toUpperCase();
+      return id.toUpperCase().includes(q) || label.includes(q) || (name && name.includes(q));
     });
   }
 
@@ -843,10 +956,12 @@ function isStaffGroup(groupId) {
 }
 
 function isStaffParticipant(p) {
-  return !!(p && isStaffGroup(p.group_id));
+  // Prefer identity (named Staff) over current group, so facilitators moved
+  // into GROUP_1…6 still type their id at login instead of appearing in the list.
+  return !!(p && (isStaffPerson(p) || isStaffGroup(p.group_id)));
 }
 
-/** Login dropdown: numbered groups only. Staff type their own id. */
+/** Login dropdown: seat roster only. Staff type their own id. */
 function getLoginMenuParticipants() {
   return state.participants.filter(p => !isStaffParticipant(p));
 }
@@ -899,10 +1014,10 @@ function initSendCombobox() {
     toggle: DOM.sendComboboxToggle,
     items: state.participants,
     excludeIds: exclude,
-    getLabel: (item) => item.participant_id,
+    getLabel: (item) => displayLabelOf(item),
     onSelect: (item) => {
       selectedReceiverId = item.participant_id;
-      DOM.sendReceiver.value = item.participant_id;
+      DOM.sendReceiver.value = displayLabelOf(item);
     }
   });
 }
@@ -1118,24 +1233,72 @@ function subscribeAndWait(subscribe, handle, label) {
   });
 }
 
+function applyEffectiveVotingToTrophyState() {
+  const config = effectiveVotingConfigForMe();
+  const prevStatus = state.trophy.votingStatus;
+  state.trophy.votingStatus = config.voting_status;
+  state.trophy.trophyRevision = config.published_at || config.calculated_at || config.voting_status;
+  recalcTrophyPermissions();
+  ensureResultSubscription();
+  updateTrophyStatusBanner();
+  renderParticipantTrophyResults();
+  renderTrophyTeammates();
+  renderProfile();
+  renderStaffFacilitatorPanel();
+  if (votingStatusPrimed && prevStatus !== config.voting_status) {
+    notifyVotingStatusChange(config.voting_status);
+  }
+  votingStatusPrimed = true;
+}
+
 async function startParticipantSubscriptions() {
   const pid = state.participantId;
 
   await Promise.all([
     subscribeAndWait(
+      (cb, err) => data.subscribeParticipants(cb, err),
+      rows => {
+        state.participants = rows;
+        setParticipantsCache(rows);
+        state.trophy.teammates = data.getTeammates(pid, state.participants);
+        refreshComboboxItems();
+        if (sendCombobox) initSendCombobox();
+        updateParticipantGreeting();
+        renderProfile();
+        renderStaffFacilitatorPanel();
+        renderTrophyTeammates();
+        applyEffectiveVotingToTrophyState();
+      },
+      '參加者名單'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeGroups(cb, err),
+      map => {
+        state.groupMeta = map || {};
+        updateSendFormState();
+        updateCharCounter();
+        applyEffectiveVotingToTrophyState();
+        renderStaffFacilitatorPanel();
+        renderProfile();
+      },
+      '組別設定'
+    ),
+    subscribeAndWait(
       (cb, err) => data.subscribeMessagingStatus(cb, err),
       status => {
-        const wasOpen = state.messagingOpen;
+        const wasOpen = isMessagingOpenForMe();
         state.messagingOpen = status === 'OPEN';
         updateSendFormState();
         updateCharCounter();
-        if (messagingStatusPrimed && wasOpen !== state.messagingOpen) {
+        const nowOpen = isMessagingOpenForMe();
+        if (messagingStatusPrimed && wasOpen !== nowOpen) {
           showToast(
-            state.messagingOpen ? '留言功能已重新開放' : '留言功能已關閉',
-            state.messagingOpen ? 'success' : 'info'
+            nowOpen ? '留言功能已重新開放' : '留言功能已關閉',
+            nowOpen ? 'success' : 'info'
           );
         }
         messagingStatusPrimed = true;
+        renderStaffFacilitatorPanel();
       },
       '留言開關'
     ),
@@ -1160,20 +1323,8 @@ async function startParticipantSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeVotingConfig(cb, err),
       config => {
-        const prevStatus = state.trophy.votingStatus;
         state.votingConfig = config;
-        state.trophy.votingStatus = config.voting_status;
-        state.trophy.trophyRevision = config.published_at || config.calculated_at || config.voting_status;
-        recalcTrophyPermissions();
-        ensureResultSubscription();
-        updateTrophyStatusBanner();
-        renderParticipantTrophyResults();
-        renderTrophyTeammates();
-        renderProfile();
-        if (votingStatusPrimed && prevStatus !== config.voting_status) {
-          notifyVotingStatusChange(config.voting_status);
-        }
-        votingStatusPrimed = true;
+        applyEffectiveVotingToTrophyState();
       },
       '投票狀態'
     ),
@@ -1194,6 +1345,23 @@ async function startParticipantSubscriptions() {
       '投票紀錄'
     )
   ]);
+
+  const facilitateGroup = getFacilitatorGroupId(pid);
+  if (facilitateGroup) {
+    track(data.subscribeGroupThreadMessages(
+      facilitateGroup,
+      messages => {
+        state.staffMonitorMessages = messages;
+        if (!state.staffMonitorBootstrapped) {
+          state.staffKnownMessageIds = new Set(messages.map(m => m.message_id));
+          state.staffMonitorBootstrapped = true;
+        }
+        renderStaffGroupMessages();
+        renderStaffFacilitatorPanel();
+      },
+      reportSubscriptionError('組內留言監控')
+    ));
+  }
 }
 
 /**
@@ -1202,7 +1370,7 @@ async function startParticipantSubscriptions() {
  * happened, and closed again if the admin reopens voting.
  */
 function ensureResultSubscription() {
-  const published = state.votingConfig.voting_status === 'PUBLISHED';
+  const published = effectiveVotingConfigForMe().voting_status === 'PUBLISHED';
 
   if (!published) {
     if (resultUnsubscribe) {
@@ -1229,11 +1397,12 @@ function ensureResultSubscription() {
 
 /** Whether this participant may still change their ballot right now. */
 function recalcTrophyPermissions() {
-  const open = state.votingConfig.voting_status === 'VOTING_OPEN';
+  const config = effectiveVotingConfigForMe();
+  const open = config.voting_status === 'VOTING_OPEN';
   const submitted = state.trophy.submissionStatus === 'submitted';
-  state.trophy.editable = open && (!submitted || state.votingConfig.allow_resubmit);
+  state.trophy.editable = open && (!submitted || config.allow_resubmit);
   state.trophy.readonly = !state.trophy.editable;
-  state.trophy.showResults = state.votingConfig.voting_status === 'PUBLISHED';
+  state.trophy.showResults = config.voting_status === 'PUBLISHED';
 }
 
 async function enterParticipantDashboard() {
@@ -1264,7 +1433,8 @@ async function enterParticipantDashboard() {
 
 function updateParticipantGreeting() {
   if (!DOM.participantGreeting) return;
-  DOM.participantGreeting.innerHTML = '你好，' + escapeHtml(state.participantId || '') + ' ' + appIcon('wave', 'inline-icon');
+  const name = displayNameOf(state.participantId) || state.participantId || '';
+  DOM.participantGreeting.innerHTML = '你好，' + escapeHtml(name) + ' ' + appIcon('wave', 'inline-icon');
   if (DOM.participantSubgreeting) {
     DOM.participantSubgreeting.innerHTML = 'Just For You ' + appIcon('heart', 'inline-icon');
   }
@@ -1273,9 +1443,14 @@ function updateParticipantGreeting() {
 function renderProfile() {
   if (!DOM.profileStats) return;
   const p = state.participants.find(x => x.participant_id === state.participantId) || {};
-  if (DOM.profileAvatar) DOM.profileAvatar.textContent = (state.participantId || '?').slice(0, 2);
-  if (DOM.profileName) DOM.profileName.textContent = state.participantId || '—';
-  if (DOM.profileGroup) DOM.profileGroup.textContent = p.group_id || '未分組';
+  const name = displayNameOf(p) || state.participantId || '—';
+  if (DOM.profileAvatar) DOM.profileAvatar.textContent = name.slice(0, 2);
+  if (DOM.profileName) DOM.profileName.textContent = name;
+  if (DOM.profileGroup) DOM.profileGroup.textContent = formatGroupLabel(p.group_id || '未分組');
+  if (DOM.profileLoginId) DOM.profileLoginId.textContent = '登入編號：' + (state.participantId || '—');
+  if (DOM.profileDisplayName && document.activeElement !== DOM.profileDisplayName) {
+    DOM.profileDisplayName.value = (p.display_name || '').trim();
+  }
 
   const sentCount = state.sentMessages.filter(m => m.status === 'active').length;
   const receivedCount = state.inboxMessages.length;
@@ -1285,9 +1460,10 @@ function renderProfile() {
   DOM.profileStats.innerHTML = `
     <div class="profile-stat"><div class="profile-stat-value">${sentCount}</div><div class="profile-stat-label">已發留言</div></div>
     <div class="profile-stat"><div class="profile-stat-value">${receivedCount}</div><div class="profile-stat-label">收到留言</div></div>
-    <div class="profile-stat"><div class="profile-stat-value">${escapeHtml(p.group_id || '—')}</div><div class="profile-stat-label">分組</div></div>
+    <div class="profile-stat"><div class="profile-stat-value">${escapeHtml(formatGroupLabel(p.group_id || '—'))}</div><div class="profile-stat-label">分組</div></div>
     <div class="profile-stat"><div class="profile-stat-value">${votingLabel}</div><div class="profile-stat-label">投票狀態</div></div>
   `;
+  renderStaffFacilitatorPanel();
 }
 
 /**
@@ -1334,10 +1510,36 @@ function refreshAdminTrophyViews() {
 async function startAdminSubscriptions() {
   await Promise.all([
     subscribeAndWait(
+      (cb, err) => data.subscribeParticipants(cb, err),
+      rows => {
+        state.participants = rows;
+        setParticipantsCache(rows);
+        initAdminParticipantCombobox();
+        refreshAdminTrophyViews();
+        renderAdminDashboard();
+        renderAdminLoginStatus();
+        renderAdminGroupOverrides();
+      },
+      '參加者名單'
+    ),
+    subscribeAndWait(
+      (cb, err) => data.subscribeGroups(cb, err),
+      map => {
+        state.groupMeta = map || {};
+        refreshAdminTrophyViews();
+        renderAdminDashboard();
+        renderAdminGroupOverrides();
+        populateAdminMsgGroupFilter();
+        if (isAdminMessagesTabActive()) renderAdminMessages();
+      },
+      '組別設定'
+    ),
+    subscribeAndWait(
       (cb, err) => data.subscribeMessagingStatus(cb, err),
       status => {
         state.messagingOpen = status === 'OPEN';
         renderAdminDashboard();
+        renderAdminGroupOverrides();
       },
       '留言開關'
     ),
@@ -1447,8 +1649,8 @@ function renderAdminDashboard(fetchData) {
       ? (VOTING_STATUS_LABELS[state.adminTrophy.overview.voting_status] || '—')
       : '—';
     DOM.adminDashboardStatus.innerHTML = `
-      <div class="status-item"><span>留言功能</span><span>${state.messagingOpen ? appIcon('dot-green') + ' 開啟' : appIcon('dot-red') + ' 關閉'}</span></div>
-      <div class="status-item"><span>投票狀態</span><span>${votingLabel}</span></div>
+      <div class="status-item"><span>全域留言</span><span>${state.messagingOpen ? appIcon('dot-green') + ' 開啟' : appIcon('dot-red') + ' 關閉'}</span></div>
+      <div class="status-item"><span>全域投票</span><span>${votingLabel}</span></div>
     `;
   }
 
@@ -1458,11 +1660,12 @@ function renderAdminDashboard(fetchData) {
       ? '<p class="form-hint">暫無最近活動</p>'
       : recent.map(m => `
         <div class="activity-item">
-          <span>${escapeHtml(m.sender_id)} → ${escapeHtml(m.receiver_id)}</span>
+          <span>${escapeHtml(displayLabelOf(m.sender_id))} → ${escapeHtml(displayLabelOf(m.receiver_id))}</span>
           <time>${formatDateTime(m.created_at)}</time>
         </div>
       `).join('');
   }
+  renderAdminGroupOverrides();
 
   if (DOM.adminVersion) DOM.adminVersion.textContent = 'Firestore';
   if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length || '—');
@@ -1483,6 +1686,10 @@ function handleLogout() {
   state.inboxMessages = [];
   state.sentMessages = [];
   state.monitorMessages = [];
+  state.staffMonitorMessages = [];
+  state.staffMonitorBootstrapped = false;
+  state.staffKnownMessageIds = new Set();
+  state.groupMeta = {};
   state.presence = [];
   state.adminTrophy.matrixModal = null;
   state.knownMessageIds = new Set();
@@ -1521,9 +1728,12 @@ function handleLogout() {
 // ─── Messaging — Send ─────────────────────────────────────────────────────────
 
 function updateSendFormState() {
-  const closed = !state.messagingOpen;
+  const closed = !isMessagingOpenForMe();
+  const groupClosed = state.messagingOpen && !groupMessagingOpen(myGroupId());
   if (DOM.sendClosedBanner) {
-    DOM.sendClosedBanner.textContent = '留言功能目前已關閉，請稍後再試';
+    DOM.sendClosedBanner.textContent = groupClosed
+      ? '本組留言功能目前已關閉，請稍後再試'
+      : '留言功能目前已關閉，請稍後再試';
     DOM.sendClosedBanner.classList.toggle('hidden', !closed);
   }
   if (DOM.sendClosedState) DOM.sendClosedState.classList.toggle('hidden', !closed);
@@ -1543,12 +1753,13 @@ function updateCharCounter() {
   const hasBad = containsBadWords(DOM.sendContent.value);
   DOM.badWordsWarning.classList.toggle('hidden', !hasBad);
   const empty = !DOM.sendContent.value.trim();
-  DOM.sendSubmit.disabled = hasBad || !state.messagingOpen || empty;
+  const messagingOpen = isMessagingOpenForMe();
+  DOM.sendSubmit.disabled = hasBad || !messagingOpen || empty;
 }
 
 async function handleSendMessage(e) {
   e.preventDefault();
-  if (!state.messagingOpen) {
+  if (!isMessagingOpenForMe()) {
     showToast('留言功能目前已關閉', 'error');
     return;
   }
@@ -1560,6 +1771,9 @@ async function handleSendMessage(e) {
   if (!content) { showToast('請輸入留言內容', 'error'); return; }
   if (containsBadWords(content)) { showToast('內容包含不適當用語', 'error'); return; }
 
+  const sender = findParticipantById(state.participantId);
+  const receiver = findParticipantById(receiverId);
+
   DOM.sendContent.value = '';
   DOM.sendReceiver.value = '';
   selectedReceiverId = null;
@@ -1570,7 +1784,10 @@ async function handleSendMessage(e) {
   // the message on screen by the time this returns. If the network is down the
   // SDK holds the write and sends it on reconnect, which is why there is no
   // spinner and no retry button any more.
-  data.sendMessage(state.participantId, receiverId, content).catch(err => {
+  data.sendMessage(state.participantId, receiverId, content, {
+    senderGroupId: (sender && sender.group_id) || '',
+    receiverGroupId: (receiver && receiver.group_id) || ''
+  }).catch(err => {
     showToast('留言傳送失敗：' + err.message, 'error');
   });
   showToast('留言已發送', 'success');
@@ -1869,7 +2086,7 @@ function renderAdminMessages() {
     card.innerHTML = `
       <div class="admin-msg-header">
         <time datetime="${escapeHtml(msg.created_at || '')}">${formatMessageTime(msg.created_at)}</time>
-        <span class="admin-msg-route">${escapeHtml(msg.sender_id)}<span class="arrow">→</span>${escapeHtml(msg.receiver_id)}</span>
+        <span class="admin-msg-route">${escapeHtml(displayLabelOf(msg.sender_id))}<span class="arrow">→</span>${escapeHtml(displayLabelOf(msg.receiver_id))}</span>
         ${isDeleted ? '<span class="badge badge-deleted">已撤回</span>' : ''}
       </div>
       <div class="admin-msg-body">
@@ -2201,7 +2418,7 @@ function toggleTrophyAssignment(teammateId, trophyId) {
     const holder = findTrophyHolder(trophyId, teammateId);
     if (holder) {
       showToast(
-        '「' + trophyNameById(trophyId) + '」已配對畀 ' + holder + '，請先取消再改',
+        '「' + trophyNameById(trophyId) + '」已配對畀 ' + displayLabelOf(holder) + '，請先取消再改',
         'error'
       );
       return;
@@ -2234,7 +2451,7 @@ function renderTrophyTeammates() {
         + (isTaken ? ' taken' : '');
       const disabled = !editable || isTaken;
       const title = isTaken
-        ? ('已配對畀 ' + holder)
+        ? ('已配對畀 ' + displayLabelOf(holder))
         : escapeHtml(trophy.trophy_name);
       return `<button type="button" class="${classes}"
         data-teammate="${escapeHtml(tid)}" data-trophy="${escapeHtml(trophy.trophy_id)}"
@@ -2242,11 +2459,11 @@ function renderTrophyTeammates() {
         ${disabled ? 'disabled' : ''}>${escapeHtml(trophy.trophy_name)}</button>`;
     }).join('');
 
-    const initials = tid.slice(0, 2);
-    // Short seat ids (e.g. 1B) match the avatar text — don't print them twice.
-    const nameLabel = tid.length > 2
-      ? escapeHtml(tid)
-      : '';
+    const label = displayLabelOf(teammate);
+    const initials = displayNameOf(teammate).slice(0, 2);
+    const nameLabel = label === tid && tid.length <= 2
+      ? ''
+      : escapeHtml(label);
     card.innerHTML = `
       <div class="trophy-card-header">
         <div class="trophy-card-name">
@@ -2386,7 +2603,7 @@ function renderGroupStatusCards(options) {
       const classes = `voter-member ${m[doneKey] ? 'voter-done' : 'voter-pending'}${focusId === m.participant_id ? ' is-focus' : ''}`;
       const inner = `
         <span class="voter-check ${m[doneKey] ? 'app-icon app-icon-check' : 'voter-check-empty'}" aria-hidden="true">${m[doneKey] ? '' : '○'}</span>
-        <span class="voter-id">${escapeHtml(m.participant_id)}</span>
+        <span class="voter-id">${escapeHtml(displayLabelOf(m.participant_id))}</span>
         <span class="voter-status-label">${m[doneKey] ? doneLabel : pendingLabel}</span>
       `;
       if (!voteMatrix) {
@@ -2995,6 +3212,223 @@ async function handleAdminCalculate(btn) {
   })());
 }
 
+// ─── Display names + Staff group facilitation ────────────────────────────────
+
+async function handleSaveDisplayName() {
+  const pid = state.participantId;
+  if (!pid) return;
+  const name = String(DOM.profileDisplayName?.value || '').trim();
+  if (name.length > 40) {
+    showToast('顯示名稱最多 40 字', 'error');
+    return;
+  }
+  await runProgressButton(DOM.profileSaveName, (async () => {
+    try {
+      await data.updateParticipantDisplayName(pid, name);
+      const person = findParticipantById(pid);
+      if (person) person.display_name = name;
+      showToast(name ? '顯示名稱已更新' : '已清除顯示名稱', 'success');
+      updateParticipantGreeting();
+      renderProfile();
+      refreshComboboxItems();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+function renderStaffFacilitatorPanel() {
+  const panel = DOM.staffFacilitatorPanel;
+  if (!panel) return;
+  const groupId = getFacilitatorGroupId();
+  const show = !!groupId && !state.isAdmin;
+  panel.classList.toggle('hidden', !show);
+  if (DOM.homeStaffCard) DOM.homeStaffCard.classList.toggle('hidden', !show);
+  if (!show) return;
+
+  const meta = state.groupMeta[groupId] || {};
+  const voting = effectiveVotingConfigForGroup(groupId);
+  const msgOpen = isMessagingOpenForGroup(groupId);
+  if (DOM.staffGroupTitle) {
+    DOM.staffGroupTitle.textContent = formatGroupLabel(groupId);
+  }
+  if (DOM.staffGroupNameInput && document.activeElement !== DOM.staffGroupNameInput) {
+    DOM.staffGroupNameInput.value = meta.display_name || '';
+  }
+  if (DOM.staffGroupStatus) {
+    DOM.staffGroupStatus.innerHTML = `
+      <div class="status-item"><span>本組留言</span><span>${msgOpen ? appIcon('dot-green') + ' 開啟' : appIcon('dot-red') + ' 關閉'}</span></div>
+      <div class="status-item"><span>本組投票</span><span>${escapeHtml(VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status)}</span></div>
+      <div class="status-item"><span>組內留言</span><span>${state.staffMonitorMessages.length} 則</span></div>
+    `;
+  }
+  if (DOM.staffVotingBadge) {
+    DOM.staffVotingBadge.textContent = VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status;
+    DOM.staffVotingBadge.className = 'voting-status-badge ' + votingStatusToneClass(voting.voting_status);
+  }
+  const steps = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
+  const idx = steps.indexOf(voting.voting_status);
+  document.querySelectorAll('#staff-voting-stepper .stepper-step').forEach(step => {
+    const stepIdx = steps.indexOf(step.dataset.step);
+    step.classList.toggle('active', stepIdx === idx);
+    step.classList.toggle('done', stepIdx >= 0 && stepIdx < idx);
+  });
+}
+
+function renderStaffGroupMessages() {
+  const list = DOM.staffMessageList;
+  if (!list) return;
+  const messages = state.staffMonitorMessages;
+  if (DOM.staffMsgEmpty) DOM.staffMsgEmpty.classList.toggle('hidden', messages.length > 0);
+  if (DOM.staffMsgCount) DOM.staffMsgCount.textContent = '共 ' + messages.length + ' 則';
+  list.innerHTML = '';
+  messages.forEach(msg => {
+    const isDeleted = msg.status === 'deleted';
+    const isNew = !state.staffKnownMessageIds.has(msg.message_id);
+    const card = document.createElement('div');
+    card.className = 'admin-msg-card' + (isDeleted ? ' deleted' : '') + (isNew ? ' new-highlight' : '');
+    const action = !isDeleted
+      ? `<button type="button" class="btn btn-danger btn-sm staff-delete-btn" data-id="${escapeHtml(msg.message_id)}">撤回</button>`
+      : `<button type="button" class="btn btn-secondary btn-sm staff-restore-btn" data-id="${escapeHtml(msg.message_id)}">取消撤回</button>`;
+    card.innerHTML = `
+      <div class="admin-msg-header">
+        <time datetime="${escapeHtml(msg.created_at || '')}">${formatMessageTime(msg.created_at)}</time>
+        <span class="admin-msg-route">${escapeHtml(displayLabelOf(msg.sender_id))}<span class="arrow">→</span>${escapeHtml(displayLabelOf(msg.receiver_id))}</span>
+        ${isDeleted ? '<span class="badge badge-deleted">已撤回</span>' : ''}
+      </div>
+      <div class="admin-msg-body">
+        <div class="admin-msg-content">${escapeHtml(msg.content)}</div>
+        <div class="admin-msg-action">${action}</div>
+      </div>
+    `;
+    list.appendChild(card);
+    state.staffKnownMessageIds.add(msg.message_id);
+  });
+  list.querySelectorAll('.staff-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await data.retractMessage(btn.dataset.id);
+        showToast('已撤回', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  });
+  list.querySelectorAll('.staff-restore-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await data.restoreMessage(btn.dataset.id);
+        showToast('已取消撤回', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  });
+}
+
+async function handleStaffSaveGroupName() {
+  const groupId = getFacilitatorGroupId();
+  if (!groupId) return;
+  const name = String(DOM.staffGroupNameInput?.value || '').trim();
+  if (name.length > 40) {
+    showToast('組名最多 40 字', 'error');
+    return;
+  }
+  await runProgressButton(DOM.staffSaveGroupName, (async () => {
+    try {
+      await data.setGroupDisplayName(groupId, name);
+      showToast(name ? '組名已更新' : '已清除自訂組名', 'success');
+      renderStaffFacilitatorPanel();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleStaffMessaging(status, btn) {
+  const groupId = getFacilitatorGroupId();
+  if (!groupId) return;
+  await runProgressButton(btn, (async () => {
+    try {
+      await data.setGroupMessagingStatus(groupId, status);
+      showToast(status === 'OPEN' ? '本組留言已開啟' : '本組留言已關閉', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleStaffVotingAction(status, btn) {
+  const groupId = getFacilitatorGroupId();
+  if (!groupId) return;
+  const confirmMessages = {
+    VOTING_OPEN: '確定要為本組開放投票嗎？',
+    VOTING_CLOSED: '確定要為本組關閉投票嗎？',
+    PUBLISHED: '確定要為本組公布結果嗎？'
+  };
+  if (confirmMessages[status] && !window.confirm(confirmMessages[status])) return;
+  await runProgressButton(btn, (async () => {
+    try {
+      await data.setGroupVotingStatus(groupId, status);
+      showToast('本組投票狀態：' + (VOTING_STATUS_LABELS[status] || status), 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleStaffCalculate(btn) {
+  const groupId = getFacilitatorGroupId();
+  if (!groupId) return;
+  await runProgressButton(btn, (async () => {
+    try {
+      const members = state.participants.filter(p => p.group_id === groupId);
+      const memberIds = members.map(p => p.participant_id);
+      const submissions = await data.fetchSubmissionsForParticipants(memberIds);
+      const trophies = filterValidTrophies(
+        state.trophy.trophies.length ? state.trophy.trophies : await data.fetchTrophies()
+      );
+      const outcome = data.computeResults(members, trophies, submissions);
+      await data.writeResults(outcome.awarded, { groupId });
+      showToast('本組結果計算完成', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+function renderAdminGroupOverrides() {
+  const host = DOM.adminGroupOverrides;
+  if (!host) return;
+  const groups = [...new Set(state.participants.map(p => p.group_id).filter(isNumberedGroupId))]
+    .sort(compareGroupLabels);
+  if (groups.length === 0) {
+    host.innerHTML = '<p class="form-hint">尚未有編號組別</p>';
+    return;
+  }
+  host.innerHTML = groups.map(groupId => {
+    const meta = state.groupMeta[groupId] || {};
+    const voting = effectiveVotingConfigForGroup(groupId);
+    const msgOpen = isMessagingOpenForGroup(groupId);
+    const facilitators = state.participants
+      .filter(p => p.group_id === groupId && isStaffPerson(p))
+      .map(p => displayLabelOf(p));
+    return `
+      <div class="admin-group-override-card">
+        <div class="admin-group-override-head">
+          <strong>${escapeHtml(formatGroupLabel(groupId))}</strong>
+          <span class="form-hint">${escapeHtml(groupId)}</span>
+        </div>
+        <div class="admin-group-override-meta">
+          <span>留言 ${msgOpen ? '開啟' : '關閉'}${meta.messaging_status ? '（組別覆寫）' : '（跟隨全域）'}</span>
+          <span>投票 ${escapeHtml(VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status)}${meta.voting_status ? '（組別覆寫）' : '（跟隨全域）'}</span>
+        </div>
+        <div class="form-hint">負責 Staff：${facilitators.length ? escapeHtml(facilitators.join('、')) : '未指派'}</div>
+      </div>
+    `;
+  }).join('');
+}
+
 // ─── Admin Participant Management ─────────────────────────────────────────────
 
 function initAdminParticipantCombobox() {
@@ -3007,7 +3441,7 @@ function initAdminParticipantCombobox() {
     dropdown: DOM.adminParticipantDropdown,
     toggle: DOM.adminParticipantToggle,
     items: state.participants,
-    getLabel: (item) => item.participant_id,
+    getLabel: (item) => displayLabelOf(item),
     onSelect: (item) => {
       selectAdminParticipant(item.participant_id);
     }
@@ -3257,6 +3691,9 @@ function switchParticipantView(viewName) {
     updateTrophyStatusBanner();
   } else if (viewName === 'profile') {
     renderProfile();
+  } else if (viewName === 'staff') {
+    renderStaffFacilitatorPanel();
+    renderStaffGroupMessages();
   }
 }
 
@@ -3394,6 +3831,31 @@ function bindEvents() {
     btn.addEventListener('click', () => switchParticipantView(btn.dataset.back || 'home'));
   });
 
+  if (DOM.profileSaveName) {
+    DOM.profileSaveName.addEventListener('click', handleSaveDisplayName);
+  }
+  if (DOM.staffSaveGroupName) {
+    DOM.staffSaveGroupName.addEventListener('click', handleStaffSaveGroupName);
+  }
+  if (DOM.staffEnableMsg) {
+    DOM.staffEnableMsg.addEventListener('click', () => handleStaffMessaging('OPEN', DOM.staffEnableMsg));
+  }
+  if (DOM.staffDisableMsg) {
+    DOM.staffDisableMsg.addEventListener('click', () => handleStaffMessaging('CLOSE', DOM.staffDisableMsg));
+  }
+  if (DOM.staffOpenVoting) {
+    DOM.staffOpenVoting.addEventListener('click', () => handleStaffVotingAction('VOTING_OPEN', DOM.staffOpenVoting));
+  }
+  if (DOM.staffCloseVoting) {
+    DOM.staffCloseVoting.addEventListener('click', () => handleStaffVotingAction('VOTING_CLOSED', DOM.staffCloseVoting));
+  }
+  if (DOM.staffCalculate) {
+    DOM.staffCalculate.addEventListener('click', () => handleStaffCalculate(DOM.staffCalculate));
+  }
+  if (DOM.staffPublish) {
+    DOM.staffPublish.addEventListener('click', () => handleStaffVotingAction('PUBLISHED', DOM.staffPublish));
+  }
+
   document.querySelectorAll('.admin-bottom-nav .bottom-nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchAdminTab(btn.dataset.adminTab));
   });
@@ -3487,7 +3949,7 @@ document.addEventListener('DOMContentLoaded', init);
  *
  * Backend: Firebase project tnit-6c48d (Firestore + Email/Password auth).
  * Collections: participants, contacts, trophies, messages, submissions,
- * results, config/messaging, config/voting.
+ * results, groups, config/messaging, config/voting.
  *
  * Participants log in with their id and phone number, which maps to
  * 1A -> 1a@tnit.local. Access is enforced by firestore.rules, not by this file.
