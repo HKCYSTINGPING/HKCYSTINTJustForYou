@@ -482,17 +482,6 @@ export function updateParticipantGroup(participantId, groupId) {
   }, { merge: true });
 }
 
-export async function bulkSetGroups(assignments) {
-  const operations = Object.entries(assignments).map(([participantId, groupId]) => (
-    batch => batch.set(doc(db, 'participants', participantId), {
-      participant_id: participantId,
-      group_id: groupId
-    }, { merge: true })
-  ));
-  await commitAll(operations);
-  return operations.length;
-}
-
 // ─── Admin: clearing data ───────────────────────────────────────────────────
 
 export async function clearParticipantRecords(participantId, options = {}) {
