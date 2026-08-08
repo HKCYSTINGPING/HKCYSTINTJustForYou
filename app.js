@@ -1686,6 +1686,10 @@ function handleLogout() {
   state.inboxMessages = [];
   state.sentMessages = [];
   state.monitorMessages = [];
+  state.staffMonitorMessages = [];
+  state.staffMonitorBootstrapped = false;
+  state.staffKnownMessageIds = new Set();
+  state.groupMeta = {};
   state.presence = [];
   state.adminTrophy.matrixModal = null;
   state.knownMessageIds = new Set();
