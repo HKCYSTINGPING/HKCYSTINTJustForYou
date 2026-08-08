@@ -72,6 +72,8 @@
   --bottom-nav-h: 80px;
   --touch-min: 48px;
   --max-width: 480px;
+  /* Soft keyboard overlap; updated by visualViewport in app.js */
+  --keyboard-inset: 0px;
 
   /* Animation */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -122,6 +124,18 @@ body.admin-active { background: var(--bg); }
   max-width: var(--max-width);
   margin: 0 auto;
   width: 100%;
+}
+
+/* Drop bottom-nav reservation while the keyboard is open; inset padding lives
+   on the scroll container (.app-main) so fields can scroll above the keyboard. */
+html.keyboard-open .screen-app {
+  padding-bottom: var(--safe-bottom);
+}
+
+html.keyboard-open .bottom-nav {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* ─── Splash ─────────────────────────────────────────────────────────────── */
@@ -237,10 +251,28 @@ body.admin-active { background: var(--bg); }
   width: 100%;
 }
 
+/* Keep login scrollable so the soft keyboard (incl. numpad) cannot cover fields */
+#screen-login.screen {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
 .login-inner {
+  flex: 1;
+  min-height: 0;
   justify-content: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding-top: var(--space-2xl);
-  padding-bottom: var(--space-xl);
+  padding-bottom: calc(var(--space-xl) + var(--keyboard-inset));
+}
+
+html.keyboard-open .login-inner {
+  justify-content: flex-start;
+  padding-top: max(var(--space-md), var(--safe-top));
 }
 
 .login-header {
@@ -325,7 +357,8 @@ body.admin-active { background: var(--bg); }
 
 .app-main {
   flex: 1;
-  padding: 0 var(--space-md) var(--space-md);
+  min-height: 0;
+  padding: 0 var(--space-md) calc(var(--space-md) + var(--keyboard-inset));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -610,6 +643,7 @@ body.admin-active { background: var(--bg); }
   flex-direction: column;
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
+  scroll-margin-block: 24px;
 }
 
 .form-group label {
@@ -624,6 +658,7 @@ body.admin-active { background: var(--bg); }
   font-family: var(--font);
   font-size: var(--fs-body);
   padding: 14px var(--space-md);
+  scroll-margin-block: 28px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-warm);

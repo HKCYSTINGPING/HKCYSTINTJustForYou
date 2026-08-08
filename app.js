@@ -1066,6 +1066,145 @@ function isLoginNativeNumpad() {
   return DOM.loginPhone && DOM.loginPhone.inputMode === 'numeric';
 }
 
+// ─── Soft-keyboard avoidance (native numpad / text keyboard) ─────────────────
+
+const KEYBOARD_OPEN_THRESHOLD = 120;
+let keyboardAvoidanceRaf = 0;
+
+function isTextEntryElement(el) {
+  if (!el || el === document.body || el === document.documentElement) return false;
+  const tag = el.tagName;
+  if (tag === 'TEXTAREA') return !el.readOnly && !el.disabled;
+  if (tag === 'INPUT') {
+    if (el.readOnly || el.disabled) return false;
+    const type = String(el.type || 'text').toLowerCase();
+    return ![
+      'button', 'submit', 'reset', 'checkbox', 'radio',
+      'file', 'hidden', 'image', 'range', 'color',
+    ].includes(type);
+  }
+  return !!el.isContentEditable;
+}
+
+function getScrollParent(el) {
+  let node = el && el.parentElement;
+  while (node && node !== document.body && node !== document.documentElement) {
+    const style = window.getComputedStyle(node);
+    const oy = style.overflowY;
+    if (
+      (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+      node.scrollHeight > node.clientHeight + 1
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+function getKeyboardInset() {
+  const vv = window.visualViewport;
+  if (!vv) return 0;
+  return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+}
+
+function adjustScrollBy(el, delta) {
+  if (!el || Math.abs(delta) < 2) return;
+  const scroller = getScrollParent(el);
+  if (
+    scroller === document.scrollingElement ||
+    scroller === document.documentElement ||
+    scroller === document.body
+  ) {
+    window.scrollBy({ top: delta, left: 0, behavior: 'smooth' });
+    return;
+  }
+  scroller.scrollBy({ top: delta, left: 0, behavior: 'smooth' });
+}
+
+/**
+ * Keep the focused text field inside the visual viewport so the soft keyboard
+ * (including the system numpad) never covers it.
+ */
+function ensureActiveFieldVisible() {
+  const el = document.activeElement;
+  if (!isTextEntryElement(el)) return;
+
+  const vv = window.visualViewport;
+  if (!vv) {
+    el.scrollIntoView({ block: 'center', inline: 'nearest' });
+    return;
+  }
+
+  const margin = 24;
+  const visibleTop = vv.offsetTop + margin;
+  const visibleBottom = vv.offsetTop + vv.height - margin;
+  const rect = el.getBoundingClientRect();
+
+  // Prefer scrolling the whole form-group so the label stays visible too.
+  const group = el.closest('.form-group');
+  const targetRect = group ? group.getBoundingClientRect() : rect;
+
+  if (targetRect.top >= visibleTop && rect.bottom <= visibleBottom) return;
+
+  if (rect.height > vv.height - margin * 2) {
+    adjustScrollBy(el, rect.top - visibleTop);
+    return;
+  }
+
+  const anchorTop = group ? targetRect.top : rect.top;
+  const anchorBottom = rect.bottom;
+  const anchorCenter = (anchorTop + anchorBottom) / 2;
+  const viewCenter = vv.offsetTop + vv.height / 2;
+  adjustScrollBy(el, anchorCenter - viewCenter);
+}
+
+function updateKeyboardAvoidance() {
+  const inset = getKeyboardInset();
+  document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
+  const open = inset >= KEYBOARD_OPEN_THRESHOLD;
+  document.documentElement.classList.toggle('keyboard-open', open);
+
+  if (open && isTextEntryElement(document.activeElement)) {
+    requestAnimationFrame(ensureActiveFieldVisible);
+  }
+}
+
+function scheduleKeyboardAvoidance() {
+  if (keyboardAvoidanceRaf) cancelAnimationFrame(keyboardAvoidanceRaf);
+  keyboardAvoidanceRaf = requestAnimationFrame(() => {
+    keyboardAvoidanceRaf = 0;
+    updateKeyboardAvoidance();
+  });
+}
+
+function initKeyboardAvoidance() {
+  const vv = window.visualViewport;
+  if (vv) {
+    vv.addEventListener('resize', scheduleKeyboardAvoidance);
+    vv.addEventListener('scroll', scheduleKeyboardAvoidance);
+  }
+  window.addEventListener('resize', scheduleKeyboardAvoidance);
+
+  document.addEventListener('focusin', (e) => {
+    if (!isTextEntryElement(e.target)) return;
+    scheduleKeyboardAvoidance();
+    // Soft keyboards animate in; re-check after the inset settles.
+    setTimeout(updateKeyboardAvoidance, 280);
+    setTimeout(ensureActiveFieldVisible, 320);
+  });
+
+  document.addEventListener('focusout', () => {
+    setTimeout(() => {
+      if (!isTextEntryElement(document.activeElement)) {
+        scheduleKeyboardAvoidance();
+      }
+    }, 80);
+  });
+
+  updateKeyboardAvoidance();
+}
+
 /**
  * Toggle the system numeric keyboard via inputmode. Always focus the password
  * field when enabling so Staff do not need to tap the text field first.
@@ -1095,6 +1234,13 @@ function setLoginNativeNumpad(enabled) {
       if (document.activeElement !== DOM.loginPhone) {
         DOM.loginPhone.focus({ preventScroll: true });
       }
+      // Keep the password field above the rising numpad.
+      scheduleKeyboardAvoidance();
+      setTimeout(() => {
+        updateKeyboardAvoidance();
+        ensureActiveFieldVisible();
+      }, 120);
+      setTimeout(ensureActiveFieldVisible, 360);
     }, 30);
   });
 }
@@ -3915,6 +4061,7 @@ function bindEvents() {
 function init() {
   cacheDOM();
   bindEvents();
+  initKeyboardAvoidance();
   initAdminMessageScrollPause();
   startApp();
 }
