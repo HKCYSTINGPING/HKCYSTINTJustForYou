@@ -3203,7 +3203,7 @@ async function handleAdminDeleteAllRecords() {
 }
 
 async function handleAdminBulkAutoGroup() {
-  if (!window.confirm('確定要依參加者編號自動修正全部分組嗎？\n（例如 1A→GROUP_1、其他→GROUP_STAFF）')) return;
+  if (!window.confirm('確定要依參加者編號自動修正全部分組嗎？\n（例如 1A→GROUP_1、1H→GROUP_1、其他→GROUP_STAFF）')) return;
 
   await runProgressButton(DOM.adminBulkAutoGroup, (async () => {
     try {
@@ -3225,7 +3225,7 @@ async function handleAdminBulkAutoGroup() {
 async function handleAdminBulkApplyGroup() {
   const groupId = (DOM.adminBulkGroup.value || DOM.adminEditGroup.value || '').trim();
   if (!groupId) {
-    showToast('請在「統一分組」欄位輸入 group_id', 'error');
+    showToast('請在「統一分組」欄位選擇 group_id', 'error');
     return;
   }
   if (!window.confirm('確定要將分組「' + groupId + '」套用到全部 ' + state.participants.length + ' 位參加者嗎？')) return;
