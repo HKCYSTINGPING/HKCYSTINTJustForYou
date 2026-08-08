@@ -396,17 +396,26 @@ function showToast(message, type = 'info') {
   setTimeout(() => toast.remove(), CONFIG.TOAST_DURATION);
 }
 
-function formatDateTime(iso) {
+function formatDateTime(iso, options = {}) {
   if (!iso) return '—';
   try {
     const d = new Date(iso.replace(' ', 'T'));
     if (isNaN(d.getTime())) return iso;
-    return d.toLocaleString('zh-Hant', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
+    const opts = {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    if (options.withSeconds) opts.second = '2-digit';
+    return d.toLocaleString('zh-Hant', opts);
   } catch (_) {
     return iso;
   }
+}
+
+function formatMessageTime(iso) {
+  return formatDateTime(iso, { withSeconds: true });
 }
 
 function escapeHtml(str) {
@@ -1866,12 +1875,12 @@ function renderAdminMessages() {
     }
 
     card.innerHTML = `
-      <div class="admin-msg-route">
-        ${escapeHtml(msg.sender_id)}<span class="arrow">→</span>${escapeHtml(msg.receiver_id)}
+      <div class="admin-msg-header">
+        <time datetime="${escapeHtml(msg.created_at || '')}">${formatMessageTime(msg.created_at)}</time>
+        <span class="admin-msg-route">${escapeHtml(msg.sender_id)}<span class="arrow">→</span>${escapeHtml(msg.receiver_id)}</span>
       </div>
       <div class="admin-msg-content">${escapeHtml(msg.content)}</div>
       <div class="admin-msg-footer">
-        <time>${formatDateTime(msg.created_at)}</time>
         ${deleteBtn}
       </div>
     `;
