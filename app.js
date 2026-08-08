@@ -244,9 +244,6 @@ function cacheDOM() {
   DOM.adminDeleteMessages = document.getElementById('admin-delete-messages');
   DOM.adminResetTrophy = document.getElementById('admin-reset-trophy');
   DOM.adminDeleteAllRecords = document.getElementById('admin-delete-all-records');
-  DOM.adminBulkGroup = document.getElementById('admin-bulk-group');
-  DOM.adminBulkAutoGroup = document.getElementById('admin-bulk-auto-group');
-  DOM.adminBulkApplyGroup = document.getElementById('admin-bulk-apply-group');
   DOM.adminBulkResetVotes = document.getElementById('admin-bulk-reset-votes');
   DOM.adminBulkDeleteAll = document.getElementById('admin-bulk-delete-all');
   DOM.adminVersion = document.getElementById('admin-version');
@@ -3120,15 +3117,6 @@ function populateAdminEditGroupSelect(selectedId) {
   populateGroupSelect(DOM.adminEditGroup, selectedId);
 }
 
-function populateAdminBulkGroupSelect() {
-  populateGroupSelect(DOM.adminBulkGroup, DOM.adminBulkGroup?.value || 'GROUP_1');
-}
-
-function deriveGroupId(participantId) {
-  const match = String(participantId || '').match(/^(\d)[A-H]$/i);
-  return match ? 'GROUP_' + match[1] : 'GROUP_STAFF';
-}
-
 async function handleAdminSaveParticipant() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) { showToast('請先選擇參加者', 'error'); return; }
@@ -3202,49 +3190,6 @@ async function handleAdminDeleteAllRecords() {
   })());
 }
 
-async function handleAdminBulkAutoGroup() {
-  if (!window.confirm('確定要依參加者編號自動修正全部分組嗎？\n（例如 1A→GROUP_1、1H→GROUP_1、其他→GROUP_STAFF）')) return;
-
-  await runProgressButton(DOM.adminBulkAutoGroup, (async () => {
-    try {
-      const assignments = {};
-      state.participants.forEach(p => {
-        assignments[p.participant_id] = deriveGroupId(p.participant_id);
-      });
-      const updated = await data.bulkSetGroups(assignments);
-      state.participants.forEach(p => { p.group_id = assignments[p.participant_id]; });
-      setParticipantsCache(state.participants);
-      showToast('已修正 ' + updated + ' 位參加者', 'success');
-      await afterBulkGroupChange();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  })());
-}
-
-async function handleAdminBulkApplyGroup() {
-  const groupId = (DOM.adminBulkGroup.value || DOM.adminEditGroup.value || '').trim();
-  if (!groupId) {
-    showToast('請在「統一分組」欄位選擇 group_id', 'error');
-    return;
-  }
-  if (!window.confirm('確定要將分組「' + groupId + '」套用到全部 ' + state.participants.length + ' 位參加者嗎？')) return;
-
-  await runProgressButton(DOM.adminBulkApplyGroup, (async () => {
-    try {
-      const assignments = {};
-      state.participants.forEach(p => { assignments[p.participant_id] = groupId; });
-      const updated = await data.bulkSetGroups(assignments);
-      state.participants.forEach(p => { p.group_id = groupId; });
-      setParticipantsCache(state.participants);
-      showToast('已套用到 ' + updated + ' 位參加者', 'success');
-      await afterBulkGroupChange();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  })());
-}
-
 async function handleAdminBulkResetVotes() {
   const count = state.participants.length;
   if (!window.confirm('確定要重置全部 ' + count + ' 位參加者的獎項投票嗎？\n包括：投票草稿／已提交選票、計算結果。\n留言不會被刪除。\n此操作無法復原！')) return;
@@ -3279,17 +3224,8 @@ async function handleAdminBulkDeleteAll() {
   })());
 }
 
-async function afterBulkGroupChange() {
-  initAdminParticipantCombobox();
-  refreshAdminTrophyViews();
-  if (state.adminParticipant.selectedId) {
-    await refreshAdminParticipantDetail();
-  }
-}
-
 function initAdminParticipantsPanel() {
   initAdminParticipantCombobox();
-  populateAdminBulkGroupSelect();
   if (state.adminParticipant.selectedId) {
     refreshAdminParticipantDetail();
   }
@@ -3504,8 +3440,6 @@ function bindEvents() {
   DOM.adminDeleteMessages.addEventListener('click', handleAdminDeleteMessages);
   DOM.adminResetTrophy.addEventListener('click', handleAdminResetTrophy);
   DOM.adminDeleteAllRecords.addEventListener('click', handleAdminDeleteAllRecords);
-  DOM.adminBulkAutoGroup.addEventListener('click', handleAdminBulkAutoGroup);
-  DOM.adminBulkApplyGroup.addEventListener('click', handleAdminBulkApplyGroup);
   DOM.adminBulkResetVotes.addEventListener('click', handleAdminBulkResetVotes);
   DOM.adminBulkDeleteAll.addEventListener('click', handleAdminBulkDeleteAll);
 

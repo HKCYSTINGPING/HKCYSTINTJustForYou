@@ -99,10 +99,12 @@ async function run() {
     );
     check('分組欄位為下拉選單', isSelect === true);
 
-    const bulkIsSelect = await page.evaluate(
-      () => document.getElementById('admin-bulk-group')?.tagName === 'SELECT'
+    check(
+      '已移除批量分組掣',
+      await page.locator('#admin-bulk-auto-group').count() === 0
+        && await page.locator('#admin-bulk-apply-group').count() === 0
+        && await page.locator('#admin-bulk-group').count() === 0
     );
-    check('統一分組欄位為下拉選單', bulkIsSelect === true);
 
     const probeGroup = originalGroup === 'GROUP_1' ? 'GROUP_2' : 'GROUP_1';
     await page.selectOption('#admin-edit-group', probeGroup);
