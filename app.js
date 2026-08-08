@@ -1879,9 +1879,9 @@ function renderAdminMessages() {
         <time datetime="${escapeHtml(msg.created_at || '')}">${formatMessageTime(msg.created_at)}</time>
         <span class="admin-msg-route">${escapeHtml(msg.sender_id)}<span class="arrow">→</span>${escapeHtml(msg.receiver_id)}</span>
       </div>
-      <div class="admin-msg-content">${escapeHtml(msg.content)}</div>
-      <div class="admin-msg-footer">
-        ${deleteBtn}
+      <div class="admin-msg-body">
+        <div class="admin-msg-content">${escapeHtml(msg.content)}</div>
+        <div class="admin-msg-action">${deleteBtn}</div>
       </div>
     `;
     DOM.adminMessageList.appendChild(card);

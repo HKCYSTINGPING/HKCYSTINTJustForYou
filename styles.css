@@ -1638,7 +1638,7 @@ textarea.input-field {
   transition: background var(--duration-normal);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .admin-msg-card.new-highlight {
@@ -1678,7 +1678,16 @@ textarea.input-field {
 
 .admin-msg-route .arrow { margin: 0 4px; color: var(--text-muted); font-weight: 500; }
 
+.admin-msg-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .admin-msg-content {
+  flex: 1;
+  min-width: 0;
   font-size: var(--fs-body);
   line-height: 1.35;
   white-space: nowrap;
@@ -1687,12 +1696,16 @@ textarea.input-field {
   margin: 0;
 }
 
-.admin-msg-footer {
+.admin-msg-action {
+  flex-shrink: 0;
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  min-height: 28px;
   line-height: 1;
+}
+
+.admin-msg-action .btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 /* Voting Stepper */
