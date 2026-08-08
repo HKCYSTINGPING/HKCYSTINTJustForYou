@@ -1557,6 +1557,72 @@ textarea.input-field {
   margin-top: var(--space-xs);
 }
 
+/* Voting-status tone cards: draft / open / closed / calculated / published */
+.voting-status-card.tone-draft,
+.voting-status-badge.tone-draft {
+  background: #F1EBE3;
+  border-color: #E0D4C4;
+  color: var(--text-secondary);
+}
+
+.voting-status-card.tone-draft .stat-value,
+.voting-status-badge.tone-draft {
+  color: var(--text-secondary);
+}
+
+.voting-status-card.tone-open,
+.voting-status-badge.tone-open {
+  background: var(--success-bg);
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  color: #3F7A3E;
+}
+
+.voting-status-card.tone-open .stat-value,
+.voting-status-badge.tone-open {
+  color: #3F7A3E;
+}
+
+.voting-status-card.tone-closed,
+.voting-status-badge.tone-closed {
+  background: var(--danger-bg);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  color: #A04545;
+}
+
+.voting-status-card.tone-closed .stat-value,
+.voting-status-badge.tone-closed {
+  color: #A04545;
+}
+
+.voting-status-card.tone-calculated,
+.voting-status-badge.tone-calculated {
+  background: var(--warning-bg);
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  color: #8A6A2A;
+}
+
+.voting-status-card.tone-calculated .stat-value,
+.voting-status-badge.tone-calculated {
+  color: #8A6A2A;
+}
+
+.voting-status-card.tone-published,
+.voting-status-badge.tone-published {
+  background: color-mix(in srgb, var(--secondary-light) 70%, var(--success-bg));
+  border-color: color-mix(in srgb, var(--secondary) 50%, var(--border));
+  color: #6B4E32;
+}
+
+.voting-status-card.tone-published .stat-value,
+.voting-status-badge.tone-published {
+  color: #6B4E32;
+}
+
+.voting-status-card {
+  border-width: 1.5px;
+  transition: background var(--duration-normal), border-color var(--duration-normal), color var(--duration-normal);
+}
+
 .status-row {
   display: flex;
   flex-direction: column;
@@ -1718,10 +1784,12 @@ textarea.input-field {
   text-align: center;
   padding: var(--space-md);
   background: var(--primary-light);
+  border: 1.5px solid transparent;
   border-radius: var(--radius-lg);
   font-weight: 700;
   font-size: var(--fs-subtitle);
   margin-bottom: var(--space-md);
+  transition: background var(--duration-normal), border-color var(--duration-normal), color var(--duration-normal);
 }
 
 .voting-stepper {

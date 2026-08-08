@@ -1992,6 +1992,17 @@ const VOTING_STATUS_LABELS = {
   PUBLISHED: '結果已公布'
 };
 
+/** CSS tone class for voting-status cards / badge. */
+function votingStatusToneClass(status) {
+  switch (status) {
+    case 'VOTING_OPEN': return 'tone-open';
+    case 'VOTING_CLOSED': return 'tone-closed';
+    case 'CALCULATED': return 'tone-calculated';
+    case 'PUBLISHED': return 'tone-published';
+    default: return 'tone-draft';
+  }
+}
+
 function filterValidTrophies(trophies) {
   return (trophies || []).filter(t => /^T\d+$/i.test(String(t.trophy_id || '').trim()));
 }
@@ -2319,11 +2330,12 @@ async function handleTrophySubmitAll() {
 function renderAdminTrophyStats() {
   const stats = state.adminTrophy.overview?.stats || {};
   const votingStatus = state.adminTrophy.overview?.voting_status || 'DRAFT';
+  const statusTone = votingStatusToneClass(votingStatus);
   DOM.adminTrophyStats.innerHTML = `
     <div class="stat-card"><div class="stat-value">${stats.completed_voters || 0}/${stats.total_participants || 0}</div><div class="stat-label">已完成投票</div></div>
     <div class="stat-card"><div class="stat-value">${stats.total_votes || 0}</div><div class="stat-label">總投票數</div></div>
     <div class="stat-card"><div class="stat-value">${stats.trophy_count || 0}</div><div class="stat-label">獎項種類</div></div>
-    <div class="stat-card"><div class="stat-value">${VOTING_STATUS_LABELS[votingStatus] || votingStatus}</div><div class="stat-label">投票狀態</div></div>
+    <div class="stat-card voting-status-card ${statusTone}"><div class="stat-value">${VOTING_STATUS_LABELS[votingStatus] || votingStatus}</div><div class="stat-label">投票狀態</div></div>
   `;
 }
 
@@ -2921,6 +2933,7 @@ function updateVotingStepper() {
 
   if (DOM.adminVotingStatusBadge) {
     DOM.adminVotingStatusBadge.textContent = VOTING_STATUS_LABELS[status] || status;
+    DOM.adminVotingStatusBadge.className = 'voting-status-badge ' + votingStatusToneClass(status);
   }
 
   document.querySelectorAll('.stepper-step').forEach(el => {
@@ -3060,12 +3073,13 @@ function renderAdminParticipantDetail(detail) {
   DOM.adminEditPhone.title = '電話號碼即登入密碼，需在電腦執行 set_participant_phone.py 更改';
   DOM.adminEditGroup.value = p.group_id || '';
 
+  const submissionTone = stats.submission_status === 'submitted' ? 'tone-published' : 'tone-draft';
   DOM.adminParticipantStats.innerHTML = `
     <div class="stat-card"><div class="stat-value">${stats.sent_active || 0}</div><div class="stat-label">有效已發留言</div></div>
     <div class="stat-card"><div class="stat-value">${stats.sent_deleted || 0}</div><div class="stat-label">已撤回留言</div></div>
     <div class="stat-card"><div class="stat-value">${stats.received_active || 0}</div><div class="stat-label">收件箱留言</div></div>
     <div class="stat-card"><div class="stat-value">${stats.trophy_votes || 0}</div><div class="stat-label">獎項投票數</div></div>
-    <div class="stat-card"><div class="stat-value">${stats.submission_status === 'submitted' ? '已提交' : '草稿'}</div><div class="stat-label">投票狀態</div></div>
+    <div class="stat-card voting-status-card ${submissionTone}"><div class="stat-value">${stats.submission_status === 'submitted' ? '已提交' : '草稿'}</div><div class="stat-label">投票狀態</div></div>
     <div class="stat-card"><div class="stat-value">${stats.trophy_awards || 0}</div><div class="stat-label">獲得獎項</div></div>
   `;
 }
