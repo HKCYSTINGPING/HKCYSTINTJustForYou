@@ -1418,18 +1418,6 @@ async function startParticipantSubscriptions() {
       '參加者名單'
     ),
     subscribeAndWait(
-      (cb, err) => data.subscribeGroups(cb, err),
-      map => {
-        state.groupMeta = map || {};
-        updateSendFormState();
-        updateCharCounter();
-        applyEffectiveVotingToTrophyState();
-        renderStaffFacilitatorPanel();
-        renderProfile();
-      },
-      '組別設定'
-    ),
-    subscribeAndWait(
       (cb, err) => data.subscribeMessagingStatus(cb, err),
       status => {
         const wasOpen = isMessagingOpenForMe();
@@ -1492,6 +1480,26 @@ async function startParticipantSubscriptions() {
     )
   ]);
 
+  // Groups overrides are additive. If rules lag behind the client, login must
+  // still succeed and fall back to global messaging / voting config.
+  track(data.subscribeGroups(
+    map => {
+      state.groupMeta = map || {};
+      updateSendFormState();
+      updateCharCounter();
+      applyEffectiveVotingToTrophyState();
+      renderStaffFacilitatorPanel();
+      renderProfile();
+    },
+    err => {
+      console.warn('組別設定 listener error:', err && err.message);
+      state.groupMeta = {};
+      if (err && err.code === 'permission-denied') {
+        showToast('組別設定未啟用：請發布最新 firestore.rules', 'info');
+      }
+    }
+  ));
+
   const facilitateGroup = getFacilitatorGroupId(pid);
   if (facilitateGroup) {
     track(data.subscribeGroupThreadMessages(
@@ -1505,7 +1513,13 @@ async function startParticipantSubscriptions() {
         renderStaffGroupMessages();
         renderStaffFacilitatorPanel();
       },
-      reportSubscriptionError('組內留言監控')
+      err => {
+        console.warn('組內留言監控 listener error:', err && err.message);
+        state.staffMonitorMessages = [];
+        if (err && err.code === 'permission-denied') {
+          showToast('組內留言監控未啟用：請發布最新 firestore.rules', 'info');
+        }
+      }
     ));
   }
 }
@@ -1669,18 +1683,6 @@ async function startAdminSubscriptions() {
       '參加者名單'
     ),
     subscribeAndWait(
-      (cb, err) => data.subscribeGroups(cb, err),
-      map => {
-        state.groupMeta = map || {};
-        refreshAdminTrophyViews();
-        renderAdminDashboard();
-        renderAdminGroupOverrides();
-        populateAdminMsgGroupFilter();
-        if (isAdminMessagesTabActive()) renderAdminMessages();
-      },
-      '組別設定'
-    ),
-    subscribeAndWait(
       (cb, err) => data.subscribeMessagingStatus(cb, err),
       status => {
         state.messagingOpen = status === 'OPEN';
@@ -1739,6 +1741,27 @@ async function startAdminSubscriptions() {
       '得獎結果'
     )
   ]);
+
+  // Groups overrides are additive. If rules lag behind the client, the rest of
+  // the admin console must still open instead of failing the whole login.
+  track(data.subscribeGroups(
+    map => {
+      state.groupMeta = map || {};
+      refreshAdminTrophyViews();
+      renderAdminDashboard();
+      renderAdminGroupOverrides();
+      populateAdminMsgGroupFilter();
+      if (isAdminMessagesTabActive()) renderAdminMessages();
+    },
+    err => {
+      console.warn('組別設定 listener error:', err && err.message);
+      state.groupMeta = {};
+      renderAdminGroupOverrides();
+      if (err && err.code === 'permission-denied') {
+        showToast('組別設定未啟用：請發布最新 firestore.rules', 'info');
+      }
+    }
+  ));
 
   // Presence is additive. If the new rules are not published yet, the rest of
   // the admin console must still open instead of failing the whole login.
