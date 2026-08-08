@@ -1871,13 +1871,14 @@ function renderAdminMessages() {
     if (!isDeleted) {
       deleteBtn = `<button type="button" class="btn btn-danger btn-sm admin-delete-btn" data-id="${escapeHtml(msg.message_id)}">撤回</button>`;
     } else {
-      deleteBtn = '<span class="badge badge-deleted">已撤回</span>';
+      deleteBtn = `<button type="button" class="btn btn-secondary btn-sm admin-restore-btn" data-id="${escapeHtml(msg.message_id)}">取消撤回</button>`;
     }
 
     card.innerHTML = `
       <div class="admin-msg-header">
         <time datetime="${escapeHtml(msg.created_at || '')}">${formatMessageTime(msg.created_at)}</time>
         <span class="admin-msg-route">${escapeHtml(msg.sender_id)}<span class="arrow">→</span>${escapeHtml(msg.receiver_id)}</span>
+        ${isDeleted ? '<span class="badge badge-deleted">已撤回</span>' : ''}
       </div>
       <div class="admin-msg-body">
         <div class="admin-msg-content">${escapeHtml(msg.content)}</div>
@@ -1890,6 +1891,9 @@ function renderAdminMessages() {
 
   DOM.adminMessageList.querySelectorAll('.admin-delete-btn').forEach(btn => {
     btn.addEventListener('click', () => handleAdminDelete(btn.dataset.id, btn));
+  });
+  DOM.adminMessageList.querySelectorAll('.admin-restore-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleAdminRestore(btn.dataset.id, btn));
   });
 
   // Keep the admin's place if we rendered while they were mid-list (e.g. after 撤回).
@@ -1947,6 +1951,26 @@ async function handleAdminDelete(messageId, btn) {
       setMonitorViewFilter('deleted');
       clearAdminMessagePause({ render: true });
       showToast('留言已撤回', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
+async function handleAdminRestore(messageId, btn) {
+  if (!window.confirm('確定要取消撤回？留言會重新出現喺接收者收件箱。')) return;
+
+  await runProgressButton(btn, (async () => {
+    try {
+      await data.restoreMessage(messageId);
+      const msg = state.monitorMessages.find(m => m.message_id === messageId);
+      if (msg) {
+        msg.status = 'active';
+        msg.deleted_at = '';
+      }
+      setMonitorViewFilter('active');
+      clearAdminMessagePause({ render: true });
+      showToast('已取消撤回，留言已恢復', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }

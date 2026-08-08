@@ -227,6 +227,13 @@ export function retractMessage(messageId) {
   });
 }
 
+export function restoreMessage(messageId) {
+  return updateDoc(doc(db, 'messages', messageId), {
+    status: 'active',
+    deleted_at: ''
+  });
+}
+
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 export function subscribeMessagingStatus(onData, onError) {
