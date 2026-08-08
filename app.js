@@ -92,8 +92,6 @@ const state = {
     trophies: [],
     submissions: [],
     results: [],
-    // Which group cards the admin has opened; survives live re-renders.
-    expandedGroups: null,
     // Open vote-matrix popup: { groupLabel, focusId } or null.
     matrixModal: null
   },
@@ -101,9 +99,7 @@ const state = {
     selectedId: null,
     detail: null
   },
-  presence: [],
-  // Which login-status group cards are open on the dashboard.
-  expandedLoginGroups: null
+  presence: []
 };
 
 let adminParticipantCombobox = null;
@@ -1490,8 +1486,6 @@ function handleLogout() {
   state.sentMessages = [];
   state.monitorMessages = [];
   state.presence = [];
-  state.expandedLoginGroups = null;
-  state.adminTrophy.expandedGroups = null;
   state.adminTrophy.matrixModal = null;
   state.knownMessageIds = new Set();
   state.adminMessagesBootstrapped = false;
@@ -2336,6 +2330,7 @@ function renderAdminTrophyStats() {
 /**
  * Shared group cards used by voting progress and login status on the dashboard.
  * doneKey marks members who are "complete" (voted / logged in).
+ * Cards always show member lists expanded.
  * When voteMatrix is true (voting panel), heading / member taps open a popup
  * matrix card instead of embedding the table in the group card.
  */
@@ -2344,7 +2339,6 @@ function renderGroupStatusCards(options) {
     container,
     title,
     groups,
-    expandedSetRef,
     doneKey,
     doneLabel,
     pendingLabel,
@@ -2369,19 +2363,12 @@ function renderGroupStatusCards(options) {
     return;
   }
 
-  if (!expandedSetRef.get()) {
-    expandedSetRef.set(new Set(
-      groups.filter(g => g.members.some(m => !m[doneKey])).map(g => g.group_label)
-    ));
-  }
-  const expanded = expandedSetRef.get();
   const modal = voteMatrix ? state.adminTrophy.matrixModal : null;
 
   const cards = groups.map(group => {
     const doneCount = group.members.filter(m => m[doneKey]).length;
     const label = group.group_label;
     const heading = group.display_label || formatGroupLabel(label);
-    const isOpen = expanded.has(label);
     const isStaff = /STAFF/i.test(label);
     const focusId = modal && modal.groupLabel === label ? modal.focusId : null;
 
@@ -2398,14 +2385,20 @@ function renderGroupStatusCards(options) {
       return `<button type="button" class="${classes}" data-member-id="${escapeHtml(m.participant_id)}" title="睇獨立選票">${inner}</button>`;
     }).join('');
 
-    return `
-      <div class="group-voter-card${isOpen ? ' is-open' : ''}${isStaff ? ' is-staff' : ''}" data-group="${escapeHtml(label)}">
-        <button type="button" class="group-voter-header" aria-expanded="${isOpen ? 'true' : 'false'}"${voteMatrix ? ' title="睇組別投票總覽"' : ''}>
-          <span class="group-voter-chevron" aria-hidden="true"></span>
+    const headerHtml = voteMatrix
+      ? `<button type="button" class="group-voter-header" title="睇組別投票總覽">
           <h4>${escapeHtml(heading)}</h4>
           <span class="group-voter-count">${doneCount}/${group.members.length}</span>
-        </button>
-        <div class="group-voter-body"${isOpen ? '' : ' hidden'}>
+        </button>`
+      : `<div class="group-voter-header">
+          <h4>${escapeHtml(heading)}</h4>
+          <span class="group-voter-count">${doneCount}/${group.members.length}</span>
+        </div>`;
+
+    return `
+      <div class="group-voter-card${isStaff ? ' is-staff' : ''}" data-group="${escapeHtml(label)}">
+        ${headerHtml}
+        <div class="group-voter-body">
           <div class="group-voter-members">${membersHtml}</div>
         </div>
       </div>
@@ -2417,33 +2410,16 @@ function renderGroupStatusCards(options) {
     <div class="group-voter-grid">${cards}</div>
   `;
 
-  container.querySelectorAll('.group-voter-header').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const card = btn.closest('.group-voter-card');
-      const groupLabel = card?.dataset.group;
-      if (!groupLabel || !expanded) return;
-
-      if (voteMatrix) {
-        openVoteMatrixModal(groupLabel, null);
-        if (!expanded.has(groupLabel)) {
-          expanded.add(groupLabel);
-          card.classList.add('is-open');
-          btn.setAttribute('aria-expanded', 'true');
-          card.querySelector('.group-voter-body')?.classList.remove('hidden');
-        }
-        return;
-      }
-
-      const open = expanded.has(groupLabel);
-      if (open) expanded.delete(groupLabel);
-      else expanded.add(groupLabel);
-      card.classList.toggle('is-open', !open);
-      btn.setAttribute('aria-expanded', open ? 'false' : 'true');
-      card.querySelector('.group-voter-body')?.classList.toggle('hidden', open);
-    });
-  });
-
   if (voteMatrix) {
+    container.querySelectorAll('.group-voter-header').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const card = btn.closest('.group-voter-card');
+        const groupLabel = card?.dataset.group;
+        if (!groupLabel) return;
+        openVoteMatrixModal(groupLabel, null);
+      });
+    });
+
     container.querySelectorAll('.voter-member[data-member-id]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2451,12 +2427,6 @@ function renderGroupStatusCards(options) {
         const card = btn.closest('.group-voter-card');
         const groupLabel = card?.dataset.group;
         if (!groupLabel) return;
-        if (!expanded.has(groupLabel)) {
-          expanded.add(groupLabel);
-          card.classList.add('is-open');
-          card.querySelector('.group-voter-header')?.setAttribute('aria-expanded', 'true');
-          card.querySelector('.group-voter-body')?.classList.remove('hidden');
-        }
         openVoteMatrixModal(groupLabel, btn.dataset.memberId);
       });
     });
@@ -2795,10 +2765,6 @@ function renderAdminPendingVoters() {
     container: DOM.adminPendingVoters,
     title: '投票進度（按組別）',
     groups: state.adminTrophy.overview?.group_voting_status || [],
-    expandedSetRef: {
-      get: () => state.adminTrophy.expandedGroups,
-      set: value => { state.adminTrophy.expandedGroups = value; }
-    },
     doneKey: 'voted',
     doneLabel: '已投',
     pendingLabel: '未投',
@@ -2846,10 +2812,6 @@ function renderAdminLoginStatus() {
     container: DOM.adminLoginStatus,
     title: '登入狀況（按組別）',
     groups: buildLoginStatusGroups(),
-    expandedSetRef: {
-      get: () => state.expandedLoginGroups,
-      set: value => { state.expandedLoginGroups = value; }
-    },
     doneKey: 'logged_in',
     doneLabel: '已登入',
     pendingLabel: '未登入',
