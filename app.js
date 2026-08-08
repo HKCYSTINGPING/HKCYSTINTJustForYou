@@ -415,6 +415,13 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function appIcon(name, extraClass = '') {
+  const cls = ['app-icon', 'app-icon-' + name];
+  if (extraClass) cls.push(extraClass);
+  return '<span class="' + cls.join(' ') + '" aria-hidden="true"></span>';
+}
+
+
 function getReadMessageIds(participantId) {
   try {
     const raw = localStorage.getItem(CONFIG.READ_MSG_PREFIX + participantId);
@@ -1231,9 +1238,9 @@ async function enterParticipantDashboard() {
 
 function updateParticipantGreeting() {
   if (!DOM.participantGreeting) return;
-  DOM.participantGreeting.textContent = '你好，' + (state.participantId || '') + ' 👋';
+  DOM.participantGreeting.innerHTML = '你好，' + escapeHtml(state.participantId || '') + ' ' + appIcon('wave', 'inline-icon');
   if (DOM.participantSubgreeting) {
-    DOM.participantSubgreeting.textContent = 'Just For You ❤️';
+    DOM.participantSubgreeting.innerHTML = 'Just For You ' + appIcon('heart', 'inline-icon');
   }
 }
 
@@ -1414,7 +1421,7 @@ function renderAdminDashboard(fetchData) {
       ? (VOTING_STATUS_LABELS[state.adminTrophy.overview.voting_status] || '—')
       : '—';
     DOM.adminDashboardStatus.innerHTML = `
-      <div class="status-item"><span>留言功能</span><span>${state.messagingOpen ? '🟢 開啟' : '🔴 關閉'}</span></div>
+      <div class="status-item"><span>留言功能</span><span>${state.messagingOpen ? appIcon('dot-green') + ' 開啟' : appIcon('dot-red') + ' 關閉'}</span></div>
       <div class="status-item"><span>投票狀態</span><span>${votingLabel}</span></div>
     `;
   }
@@ -1559,7 +1566,7 @@ function renderInbox() {
     card.className = 'message-card' + (isUnread ? ' unread' : '');
     card.innerHTML = `
       <div class="message-meta">
-        <span class="message-anon-badge">🔒 匿名留言</span>
+        <span class="message-anon-badge">${appIcon('lock')} 匿名留言</span>
         <div style="display:flex;align-items:center;gap:6px">
           ${isUnread ? '<span class="unread-dot" aria-label="未讀"></span>' : ''}
           <time datetime="${escapeHtml(msg.created_at)}">${formatDateTime(msg.created_at)}</time>
@@ -2325,7 +2332,7 @@ function renderGroupStatusCards(options) {
     const membersHtml = group.members.map(m => {
       const classes = `voter-member ${m[doneKey] ? 'voter-done' : 'voter-pending'}${focusId === m.participant_id ? ' is-focus' : ''}`;
       const inner = `
-        <span class="voter-check" aria-hidden="true">${m[doneKey] ? '✓' : '○'}</span>
+        <span class="voter-check ${m[doneKey] ? 'app-icon app-icon-check' : 'voter-check-empty'}" aria-hidden="true">${m[doneKey] ? '' : '○'}</span>
         <span class="voter-id">${escapeHtml(m.participant_id)}</span>
         <span class="voter-status-label">${m[doneKey] ? doneLabel : pendingLabel}</span>
       `;
@@ -2836,7 +2843,7 @@ function renderAuditTable() {
       : filtered.map(v => `
         <div class="audit-card">
           <div class="audit-card-route">${escapeHtml(v.sender_id)} → ${escapeHtml(v.receiver_id)}</div>
-          <div class="audit-card-trophy"><span class="icon-trophy" aria-hidden="true"></span>${escapeHtml(v.trophy_name)}</div>
+          <div class="audit-card-trophy">${appIcon('trophy')}${escapeHtml(v.trophy_name)}</div>
           ${v.submitted_at ? `<div class="audit-card-time">${formatDateTime(v.submitted_at)}</div>` : ''}
         </div>
       `).join('');
@@ -2867,7 +2874,7 @@ function renderTrophySummary() {
     const winnerHtml = winners.map(w =>
       `<div class="summary-winner">${escapeHtml(w.participant_id)} · ${w.vote_count || 0} 票</div>`
     ).join('');
-    const tieNote = item.is_tie ? '<div class="summary-tie">⚠ 平票</div>' : '';
+    const tieNote = item.is_tie ? '<div class="summary-tie">' + appIcon('warning') + ' 平票</div>' : '';
     const ranking = (item.top_ranking || []).slice(0, 3).map((r, idx) =>
       `<div>${idx + 1}. ${escapeHtml(r.participant_id)} (${r.vote_count} 票)</div>`
     ).join('');

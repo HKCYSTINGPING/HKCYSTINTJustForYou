@@ -161,6 +161,7 @@ body.admin-active { background: var(--bg); }
 }
 
 .splash-heart { font-size: 2.5rem; }
+.splash-heart.app-icon { font-size: 0; }
 
 .splash-title {
   font-size: var(--fs-title);
@@ -382,40 +383,103 @@ body.admin-active { background: var(--bg); }
 
 .home-card-icon { font-size: 2rem; line-height: 1; }
 
-.icon-trophy {
+/* Custom illustrated icons (replace emoji) */
+.app-icon {
   display: inline-block;
   width: 1.2em;
   height: 1.2em;
-  background: url("assets/trophy.png") center / contain no-repeat;
-  vertical-align: -0.12em;
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  vertical-align: -0.15em;
   flex-shrink: 0;
 }
 
-.home-card-icon.icon-trophy {
+.app-icon-heart { background-image: url("assets/heart.png"); }
+.app-icon-wave { background-image: url("assets/wave.png"); }
+.app-icon-chat { background-image: url("assets/chat.png"); }
+.app-icon-inbox { background-image: url("assets/inbox.png"); }
+.app-icon-settings { background-image: url("assets/settings.png"); }
+.app-icon-warning { background-image: url("assets/warning.png"); }
+.app-icon-check { background-image: url("assets/check.png"); }
+.app-icon-envelope { background-image: url("assets/envelope.png"); }
+.app-icon-party { background-image: url("assets/party.png"); }
+.app-icon-home { background-image: url("assets/home.png"); }
+.app-icon-profile { background-image: url("assets/profile.png"); }
+.app-icon-loveletter { background-image: url("assets/loveletter.png"); }
+.app-icon-sleep { background-image: url("assets/sleep.png"); }
+.app-icon-chart { background-image: url("assets/chart.png"); }
+.app-icon-clipboard { background-image: url("assets/clipboard.png"); }
+.app-icon-outbox { background-image: url("assets/outbox.png"); }
+.app-icon-mailbox { background-image: url("assets/mailbox.png"); }
+.app-icon-lock { background-image: url("assets/lock.png"); }
+.app-icon-dot-red { background-image: url("assets/dot-red.png"); }
+.app-icon-dot-green { background-image: url("assets/dot-green.png"); }
+.app-icon-trophy { background-image: url("assets/trophy.png"); }
+
+.home-card-icon.app-icon {
   width: 2rem;
   height: 2rem;
   vertical-align: middle;
 }
 
-.bottom-nav-icon.icon-trophy {
+.bottom-nav-icon.app-icon {
   width: 1.35rem;
   height: 1.35rem;
 }
 
-.trophy-results-icon.icon-trophy {
+.trophy-results-icon.app-icon {
   width: 1.5rem;
   height: 1.5rem;
 }
 
-.illustration-circle .icon-trophy {
+.illustration-circle .app-icon {
   width: 2.5rem;
   height: 2.5rem;
 }
 
-.audit-card-trophy .icon-trophy {
+.splash-heart.app-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  vertical-align: middle;
+}
+
+.brand-icon.app-icon {
+  width: 2rem;
+  height: 2rem;
+  vertical-align: middle;
+}
+
+.success-illustration.app-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.trophy-modal-celebration.app-icon {
+  width: 3rem;
+  height: 3rem;
+}
+
+.audit-card-trophy .app-icon,
+.message-anon-badge .app-icon,
+.summary-tie .app-icon,
+.status-item .app-icon,
+.voter-check.app-icon {
   width: 1.05em;
   height: 1.05em;
+  margin-right: 0.2em;
+}
+
+.voter-check-empty {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  color: var(--text-muted);
   margin-right: 0.25em;
+}
+
+.inline-icon {
+  margin: 0 0.1em;
 }
 
 .home-card-label {

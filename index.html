@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#FFF9F2">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>HKCYS TINT — Just For You ❤️</title>
+  <title>HKCYS TINT — Just For You</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -15,10 +15,10 @@
   <section id="screen-splash" class="screen screen-splash" aria-label="啟動畫面">
     <div class="splash-content">
       <div class="splash-logo" aria-hidden="true">
-        <div class="splash-heart">❤️</div>
+        <div class="splash-heart app-icon app-icon-heart" aria-hidden="true"></div>
       </div>
       <h1 class="splash-title">HKCYS TINT</h1>
-      <p class="splash-subtitle">Just For You ❤️</p>
+      <p class="splash-subtitle">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
       <p class="splash-loading-text">載入中… <span id="splash-percent" class="loading-percent">0%</span></p>
       <div class="loading-bar splash-loading-bar" aria-hidden="true">
         <div id="splash-bar-fill" class="loading-bar-fill"></div>
@@ -51,10 +51,10 @@
     <div class="screen-inner login-inner page-enter">
       <header class="login-header">
         <div class="brand-mark" aria-hidden="true">
-          <span class="brand-icon">❤️</span>
+          <span class="brand-icon app-icon app-icon-heart" aria-hidden="true"></span>
         </div>
         <h1 class="app-title">HKCYS TINT</h1>
-        <p class="app-subtitle">Just For You ❤️</p>
+        <p class="app-subtitle">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
         <p class="login-welcome">歡迎回來，請登入以繼續</p>
       </header>
 
@@ -116,8 +116,8 @@
   <section id="screen-participant" class="screen screen-app hidden" aria-label="參加者主頁">
     <header class="app-header">
       <div class="app-header-content">
-        <h1 id="participant-greeting" class="greeting-text">你好 👋</h1>
-        <p id="participant-subgreeting" class="greeting-sub">Just For You</p>
+        <h1 id="participant-greeting" class="greeting-text">你好 <span class="app-icon app-icon-wave inline-icon" aria-hidden="true"></span></h1>
+        <p id="participant-subgreeting" class="greeting-sub">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
       </div>
     </header>
 
@@ -126,23 +126,23 @@
       <div id="view-home" class="app-view active" data-view="home">
         <div class="home-cards">
           <button type="button" class="home-card" data-nav="send">
-            <span class="home-card-icon">💌</span>
+            <span class="home-card-icon app-icon app-icon-loveletter" aria-hidden="true"></span>
             <span class="home-card-label">匿名留言</span>
             <span class="home-card-desc">寫給隊友的鼓勵</span>
           </button>
           <button type="button" class="home-card" data-nav="inbox">
-            <span class="home-card-icon">📥</span>
+            <span class="home-card-icon app-icon app-icon-inbox" aria-hidden="true"></span>
             <span class="home-card-label">收件箱</span>
             <span class="home-card-desc">查看收到的留言</span>
             <span id="home-inbox-badge" class="home-card-badge hidden">0</span>
           </button>
           <button type="button" class="home-card" data-nav="trophy">
-            <span class="home-card-icon icon-trophy" aria-hidden="true"></span>
+            <span class="home-card-icon app-icon app-icon-trophy" aria-hidden="true"></span>
             <span class="home-card-label">獎項配對</span>
             <span class="home-card-desc">為隊友投票</span>
           </button>
           <button type="button" class="home-card" data-nav="sent">
-            <span class="home-card-icon">📤</span>
+            <span class="home-card-icon app-icon app-icon-outbox" aria-hidden="true"></span>
             <span class="home-card-label">已發送</span>
             <span class="home-card-desc">查看已發留言</span>
           </button>
@@ -158,7 +158,7 @@
           <h2 class="view-title">匿名留言</h2>
         </div>
         <div id="send-closed-state" class="empty-state empty-illustration hidden">
-          <div class="illustration-circle">💤</div>
+          <div class="illustration-circle"><span class="app-icon app-icon-sleep" aria-hidden="true"></span></div>
           <h3>留言功能暫停</h3>
           <p>管理員已暫時關閉留言功能，請稍後再試</p>
         </div>
@@ -200,7 +200,7 @@
         </div>
         <div id="inbox-list" class="message-list"></div>
         <div id="inbox-empty" class="empty-state empty-illustration hidden">
-          <div class="illustration-circle">📭</div>
+          <div class="illustration-circle"><span class="app-icon app-icon-mailbox" aria-hidden="true"></span></div>
           <h3>收件箱是空的</h3>
           <p>當有人給你留言時，會在這裡顯示</p>
         </div>
@@ -221,7 +221,7 @@
         </div>
         <div id="sent-list" class="message-list"></div>
         <div id="sent-empty" class="empty-state empty-illustration hidden">
-          <div class="illustration-circle">✉️</div>
+          <div class="illustration-circle"><span class="app-icon app-icon-envelope" aria-hidden="true"></span></div>
           <h3>尚未發送任何留言</h3>
           <p>前往「匿名留言」開始寫給隊友</p>
         </div>
@@ -232,14 +232,14 @@
         <div id="trophy-status-banner" class="status-banner hidden" role="status"></div>
 
         <div id="trophy-not-open" class="empty-state empty-illustration hidden">
-          <div class="illustration-circle"><span class="icon-trophy" aria-hidden="true"></span></div>
+          <div class="illustration-circle"><span class="app-icon app-icon-trophy" aria-hidden="true"></span></div>
           <h3>投票尚未開始</h3>
           <p>管理員開放投票後，你可以為隊友配對獎項（每位隊友至少一個；每個獎項只能配一位）</p>
         </div>
 
         <div id="trophy-results-panel" class="trophy-results-panel card hidden" aria-live="polite">
           <div class="trophy-results-header">
-            <span class="trophy-results-icon icon-trophy" aria-hidden="true"></span>
+            <span class="trophy-results-icon app-icon app-icon-trophy" aria-hidden="true"></span>
             <h3 id="trophy-results-title">你的獎項結果</h3>
           </div>
           <div id="trophy-results-list" class="trophy-results-list"></div>
@@ -257,7 +257,7 @@
           </div>
           <div id="trophy-teammates" class="trophy-teammates"></div>
           <div id="trophy-empty" class="empty-state empty-illustration hidden">
-            <div class="illustration-circle">👥</div>
+            <div class="illustration-circle"><span class="app-icon app-icon-profile" aria-hidden="true"></span></div>
             <h3>暫無隊友資料</h3>
             <p>請聯絡管理員確認分組設定</p>
           </div>
@@ -277,7 +277,7 @@
       <!-- 獎項提交成功 -->
       <div id="view-trophy-submitted" class="app-view hidden" data-view="trophy-submitted">
         <div class="success-state">
-          <div class="success-illustration">✅</div>
+          <div class="success-illustration app-icon app-icon-check" aria-hidden="true"></div>
           <h2>投票已提交</h2>
           <p>等待管理員處理結果</p>
           <button type="button" id="trophy-submitted-home" class="btn btn-primary btn-lg">返回首頁</button>
@@ -298,20 +298,20 @@
 
     <nav class="bottom-nav" role="tablist" aria-label="主要導航">
       <button type="button" class="bottom-nav-item active" data-tab="home" role="tab" aria-selected="true">
-        <span class="bottom-nav-icon">🏠</span>
+        <span class="bottom-nav-icon app-icon app-icon-home" aria-hidden="true"></span>
         <span class="bottom-nav-label">首頁</span>
       </button>
       <button type="button" class="bottom-nav-item" data-tab="inbox" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon">📥</span>
+        <span class="bottom-nav-icon app-icon app-icon-inbox" aria-hidden="true"></span>
         <span class="bottom-nav-label">Inbox</span>
         <span id="inbox-badge" class="bottom-nav-badge hidden">0</span>
       </button>
       <button type="button" class="bottom-nav-item" data-tab="trophy" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon icon-trophy" aria-hidden="true"></span>
+        <span class="bottom-nav-icon app-icon app-icon-trophy" aria-hidden="true"></span>
         <span class="bottom-nav-label">獎項</span>
       </button>
       <button type="button" class="bottom-nav-item" data-tab="profile" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon">👤</span>
+        <span class="bottom-nav-icon app-icon app-icon-profile" aria-hidden="true"></span>
         <span class="bottom-nav-label">我的</span>
       </button>
     </nav>
@@ -320,7 +320,7 @@
   <!-- Award Popup (Glass) -->
   <div id="trophy-results-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="trophy-results-modal-title">
     <div class="modal-card glass-card trophy-modal-card">
-      <div class="trophy-modal-celebration" aria-hidden="true">🎉</div>
+      <div class="trophy-modal-celebration app-icon app-icon-party" aria-hidden="true"></div>
       <h2 id="trophy-results-modal-title">恭喜！</h2>
       <p class="trophy-modal-subtitle">你獲得：</p>
       <div id="trophy-results-modal-list" class="trophy-results-list"></div>
@@ -409,7 +409,7 @@
         </div>
         <div id="admin-message-list" class="admin-message-list"></div>
         <div id="admin-msg-empty" class="empty-state empty-illustration hidden">
-          <div class="illustration-circle">💬</div>
+          <div class="illustration-circle"><span class="app-icon app-icon-chat" aria-hidden="true"></span></div>
           <h3>暫無留言</h3>
           <p>參加者發送留言後會即時顯示</p>
         </div>
@@ -595,23 +595,23 @@
 
     <nav class="bottom-nav admin-bottom-nav" role="tablist" aria-label="管理員導航">
       <button type="button" class="bottom-nav-item active" data-admin-tab="dashboard" role="tab" aria-selected="true">
-        <span class="bottom-nav-icon">📊</span>
+        <span class="bottom-nav-icon app-icon app-icon-chart" aria-hidden="true"></span>
         <span class="bottom-nav-label">Dashboard</span>
       </button>
       <button type="button" class="bottom-nav-item" data-admin-tab="messages" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon">💬</span>
+        <span class="bottom-nav-icon app-icon app-icon-chat" aria-hidden="true"></span>
         <span class="bottom-nav-label">Messages</span>
       </button>
       <button type="button" class="bottom-nav-item" data-admin-tab="voting" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon icon-trophy" aria-hidden="true"></span>
+        <span class="bottom-nav-icon app-icon app-icon-trophy" aria-hidden="true"></span>
         <span class="bottom-nav-label">Voting</span>
       </button>
       <button type="button" class="bottom-nav-item" data-admin-tab="results" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon">📋</span>
+        <span class="bottom-nav-icon app-icon app-icon-clipboard" aria-hidden="true"></span>
         <span class="bottom-nav-label">Results</span>
       </button>
       <button type="button" class="bottom-nav-item" data-admin-tab="settings" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon">⚙️</span>
+        <span class="bottom-nav-icon app-icon app-icon-settings" aria-hidden="true"></span>
         <span class="bottom-nav-label">Settings</span>
       </button>
     </nav>
