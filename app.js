@@ -247,6 +247,7 @@ function cacheDOM() {
   DOM.adminBulkGroup = document.getElementById('admin-bulk-group');
   DOM.adminBulkAutoGroup = document.getElementById('admin-bulk-auto-group');
   DOM.adminBulkApplyGroup = document.getElementById('admin-bulk-apply-group');
+  DOM.adminBulkResetVotes = document.getElementById('admin-bulk-reset-votes');
   DOM.adminBulkDeleteAll = document.getElementById('admin-bulk-delete-all');
   DOM.adminVersion = document.getElementById('admin-version');
   DOM.adminParticipantCount = document.getElementById('admin-participant-count');
@@ -3210,6 +3211,23 @@ async function handleAdminBulkApplyGroup() {
   })());
 }
 
+async function handleAdminBulkResetVotes() {
+  const count = state.participants.length;
+  if (!window.confirm('確定要重置全部 ' + count + ' 位參加者的獎項投票嗎？\n包括：投票草稿／已提交選票、計算結果。\n留言不會被刪除。\n此操作無法復原！')) return;
+  if (!window.confirm('再次確認：真的要清除全部參加者的投票嗎？')) return;
+
+  await runProgressButton(DOM.adminBulkResetVotes, (async () => {
+    try {
+      const removed = await data.resetAllVotes();
+      showToast('已重置 ' + removed + ' 項投票紀錄', 'success');
+      await refreshAdminParticipantDetail();
+      refreshAdminTrophyViews();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  })());
+}
+
 async function handleAdminBulkDeleteAll() {
   const count = state.participants.length;
   if (!window.confirm('確定要刪除全部 ' + count + ' 位參加者的所有紀錄嗎？\n包括：已發留言、獎項投票、結果。\n此操作無法復原！')) return;
@@ -3220,6 +3238,7 @@ async function handleAdminBulkDeleteAll() {
       const removed = await data.clearAllRecords();
       showToast('已清除 ' + removed + ' 項紀錄，投票狀態已重設', 'success');
       await refreshAdminParticipantDetail();
+      refreshAdminTrophyViews();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -3452,6 +3471,7 @@ function bindEvents() {
   DOM.adminDeleteAllRecords.addEventListener('click', handleAdminDeleteAllRecords);
   DOM.adminBulkAutoGroup.addEventListener('click', handleAdminBulkAutoGroup);
   DOM.adminBulkApplyGroup.addEventListener('click', handleAdminBulkApplyGroup);
+  DOM.adminBulkResetVotes.addEventListener('click', handleAdminBulkResetVotes);
   DOM.adminBulkDeleteAll.addEventListener('click', handleAdminBulkDeleteAll);
 
   DOM.auditSearch.addEventListener('input', renderAuditTable);
