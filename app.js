@@ -421,6 +421,29 @@ function appIcon(name, extraClass = '') {
   return '<span class="' + cls.join(' ') + '" aria-hidden="true"></span>';
 }
 
+/** Springy “彈一下” on illustrated icons inside a tapped button/card. */
+function popAppIcon(el) {
+  const icon = el && el.querySelector ? el.querySelector('.app-icon') : null;
+  if (!icon) return;
+  icon.classList.remove('is-popping');
+  // Restart the CSS animation even if tapped again mid-bounce.
+  void icon.offsetWidth;
+  icon.classList.add('is-popping');
+}
+
+function bindIconPopTargets(selector) {
+  document.querySelectorAll(selector).forEach(el => {
+    if (el.dataset.iconPopBound === '1') return;
+    el.dataset.iconPopBound = '1';
+    el.addEventListener('pointerdown', () => popAppIcon(el), { passive: true });
+    el.addEventListener('animationend', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('app-icon')) {
+        e.target.classList.remove('is-popping');
+      }
+    });
+  });
+}
+
 
 function getReadMessageIds(participantId) {
   try {
@@ -3363,6 +3386,10 @@ function bindEvents() {
   document.querySelectorAll('#screen-participant .home-card').forEach(card => {
     card.addEventListener('click', () => switchParticipantView(card.dataset.nav));
   });
+
+  bindIconPopTargets('#screen-participant .home-card');
+  bindIconPopTargets('#screen-participant .bottom-nav-item');
+  bindIconPopTargets('.admin-bottom-nav .bottom-nav-item');
 
   document.querySelectorAll('#screen-participant .back-btn').forEach(btn => {
     btn.addEventListener('click', () => switchParticipantView(btn.dataset.back || 'home'));
