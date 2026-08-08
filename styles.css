@@ -370,7 +370,7 @@ body.admin-active { background: var(--bg); }
   text-align: left;
   font-family: var(--font);
   color: var(--text);
-  min-height: 130px;
+  min-height: 160px;
   transition: transform var(--duration-fast) var(--ease-out),
               box-shadow var(--duration-fast);
   -webkit-tap-highlight-color: transparent;
@@ -381,7 +381,7 @@ body.admin-active { background: var(--bg); }
   box-shadow: var(--shadow-sm);
 }
 
-.home-card-icon { font-size: 2rem; line-height: 1; }
+.home-card-icon { font-size: 3.74rem; line-height: 1; }
 
 /* Custom illustrated icons (replace emoji) */
 .app-icon {
@@ -418,8 +418,8 @@ body.admin-active { background: var(--bg); }
 .app-icon-trophy { background-image: url("assets/trophy.png"); }
 
 .home-card-icon.app-icon {
-  width: 2rem;
-  height: 2rem;
+  width: 3.74rem; /* 2rem × 1.87 */
+  height: 3.74rem;
   vertical-align: middle;
 }
 
