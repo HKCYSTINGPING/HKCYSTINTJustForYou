@@ -15,3 +15,7 @@ node_modules/
 package.json
 package-lock.json
 .test-phones.json
+firebase.json
+firestore-debug.log
+rules_repro.mjs
+firebase-debug.log

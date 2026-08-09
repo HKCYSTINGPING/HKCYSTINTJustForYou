@@ -62,14 +62,25 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/config/messaging).data.status == 'OPEN';
     }
 
-    function groupDoc(groupId) {
-      return get(/databases/$(database)/documents/groups/$(groupId));
+    function groupPath(groupId) {
+      return /databases/$(database)/documents/groups/$(groupId);
     }
 
+    function groupDoc(groupId) {
+      return get(groupPath(groupId));
+    }
+
+    // Resource has no .exists() method — use the top-level exists() function.
+    // Empty / unknown voting_status values must fall back to the global config,
+    // matching the client’s effectiveVotingConfigForGroup().
     function groupMessagingOpen(groupId) {
-      return !groupDoc(groupId).exists()
-        || !('messaging_status' in groupDoc(groupId).data)
-        || groupDoc(groupId).data.messaging_status != 'CLOSE';
+      return !exists(groupPath(groupId))
+        ? true
+        : (
+          !('messaging_status' in groupDoc(groupId).data)
+            ? true
+            : groupDoc(groupId).data.messaging_status != 'CLOSE'
+        );
     }
 
     // Admin global CLOSE is a master kill-switch; group CLOSE is an override.
@@ -81,12 +92,25 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/config/voting).data.voting_status;
     }
 
+    function groupVotingOverride(groupId) {
+      return !exists(groupPath(groupId))
+        ? ''
+        : (
+          !('voting_status' in groupDoc(groupId).data)
+            ? ''
+            : (
+              !(groupDoc(groupId).data.voting_status in
+                ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'])
+                ? ''
+                : groupDoc(groupId).data.voting_status
+            )
+        );
+    }
+
     function votingStatusFor(groupId) {
-      return groupDoc(groupId).exists()
-        && ('voting_status' in groupDoc(groupId).data)
-        && groupDoc(groupId).data.voting_status is string
-        ? groupDoc(groupId).data.voting_status
-        : globalVotingStatus();
+      return groupVotingOverride(groupId) == ''
+        ? globalVotingStatus()
+        : groupVotingOverride(groupId);
     }
 
     function myVotingStatus() {

@@ -1047,7 +1047,7 @@ async function bootstrapApp() {
     else refreshComboboxItems();
   } catch (err) {
     if (!state.participants.length) {
-      showToast('無法載入參加者名單：' + err.message, 'error');
+      showToast('無法載入參加者名單：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
     }
   }
 }
@@ -1494,9 +1494,6 @@ async function startParticipantSubscriptions() {
     err => {
       console.warn('組別設定 listener error:', err && err.message);
       state.groupMeta = {};
-      if (err && err.code === 'permission-denied') {
-        showToast('組別設定未啟用：請發布最新 firestore.rules', 'info');
-      }
     }
   ));
 
@@ -1516,9 +1513,6 @@ async function startParticipantSubscriptions() {
       err => {
         console.warn('組內留言監控 listener error:', err && err.message);
         state.staffMonitorMessages = [];
-        if (err && err.code === 'permission-denied') {
-          showToast('組內留言監控未啟用：請發布最新 firestore.rules', 'info');
-        }
       }
     ));
   }
@@ -1585,7 +1579,7 @@ async function enterParticipantDashboard() {
     renderTrophyTeammates();
     renderProfile();
   } catch (err) {
-    showToast('載入資料失敗：' + err.message, 'error');
+    showToast('載入資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
     finishLoading();
   }
@@ -1757,9 +1751,6 @@ async function startAdminSubscriptions() {
       console.warn('組別設定 listener error:', err && err.message);
       state.groupMeta = {};
       renderAdminGroupOverrides();
-      if (err && err.code === 'permission-denied') {
-        showToast('組別設定未啟用：請發布最新 firestore.rules', 'info');
-      }
     }
   ));
 
@@ -1775,9 +1766,6 @@ async function startAdminSubscriptions() {
       console.warn('登入狀況 listener error:', err && err.message);
       state.presence = [];
       renderAdminLoginStatus();
-      if (err && err.code === 'permission-denied') {
-        showToast('登入狀況未啟用：請發布最新 firestore.rules', 'info');
-      }
     }
   ));
 }
@@ -1793,7 +1781,7 @@ async function enterAdminDashboard() {
     setLoadingPercent(95);
     switchAdminTab('dashboard');
   } catch (err) {
-    showToast('載入管理員資料失敗：' + err.message, 'error');
+    showToast('載入管理員資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
     switchAdminTab('dashboard');
   } finally {
     finishLoading();
@@ -1957,7 +1945,7 @@ async function handleSendMessage(e) {
     senderGroupId: (sender && sender.group_id) || '',
     receiverGroupId: (receiver && receiver.group_id) || ''
   }).catch(err => {
-    showToast('留言傳送失敗：' + err.message, 'error');
+    showToast('留言傳送失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   });
   showToast('留言已發送', 'success');
 }
@@ -2330,7 +2318,7 @@ async function handleAdminDelete(messageId, btn) {
       clearAdminMessagePause({ render: true });
       showToast('留言已撤回', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -2350,7 +2338,7 @@ async function handleAdminRestore(messageId, btn) {
       clearAdminMessagePause({ render: true });
       showToast('已取消撤回，留言已恢復', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -2361,7 +2349,7 @@ async function handleSetMessagingStatus(status, btn) {
       await data.setMessagingStatus(status);
       showToast(status === 'OPEN' ? '留言功能已開啟' : '留言功能已關閉', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -2660,7 +2648,7 @@ async function handleTrophySaveDraft() {
       await data.saveSubmission(state.participantId, pairings, false);
       showToast('草稿已儲存', 'success');
     } catch (err) {
-      showToast('草稿儲存失敗：' + err.message, 'error');
+      showToast('草稿儲存失敗：' + data.describeFirestoreError(err, '請確認投票已開放後再試'), 'error');
     }
   })());
 }
@@ -2702,7 +2690,7 @@ async function handleTrophySubmitAll() {
       switchParticipantView('trophy-submitted');
       showToast('投票已提交', 'success');
     } catch (err) {
-      showToast('投票提交失敗，請再試一次：' + err.message, 'error');
+      showToast('投票提交失敗：' + data.describeFirestoreError(err, '請再試一次'), 'error');
       switchParticipantView('trophy');
     }
   })());
@@ -3360,7 +3348,7 @@ async function handleAdminVotingAction(status, btn) {
       await data.setVotingStatus(status);
       showToast('投票狀態已更新：' + (VOTING_STATUS_LABELS[status] || status), 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3376,7 +3364,7 @@ async function handleAdminCalculate(btn) {
       await data.writeResults(outcome.awarded);
       showToast('結果計算完成', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3401,7 +3389,7 @@ async function handleSaveDisplayName() {
       renderProfile();
       refreshComboboxItems();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3479,7 +3467,7 @@ function renderStaffGroupMessages() {
         await data.retractMessage(btn.dataset.id);
         showToast('已撤回', 'success');
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast(data.describeFirestoreError(err), 'error');
       }
     });
   });
@@ -3489,7 +3477,7 @@ function renderStaffGroupMessages() {
         await data.restoreMessage(btn.dataset.id);
         showToast('已取消撤回', 'success');
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast(data.describeFirestoreError(err), 'error');
       }
     });
   });
@@ -3509,7 +3497,7 @@ async function handleStaffSaveGroupName() {
       showToast(name ? '組名已更新' : '已清除自訂組名', 'success');
       renderStaffFacilitatorPanel();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3522,7 +3510,7 @@ async function handleStaffMessaging(status, btn) {
       await data.setGroupMessagingStatus(groupId, status);
       showToast(status === 'OPEN' ? '本組留言已開啟' : '本組留言已關閉', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3541,7 +3529,7 @@ async function handleStaffVotingAction(status, btn) {
       await data.setGroupVotingStatus(groupId, status);
       showToast('本組投票狀態：' + (VOTING_STATUS_LABELS[status] || status), 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3561,7 +3549,7 @@ async function handleStaffCalculate(btn) {
       await data.writeResults(outcome.awarded, { groupId });
       showToast('本組結果計算完成', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3657,7 +3645,7 @@ async function selectAdminParticipant(participantId) {
     state.adminParticipant.detail = buildParticipantDetail(participantId, phone);
     renderAdminParticipantDetail(state.adminParticipant.detail);
   } catch (err) {
-    showToast('載入參加者資料失敗：' + err.message, 'error');
+    showToast('載入參加者資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
     finishLoading();
   }
@@ -3736,7 +3724,7 @@ async function handleAdminSaveParticipant() {
       showToast('分組已更新', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3754,7 +3742,7 @@ async function handleAdminDeleteMessages() {
       showToast('已刪除 ' + removed + ' 則留言', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3770,7 +3758,7 @@ async function handleAdminResetTrophy() {
       showToast('獎項投票已重置', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3788,7 +3776,7 @@ async function handleAdminDeleteAllRecords() {
       showToast('已刪除 ' + removed + ' 項紀錄', 'success');
       await refreshAdminParticipantDetail();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3805,7 +3793,7 @@ async function handleAdminBulkResetVotes() {
       await refreshAdminParticipantDetail();
       refreshAdminTrophyViews();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
@@ -3822,7 +3810,7 @@ async function handleAdminBulkDeleteAll() {
       await refreshAdminParticipantDetail();
       refreshAdminTrophyViews();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     }
   })());
 }
