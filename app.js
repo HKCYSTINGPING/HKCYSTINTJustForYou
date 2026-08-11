@@ -2238,14 +2238,16 @@ function renderAdminDashboard(fetchData) {
   renderAdminLoginStatus();
 }
 
-function handleLogout() {
+async function handleLogout() {
   const leavingId = state.participantId;
   const wasAdmin = state.isAdmin;
   stopAllSubscriptions();
   if (leavingId && !wasAdmin) {
-    data.markPresenceOffline(leavingId).catch(() => { /* best-effort */ });
+    try {
+      await data.markPresenceOffline(leavingId);
+    } catch (_) { /* best-effort */ }
   }
-  data.signOutUser().catch(() => { /* the local session is gone either way */ });
+  await data.signOutUser().catch(() => { /* the local session is gone either way */ });
   clearSession();
   state.participantId = null;
   state.sessionStartedAt = 0;
