@@ -54,6 +54,7 @@ const state = {
   participantId: null,
   sessionStartedAt: 0,
   handledForceLogoutRev: 0,
+  isLoggingOut: false,
   participants: [],
   // group_id -> { display_name, messaging_status, voting_status, ... }
   groupMeta: {},
@@ -997,7 +998,7 @@ async function startPresenceHeartbeat() {
   const pulse = () => {
     // Skip if a force-logout is already being applied — otherwise the next
     // heartbeat can recreate the presence doc and the admin panel flaps back.
-    if (state.handledForceLogoutRev) return;
+    if (state.handledForceLogoutRev || state.isLoggingOut) return;
     data.touchPresence(state.participantId).catch(() => { /* presence is best-effort */ });
   };
   pulse();
@@ -2241,9 +2242,14 @@ function renderAdminDashboard(fetchData) {
 async function handleLogout() {
   const leavingId = state.participantId;
   const wasAdmin = state.isAdmin;
+  state.isLoggingOut = true;
   stopAllSubscriptions();
   if (leavingId && !wasAdmin) {
     try {
+      await data.markPresenceOffline(leavingId);
+      // A heartbeat can race with logout right around the 45s interval.
+      // Delete once more after a short beat so the stale write cannot linger.
+      await new Promise(resolve => setTimeout(resolve, 250));
       await data.markPresenceOffline(leavingId);
     } catch (_) { /* best-effort */ }
   }
@@ -2252,6 +2258,7 @@ async function handleLogout() {
   state.participantId = null;
   state.sessionStartedAt = 0;
   state.handledForceLogoutRev = 0;
+  state.isLoggingOut = false;
   state.isAdmin = false;
   state.inboxMessages = [];
   state.sentMessages = [];
