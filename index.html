@@ -315,7 +315,7 @@
 
       <!-- Staff facilitator: monitor + per-group controls -->
       <div id="view-staff" class="app-view hidden" data-view="staff">
-        <div class="view-toolbar">
+        <div class="view-toolbar" data-tour="staff-toolbar">
           <button type="button" class="btn btn-ghost btn-icon back-btn" data-back="home" aria-label="返回">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
           </button>
@@ -323,7 +323,7 @@
         </div>
 
         <div id="staff-facilitator-panel" class="staff-facilitator-panel hidden">
-          <div class="card">
+          <div class="card" data-tour="staff-group-card">
             <h3 class="section-title">負責組別</h3>
             <p id="staff-group-title" class="staff-group-title">—</p>
             <div id="staff-group-status" class="status-row"></div>
@@ -337,7 +337,7 @@
             </button>
           </div>
 
-          <div class="card">
+          <div class="card" data-tour="staff-message-controls">
             <h3 class="section-title">本組留言</h3>
             <p class="form-hint">只影響你負責嘅組；Admin 全域關閉仍然會停用全部組。</p>
             <div class="toggle-group">
@@ -352,7 +352,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" data-tour="staff-voting-controls">
             <h3 class="section-title">本組投票</h3>
             <div id="staff-voting-badge" class="voting-status-badge">—</div>
             <div id="staff-voting-stepper" class="voting-stepper">
@@ -386,7 +386,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" data-tour="staff-monitor">
             <div class="admin-controls">
               <h3 class="section-title">組內留言監控</h3>
               <span id="staff-msg-count" class="form-hint">共 0 則</span>
@@ -480,6 +480,24 @@
         <button type="button" id="force-logout-cancel" class="btn btn-secondary btn-sm">取消</button>
         <button type="button" id="force-logout-confirm" class="btn btn-danger btn-sm btn-progress">
           <span class="btn-label">登出</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="force-logout-all-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="force-logout-all-title">
+    <div class="modal-card glass-card force-logout-modal-card">
+      <h2 id="force-logout-all-title">全部強制登出</h2>
+      <p class="trophy-modal-subtitle">Staff / Admin 不受限制。請設定參加者幾點先可以重新登入。</p>
+      <div class="form-group">
+        <label for="force-logout-all-time">重新登入時間</label>
+        <input type="time" id="force-logout-all-time" class="input-field" step="60">
+      </div>
+      <div class="onboarding-actions">
+        <button type="button" id="force-logout-all-cancel" class="btn btn-secondary btn-sm">取消</button>
+        <button type="button" id="force-logout-all-confirm" class="btn btn-danger btn-sm btn-progress">
+          <span class="btn-label">全部登出</span>
           <span class="btn-progress-bar" aria-hidden="true"></span>
         </button>
       </div>

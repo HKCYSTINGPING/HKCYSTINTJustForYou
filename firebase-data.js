@@ -299,6 +299,22 @@ export function setMessagingStatus(status) {
   }, { merge: true });
 }
 
+export async function fetchLoginLockout() {
+  const snapshot = await getDoc(doc(db, 'config', 'login_lockout'));
+  const data = snapshot.exists() ? (snapshot.data() || {}) : {};
+  return {
+    locked_until: toIso(data.locked_until),
+    updated_at: toIso(data.updated_at)
+  };
+}
+
+export function setLoginLockout(lockedUntil) {
+  return setDoc(doc(db, 'config', 'login_lockout'), {
+    locked_until: lockedUntil || '',
+    updated_at: serverTimestamp()
+  }, { merge: true });
+}
+
 function votingConfigFromData(data) {
   return {
     voting_status: data.voting_status || 'DRAFT',

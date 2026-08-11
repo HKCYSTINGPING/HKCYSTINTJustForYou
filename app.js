@@ -108,6 +108,7 @@ const state = {
     detail: null
   },
   adminForceLogoutTarget: null,
+  adminLoginLockoutUntil: '',
   presence: [],
   staffGroup: {
     submissions: [],
@@ -277,6 +278,36 @@ const ONBOARDING_STEPS = {
       prepare: 'profile',
       title: '登出',
       body: '活動完或換機時撳呢度登出。'
+    },
+    {
+      target: '[data-tour="staff-toolbar"]',
+      prepare: 'staff',
+      title: 'Staff 頁面',
+      body: '呢度係你負責組別嘅控制台，睇組名、留言開關、投票流程同組內留言。'
+    },
+    {
+      target: '[data-tour="staff-group-card"]',
+      prepare: 'staff',
+      title: '負責組別',
+      body: '可以睇目前負責邊一組，同埋改呢組顯示名稱。'
+    },
+    {
+      target: '[data-tour="staff-message-controls"]',
+      prepare: 'staff',
+      title: '本組留言控制',
+      body: '只會影響你負責嗰組；Admin 全域關閉時仍然會全部停用。'
+    },
+    {
+      target: '[data-tour="staff-voting-controls"]',
+      prepare: 'staff',
+      title: '本組投票控制',
+      body: '可以幫自己負責嗰組開放投票、關閉、計算結果同公布。'
+    },
+    {
+      target: '[data-tour="staff-monitor"]',
+      prepare: 'staff',
+      title: '組內留言監控',
+      body: '即時睇同組成員之間嘅留言，方便你現場跟進。'
     }
   ],
   admin: [
@@ -567,6 +598,10 @@ function cacheDOM() {
   DOM.forceLogoutBody = document.getElementById('force-logout-body');
   DOM.forceLogoutCancel = document.getElementById('force-logout-cancel');
   DOM.forceLogoutConfirm = document.getElementById('force-logout-confirm');
+  DOM.forceLogoutAllModal = document.getElementById('force-logout-all-modal');
+  DOM.forceLogoutAllTime = document.getElementById('force-logout-all-time');
+  DOM.forceLogoutAllCancel = document.getElementById('force-logout-all-cancel');
+  DOM.forceLogoutAllConfirm = document.getElementById('force-logout-all-confirm');
   DOM.trophyProgressText = document.getElementById('trophy-progress-text');
   DOM.trophyProgressFill = document.getElementById('trophy-progress-fill');
   DOM.trophyTeammates = document.getElementById('trophy-teammates');
@@ -1342,6 +1377,24 @@ function isStaffParticipant(p) {
   return !!(p && (isStaffPerson(p) || isStaffGroup(p.group_id)));
 }
 
+function buildLockoutUntilIso(timeValue) {
+  const raw = String(timeValue || '').trim();
+  if (!/^\d{2}:\d{2}$/.test(raw)) return '';
+  const [hh, mm] = raw.split(':').map(Number);
+  const now = new Date();
+  const until = new Date(now);
+  until.setHours(hh, mm, 0, 0);
+  if (until.getTime() <= now.getTime()) return '';
+  return until.toISOString();
+}
+
+function formatClockTime(iso) {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (!Number.isFinite(dt.getTime())) return '';
+  return dt.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 /** Login dropdown: seat roster only. Staff type their own id. */
 function getLoginMenuParticipants() {
   return state.participants.filter(p => !isStaffParticipant(p));
@@ -1652,6 +1705,10 @@ async function handleLogin(e) {
       return;
     }
 
+    if (!(await verifyLoginAllowedAfterAuth(participantId, isAdmin))) {
+      return;
+    }
+
     state.participantId = participantId;
     state.isAdmin = isAdmin;
     saveSession(participantId, isAdmin);
@@ -1731,12 +1788,42 @@ async function tryRestoreSession() {
     saveSession(state.participantId, state.isAdmin);
   }
 
+  if (!(await verifyLoginAllowedAfterAuth(state.participantId, state.isAdmin, true))) {
+    return false;
+  }
+
   if (state.isAdmin) {
     await enterAdminDashboard();
   } else {
     await enterParticipantDashboard();
   }
   return true;
+}
+
+async function verifyLoginAllowedAfterAuth(participantId, isAdmin, silent = false) {
+  if (isAdmin || !isSeatParticipantId(participantId)) return true;
+  try {
+    const lockout = await data.fetchLoginLockout();
+    state.adminLoginLockoutUntil = lockout.locked_until || '';
+    const until = lockout.locked_until ? new Date(lockout.locked_until).getTime() : 0;
+    if (until && Number.isFinite(until) && until > Date.now()) {
+      await data.signOutUser().catch(() => {});
+      clearSession();
+      state.participantId = null;
+      state.sessionStartedAt = 0;
+      state.isAdmin = false;
+      if (!silent) {
+        showToast('請於 ' + formatClockTime(lockout.locked_until) + ' 後再登入', 'info');
+      }
+      return false;
+    }
+    return true;
+  } catch (err) {
+    if (!silent) showToast(data.describeFirestoreError(err), 'error');
+    await data.signOutUser().catch(() => {});
+    clearSession();
+    return false;
+  }
 }
 
 /**
@@ -2279,6 +2366,7 @@ async function handleLogout() {
   state.monitorGroupFilter = '';
   hideTrophyResultsModal();
   closeForceLogoutModal();
+  closeForceLogoutAllModal();
   hideOnboarding();
   state.trophy = {
     loaded: false,
@@ -2824,7 +2912,7 @@ function hideTrophyResultsModal() {
 }
 
 function syncBodyModalOpen() {
-  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal, DOM.forceLogoutModal]
+  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal, DOM.forceLogoutModal, DOM.forceLogoutAllModal]
     .some(el => el && !el.classList.contains('hidden'));
   document.body.classList.toggle('modal-open', anyOpen);
 }
@@ -3357,6 +3445,7 @@ function renderGroupStatusCards(options) {
     voteMatrix = false,
     titleActionHtml = '',
     onMemberClick = null,
+    canMemberClick = null,
     afterRender = null
   } = options;
 
@@ -3387,12 +3476,13 @@ function renderGroupStatusCards(options) {
 
     const membersHtml = group.members.map(m => {
       const classes = `voter-member ${m[doneKey] ? 'voter-done' : 'voter-pending'}${focusId === m.participant_id ? ' is-focus' : ''}`;
+      const memberClickable = voteMatrix || (!!onMemberClick && m[doneKey] && (!canMemberClick || canMemberClick(m)));
       const inner = `
         <span class="voter-check ${m[doneKey] ? 'app-icon app-icon-check' : 'voter-check-empty'}" aria-hidden="true">${m[doneKey] ? '' : '○'}</span>
         <span class="voter-id">${escapeHtml(displayLabelOf(m.participant_id))}</span>
         <span class="voter-status-label">${m[doneKey] ? doneLabel : pendingLabel}</span>
       `;
-      if (!voteMatrix && !(onMemberClick && m[doneKey])) {
+      if (!memberClickable) {
         return `<div class="${classes}">${inner}</div>`;
       }
       const titleText = voteMatrix ? '睇獨立選票' : '管理登入';
@@ -3506,6 +3596,25 @@ function closeForceLogoutModal() {
   state.adminForceLogoutTarget = null;
   if (DOM.forceLogoutModal) {
     DOM.forceLogoutModal.classList.add('hidden');
+  }
+  syncBodyModalOpen();
+}
+
+function openForceLogoutAllModal() {
+  if (!DOM.forceLogoutAllModal) return;
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + 5, 0, 0);
+  if (DOM.forceLogoutAllTime) {
+    DOM.forceLogoutAllTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+  DOM.forceLogoutAllModal.classList.remove('hidden');
+  syncBodyModalOpen();
+  DOM.forceLogoutAllTime?.focus();
+}
+
+function closeForceLogoutAllModal() {
+  if (DOM.forceLogoutAllModal) {
+    DOM.forceLogoutAllModal.classList.add('hidden');
   }
   syncBodyModalOpen();
 }
@@ -3902,6 +4011,7 @@ function renderAdminLoginStatus() {
       </div>
     `,
     onMemberClick: participantId => openForceLogoutModal(participantId),
+    canMemberClick: member => isSeatParticipantId(member.participant_id),
     afterRender: container => {
       const refreshBtn = container.querySelector('#admin-refresh-login-status');
       if (refreshBtn) {
@@ -3909,7 +4019,7 @@ function renderAdminLoginStatus() {
       }
       const allBtn = container.querySelector('#admin-force-logout-all');
       if (allBtn) {
-        allBtn.addEventListener('click', handleAdminForceLogoutAll);
+        allBtn.addEventListener('click', openForceLogoutAllModal);
       }
     }
   });
@@ -4557,15 +4667,22 @@ async function handleAdminForceLogoutAll() {
   const ids = state.presence
     .filter(p => isPresenceCurrentlyLoggedIn(p))
     .map(p => normalizeId(p.participant_id))
-    .filter(Boolean);
+    .filter(id => !!id && isSeatParticipantId(id));
   if (!ids.length) {
     showToast('目前沒有已登入參加者', 'info');
     return;
   }
-  if (!window.confirm('確定要強制登出全部已登入參加者嗎？')) return;
   try {
+    const untilIso = buildLockoutUntilIso(DOM.forceLogoutAllTime?.value || '');
+    if (!untilIso) {
+      showToast('請選擇稍後的重新登入時間', 'error');
+      return;
+    }
+    await data.setLoginLockout(untilIso);
+    state.adminLoginLockoutUntil = untilIso;
     await data.forceLogoutParticipants(ids);
     removeLocalPresence(ids);
+    closeForceLogoutAllModal();
   } catch (err) {
     showToast(data.describeFirestoreError(err), 'error');
   }
@@ -4834,6 +4951,17 @@ function bindEvents() {
   if (DOM.forceLogoutModal) {
     DOM.forceLogoutModal.addEventListener('click', (e) => {
       if (e.target === DOM.forceLogoutModal) closeForceLogoutModal();
+    });
+  }
+  if (DOM.forceLogoutAllCancel) {
+    DOM.forceLogoutAllCancel.addEventListener('click', closeForceLogoutAllModal);
+  }
+  if (DOM.forceLogoutAllConfirm) {
+    DOM.forceLogoutAllConfirm.addEventListener('click', () => handleAdminForceLogoutAll());
+  }
+  if (DOM.forceLogoutAllModal) {
+    DOM.forceLogoutAllModal.addEventListener('click', (e) => {
+      if (e.target === DOM.forceLogoutAllModal) closeForceLogoutAllModal();
     });
   }
 

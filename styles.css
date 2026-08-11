@@ -2627,6 +2627,13 @@ button.group-voter-header:hover {
   margin: 0;
 }
 
+.admin-login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+}
+
 .btn-xs {
   min-height: 32px;
   padding: 6px 10px;
