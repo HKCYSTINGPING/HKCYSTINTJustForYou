@@ -52,6 +52,8 @@ const BAD_WORDS = [
 
 const state = {
   participantId: null,
+  sessionStartedAt: 0,
+  handledForceLogoutRev: 0,
   participants: [],
   // group_id -> { display_name, messaging_status, voting_status, ... }
   groupMeta: {},
@@ -104,6 +106,7 @@ const state = {
     selectedId: null,
     detail: null
   },
+  adminForceLogoutTarget: null,
   presence: [],
   staffGroup: {
     submissions: [],
@@ -558,6 +561,10 @@ function cacheDOM() {
   DOM.voteMatrixModalBack = document.getElementById('vote-matrix-modal-back');
   DOM.voteMatrixModalBody = document.getElementById('vote-matrix-modal-body');
   DOM.voteMatrixModalClose = document.getElementById('vote-matrix-modal-close');
+  DOM.forceLogoutModal = document.getElementById('force-logout-modal');
+  DOM.forceLogoutBody = document.getElementById('force-logout-body');
+  DOM.forceLogoutCancel = document.getElementById('force-logout-cancel');
+  DOM.forceLogoutConfirm = document.getElementById('force-logout-confirm');
   DOM.trophyProgressText = document.getElementById('trophy-progress-text');
   DOM.trophyProgressFill = document.getElementById('trophy-progress-fill');
   DOM.trophyTeammates = document.getElementById('trophy-teammates');
@@ -1654,11 +1661,13 @@ async function handleLogin(e) {
 }
 
 function saveSession(participantId, isAdmin) {
+  const savedAt = Date.now();
+  state.sessionStartedAt = savedAt;
   try {
     sessionStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify({
       participantId,
       isAdmin: !!isAdmin,
-      savedAt: Date.now()
+      savedAt
     }));
   } catch (_) { /* private mode / quota — Firebase session is still enough */ }
 }
@@ -1677,7 +1686,8 @@ function readSession() {
     if (!data || !data.participantId) return null;
     return {
       participantId: normalizeId(data.participantId),
-      isAdmin: !!data.isAdmin
+      isAdmin: !!data.isAdmin,
+      savedAt: Number(data.savedAt || 0) || 0
     };
   } catch (_) {
     return null;
@@ -1708,6 +1718,7 @@ async function tryRestoreSession() {
   if (stored && stored.participantId === fromAuth.participantId) {
     state.participantId = stored.participantId;
     state.isAdmin = stored.isAdmin || fromAuth.isAdmin;
+    state.sessionStartedAt = stored.savedAt || Date.now();
   } else {
     state.participantId = fromAuth.participantId;
     state.isAdmin = fromAuth.isAdmin;
@@ -1775,6 +1786,7 @@ async function startParticipantSubscriptions() {
       (cb, err) => data.subscribeParticipants(cb, err),
       rows => {
         state.participants = rows;
+        maybeHandleForcedLogout(rows);
         setParticipantsCache(rows);
         state.trophy.teammates = data.getTeammates(pid, state.participants);
         refreshComboboxItems();
@@ -2209,6 +2221,8 @@ function handleLogout() {
   data.signOutUser().catch(() => { /* the local session is gone either way */ });
   clearSession();
   state.participantId = null;
+  state.sessionStartedAt = 0;
+  state.handledForceLogoutRev = 0;
   state.isAdmin = false;
   state.inboxMessages = [];
   state.sentMessages = [];
@@ -2228,6 +2242,7 @@ function handleLogout() {
   state.monitorViewFilter = 'all';
   state.monitorGroupFilter = '';
   hideTrophyResultsModal();
+  closeForceLogoutModal();
   hideOnboarding();
   state.trophy = {
     loaded: false,
@@ -2777,7 +2792,7 @@ function hideTrophyResultsModal() {
 }
 
 function syncBodyModalOpen() {
-  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal]
+  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal, DOM.forceLogoutModal]
     .some(el => el && !el.classList.contains('hidden'));
   document.body.classList.toggle('modal-open', anyOpen);
 }
@@ -3307,7 +3322,10 @@ function renderGroupStatusCards(options) {
     pendingLabel,
     emptyAllDone,
     emptyPendingTitle,
-    voteMatrix = false
+    voteMatrix = false,
+    titleActionHtml = '',
+    onMemberClick = null,
+    afterRender = null
   } = options;
 
   if (!container) return;
@@ -3342,10 +3360,11 @@ function renderGroupStatusCards(options) {
         <span class="voter-id">${escapeHtml(displayLabelOf(m.participant_id))}</span>
         <span class="voter-status-label">${m[doneKey] ? doneLabel : pendingLabel}</span>
       `;
-      if (!voteMatrix) {
+      if (!voteMatrix && !(onMemberClick && m[doneKey])) {
         return `<div class="${classes}">${inner}</div>`;
       }
-      return `<button type="button" class="${classes}" data-member-id="${escapeHtml(m.participant_id)}" title="睇獨立選票">${inner}</button>`;
+      const titleText = voteMatrix ? '睇獨立選票' : '管理登入';
+      return `<button type="button" class="${classes}" data-member-id="${escapeHtml(m.participant_id)}" title="${titleText}">${inner}</button>`;
     }).join('');
 
     const headerHtml = voteMatrix
@@ -3369,12 +3388,16 @@ function renderGroupStatusCards(options) {
   }).join('');
 
   container.innerHTML = `
-    <h4 class="admin-pending-title">${title}${pending.length > 0 ? ` · 尚餘 ${pending.length} 人` : ''}</h4>
+    <div class="admin-pending-title-row">
+      <h4 class="admin-pending-title">${title}${pending.length > 0 ? ` · 尚餘 ${pending.length} 人` : ''}</h4>
+      ${titleActionHtml}
+    </div>
     <div class="group-voter-grid">${cards}</div>
   `;
 
-  if (voteMatrix) {
+  if (voteMatrix || onMemberClick) {
     container.querySelectorAll('.group-voter-header').forEach(btn => {
+      if (!voteMatrix) return;
       btn.addEventListener('click', () => {
         const card = btn.closest('.group-voter-card');
         const groupLabel = card?.dataset.group;
@@ -3387,13 +3410,18 @@ function renderGroupStatusCards(options) {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const card = btn.closest('.group-voter-card');
-        const groupLabel = card?.dataset.group;
-        if (!groupLabel) return;
-        openVoteMatrixModal(groupLabel, btn.dataset.memberId);
+        if (voteMatrix) {
+          const card = btn.closest('.group-voter-card');
+          const groupLabel = card?.dataset.group;
+          if (!groupLabel) return;
+          openVoteMatrixModal(groupLabel, btn.dataset.memberId);
+          return;
+        }
+        if (onMemberClick) onMemberClick(btn.dataset.memberId, btn);
       });
     });
   }
+  if (afterRender) afterRender(container);
 }
 
 function findAdminVotingGroup(groupLabel) {
@@ -3428,6 +3456,26 @@ function closeVoteMatrixModal() {
       btn.classList.remove('is-focus');
     });
   }
+}
+
+function openForceLogoutModal(participantId) {
+  const pid = normalizeId(participantId);
+  if (!pid || !DOM.forceLogoutModal) return;
+  state.adminForceLogoutTarget = pid;
+  if (DOM.forceLogoutBody) {
+    DOM.forceLogoutBody.textContent = `確定要強制登出 ${pid} 嗎？`;
+  }
+  DOM.forceLogoutModal.classList.remove('hidden');
+  syncBodyModalOpen();
+  DOM.forceLogoutConfirm?.focus();
+}
+
+function closeForceLogoutModal() {
+  state.adminForceLogoutTarget = null;
+  if (DOM.forceLogoutModal) {
+    DOM.forceLogoutModal.classList.add('hidden');
+  }
+  syncBodyModalOpen();
 }
 
 function renderVoteMatrixModal() {
@@ -3757,7 +3805,8 @@ function buildLoginStatusGroups() {
     byGroup.get(group).push({
       participant_id: p.participant_id,
       logged_in: loggedIn.has(p.participant_id),
-      online: online.has(p.participant_id)
+      online: online.has(p.participant_id),
+      force_logout_rev: Number(p.force_logout_rev || 0) || 0
     });
   });
 
@@ -3770,6 +3819,18 @@ function buildLoginStatusGroups() {
     }));
 }
 
+function maybeHandleForcedLogout(rows) {
+  if (state.isAdmin || !state.participantId) return;
+  const me = (rows || []).find(p => p.participant_id === state.participantId);
+  if (!me) return;
+  const rev = Number(me.force_logout_rev || 0) || 0;
+  if (!rev) return;
+  const sessionStartedAt = Number(state.sessionStartedAt || 0) || 0;
+  if (rev <= sessionStartedAt || rev === state.handledForceLogoutRev) return;
+  state.handledForceLogoutRev = rev;
+  setTimeout(() => handleLogout(), 50);
+}
+
 function renderAdminLoginStatus() {
   renderGroupStatusCards({
     container: DOM.adminLoginStatus,
@@ -3779,7 +3840,15 @@ function renderAdminLoginStatus() {
     doneLabel: '已登入',
     pendingLabel: '未登入',
     emptyAllDone: '所有參加者均已登入',
-    emptyPendingTitle: '尚未登入'
+    emptyPendingTitle: '尚未登入',
+    titleActionHtml: `<button type="button" id="admin-force-logout-all" class="btn btn-danger btn-sm">全部強制登出</button>`,
+    onMemberClick: participantId => openForceLogoutModal(participantId),
+    afterRender: container => {
+      const allBtn = container.querySelector('#admin-force-logout-all');
+      if (allBtn) {
+        allBtn.addEventListener('click', handleAdminForceLogoutAll);
+      }
+    }
   });
 }
 
@@ -4379,6 +4448,47 @@ async function handleAdminSaveParticipant() {
   })());
 }
 
+async function handleAdminForceLogoutParticipant(participantId, btn) {
+  const pid = normalizeId(participantId);
+  if (!pid) return;
+
+  const action = async () => {
+    await data.forceLogoutParticipant(pid);
+    closeForceLogoutModal();
+  };
+
+  if (btn) {
+    try {
+      await runProgressButton(btn, action());
+    } catch (err) {
+      showToast(data.describeFirestoreError(err), 'error');
+    }
+  } else {
+    try {
+      await action();
+    } catch (err) {
+      showToast(data.describeFirestoreError(err), 'error');
+    }
+  }
+}
+
+async function handleAdminForceLogoutAll() {
+  const ids = state.presence
+    .filter(p => !!p.first_seen)
+    .map(p => normalizeId(p.participant_id))
+    .filter(Boolean);
+  if (!ids.length) {
+    showToast('目前沒有已登入參加者', 'info');
+    return;
+  }
+  if (!window.confirm('確定要強制登出全部已登入參加者嗎？')) return;
+  try {
+    await data.forceLogoutParticipants(ids);
+  } catch (err) {
+    showToast(data.describeFirestoreError(err), 'error');
+  }
+}
+
 async function handleAdminDeleteMessages() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) return;
@@ -4628,6 +4738,20 @@ function bindEvents() {
   if (DOM.voteMatrixModal) {
     DOM.voteMatrixModal.addEventListener('click', (e) => {
       if (e.target === DOM.voteMatrixModal) closeVoteMatrixModal();
+    });
+  }
+  if (DOM.forceLogoutCancel) {
+    DOM.forceLogoutCancel.addEventListener('click', closeForceLogoutModal);
+  }
+  if (DOM.forceLogoutConfirm) {
+    DOM.forceLogoutConfirm.addEventListener('click', () => {
+      if (!state.adminForceLogoutTarget) return;
+      handleAdminForceLogoutParticipant(state.adminForceLogoutTarget, DOM.forceLogoutConfirm);
+    });
+  }
+  if (DOM.forceLogoutModal) {
+    DOM.forceLogoutModal.addEventListener('click', (e) => {
+      if (e.target === DOM.forceLogoutModal) closeForceLogoutModal();
     });
   }
 

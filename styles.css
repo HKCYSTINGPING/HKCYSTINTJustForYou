@@ -1499,6 +1499,10 @@ textarea.input-field {
 
 .trophy-modal-card .trophy-results-list { margin-bottom: var(--space-lg); }
 
+.force-logout-modal-card {
+  max-width: 320px;
+}
+
 /* ─── First-login coach tips ────────────────────────────────────────────── */
 
 .onboarding-coach {
@@ -2609,4 +2613,23 @@ button.group-voter-header:hover {
 .admin-pending-title {
   font-size: 13px;
   margin: 0 0 var(--space-sm);
+}
+
+.admin-pending-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.admin-pending-title-row .admin-pending-title {
+  margin: 0;
+}
+
+.btn-xs {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 999px;
 }

@@ -472,6 +472,20 @@
     </div>
   </div>
 
+  <div id="force-logout-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="force-logout-title">
+    <div class="modal-card glass-card force-logout-modal-card">
+      <h2 id="force-logout-title">強制登出</h2>
+      <p id="force-logout-body" class="trophy-modal-subtitle">確定要登出這位參加者嗎？</p>
+      <div class="onboarding-actions">
+        <button type="button" id="force-logout-cancel" class="btn btn-secondary btn-sm">取消</button>
+        <button type="button" id="force-logout-confirm" class="btn btn-danger btn-sm btn-progress">
+          <span class="btn-label">登出</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ ADMIN APP ═══ -->
   <section id="screen-admin" class="screen screen-app hidden" aria-label="管理員控制台">
     <header class="app-header admin-header" data-tour="admin-header">

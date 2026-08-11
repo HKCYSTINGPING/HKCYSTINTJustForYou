@@ -22,6 +22,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -614,7 +615,8 @@ export function subscribeParticipants(onData, onError) {
       return {
         participant_id: raw.participant_id || d.id,
         group_id: raw.group_id || '',
-        display_name: String(raw.display_name || '').trim()
+        display_name: String(raw.display_name || '').trim(),
+        force_logout_rev: Number(raw.force_logout_rev || 0) || 0
       };
     }).sort((a, b) => a.participant_id.localeCompare(b.participant_id)));
   }, onError);
@@ -644,6 +646,30 @@ export function updateParticipantGroup(participantId, groupId) {
     participant_id: participantId,
     group_id: groupId
   }, { merge: true });
+}
+
+export function forceLogoutParticipant(participantId) {
+  const rev = Date.now();
+  return Promise.all([
+    setDoc(doc(db, 'participants', participantId), {
+      participant_id: participantId,
+      force_logout_rev: rev
+    }, { merge: true }),
+    deleteDoc(doc(db, 'presence', participantId)).catch(() => {})
+  ]);
+}
+
+export async function forceLogoutParticipants(participantIds) {
+  const ids = [...new Set((participantIds || []).filter(Boolean))];
+  if (!ids.length) return 0;
+  const rev = Date.now();
+  const operations = ids.map(id => batch => batch.set(doc(db, 'participants', id), {
+    participant_id: id,
+    force_logout_rev: rev
+  }, { merge: true }));
+  await commitAll(operations);
+  await Promise.all(ids.map(id => deleteDoc(doc(db, 'presence', id)).catch(() => {})));
+  return ids.length;
 }
 
 // ─── Admin: clearing data ───────────────────────────────────────────────────
