@@ -32,9 +32,7 @@ const CONFIG = {
   PRESENCE_ONLINE_MS: 120000,
   // Admin message list: after the admin scrolls, pause live re-renders so they
   // can read / hit 撤回 without the list jumping. Resume after this idle time.
-  ADMIN_MSG_SCROLL_RESUME_MS: 3000,
-  // Per-role first-login guide; survives reload and logout on this browser.
-  ONBOARDING_DISMISSED_KEY: 'hkcy_onboarding_dismissed'
+  ADMIN_MSG_SCROLL_RESUME_MS: 3000
 };
 
 const BAD_WORDS = [
@@ -546,7 +544,6 @@ function cacheDOM() {
   DOM.onboardingStepLabel = document.getElementById('onboarding-step-label');
   DOM.onboardingTitle = document.getElementById('onboarding-title');
   DOM.onboardingBody = document.getElementById('onboarding-body');
-  DOM.onboardingDismiss = document.getElementById('onboarding-dismiss');
   DOM.onboardingPrev = document.getElementById('onboarding-prev');
   DOM.onboardingNext = document.getElementById('onboarding-next');
   DOM.onboardingSkip = document.getElementById('onboarding-skip');
@@ -1441,6 +1438,7 @@ function isLoginNativeNumpad() {
 
 const KEYBOARD_OPEN_THRESHOLD = 120;
 let keyboardAvoidanceRaf = 0;
+let ensureFieldTimer = 0;
 
 function isTextEntryElement(el) {
   if (!el || el === document.body || el === document.documentElement) return false;
@@ -1480,65 +1478,62 @@ function getKeyboardInset() {
 }
 
 function adjustScrollBy(el, delta) {
-  if (!el || Math.abs(delta) < 2) return;
+  if (!el || Math.abs(delta) < 4) return;
   const scroller = getScrollParent(el);
+  // Instant scroll — smooth + browser focus-scroll + layout inset = mobile jitter.
   if (
     scroller === document.scrollingElement ||
     scroller === document.documentElement ||
     scroller === document.body
   ) {
-    window.scrollBy({ top: delta, left: 0, behavior: 'smooth' });
+    window.scrollBy(0, delta);
     return;
   }
-  scroller.scrollBy({ top: delta, left: 0, behavior: 'smooth' });
+  scroller.scrollTop += delta;
 }
 
 /**
- * Keep the focused text field inside the visual viewport so the soft keyboard
- * (including the system numpad) never covers it.
+ * Nudge the focused field just enough to clear the soft keyboard.
+ * Avoid centering (that overshoots and feels like a double bounce).
  */
 function ensureActiveFieldVisible() {
   const el = document.activeElement;
   if (!isTextEntryElement(el)) return;
 
   const vv = window.visualViewport;
-  if (!vv) {
-    el.scrollIntoView({ block: 'center', inline: 'nearest' });
-    return;
-  }
+  if (!vv) return;
 
-  const margin = 24;
+  const inset = getKeyboardInset();
+  if (inset < KEYBOARD_OPEN_THRESHOLD) return;
+
+  const margin = 16;
   const visibleTop = vv.offsetTop + margin;
   const visibleBottom = vv.offsetTop + vv.height - margin;
   const rect = el.getBoundingClientRect();
-
-  // Prefer scrolling the whole form-group so the label stays visible too.
   const group = el.closest('.form-group');
-  const targetRect = group ? group.getBoundingClientRect() : rect;
+  const topEdge = group ? group.getBoundingClientRect().top : rect.top;
 
-  if (targetRect.top >= visibleTop && rect.bottom <= visibleBottom) return;
-
-  if (rect.height > vv.height - margin * 2) {
-    adjustScrollBy(el, rect.top - visibleTop);
-    return;
+  let delta = 0;
+  if (rect.bottom > visibleBottom) {
+    delta = rect.bottom - visibleBottom;
+  } else if (topEdge < visibleTop) {
+    delta = topEdge - visibleTop;
   }
+  adjustScrollBy(el, delta);
+}
 
-  const anchorTop = group ? targetRect.top : rect.top;
-  const anchorBottom = rect.bottom;
-  const anchorCenter = (anchorTop + anchorBottom) / 2;
-  const viewCenter = vv.offsetTop + vv.height / 2;
-  adjustScrollBy(el, anchorCenter - viewCenter);
+function scheduleEnsureActiveFieldVisible(delay = 140) {
+  if (ensureFieldTimer) clearTimeout(ensureFieldTimer);
+  ensureFieldTimer = setTimeout(() => {
+    ensureFieldTimer = 0;
+    ensureActiveFieldVisible();
+  }, delay);
 }
 
 function updateKeyboardAvoidance() {
   const inset = getKeyboardInset();
   document.documentElement.style.setProperty('--keyboard-inset', `${inset}px`);
-  const open = inset >= KEYBOARD_OPEN_THRESHOLD;
-  document.documentElement.classList.toggle('keyboard-open', open);
-
-  if (open && isTextEntryElement(document.activeElement)) {
-    requestAnimationFrame(ensureActiveFieldVisible);
-  }
+  document.documentElement.classList.toggle('keyboard-open', inset >= KEYBOARD_OPEN_THRESHOLD);
 }
 
 function scheduleKeyboardAvoidance() {
@@ -1546,6 +1541,10 @@ function scheduleKeyboardAvoidance() {
   keyboardAvoidanceRaf = requestAnimationFrame(() => {
     keyboardAvoidanceRaf = 0;
     updateKeyboardAvoidance();
+    // Debounce the scroll nudge until viewport resize bursts settle.
+    if (isTextEntryElement(document.activeElement)) {
+      scheduleEnsureActiveFieldVisible(140);
+    }
   });
 }
 
@@ -1559,15 +1558,18 @@ function initKeyboardAvoidance() {
 
   document.addEventListener('focusin', (e) => {
     if (!isTextEntryElement(e.target)) return;
-    scheduleKeyboardAvoidance();
-    // Soft keyboards animate in; re-check after the inset settles.
-    setTimeout(updateKeyboardAvoidance, 280);
-    setTimeout(ensureActiveFieldVisible, 320);
+    updateKeyboardAvoidance();
+    // Wait for the keyboard animation instead of fighting the browser's own focus scroll.
+    scheduleEnsureActiveFieldVisible(360);
   });
 
   document.addEventListener('focusout', () => {
     setTimeout(() => {
       if (!isTextEntryElement(document.activeElement)) {
+        if (ensureFieldTimer) {
+          clearTimeout(ensureFieldTimer);
+          ensureFieldTimer = 0;
+        }
         scheduleKeyboardAvoidance();
       }
     }, 80);
@@ -1605,13 +1607,8 @@ function setLoginNativeNumpad(enabled) {
       if (document.activeElement !== DOM.loginPhone) {
         DOM.loginPhone.focus({ preventScroll: true });
       }
-      // Keep the password field above the rising numpad.
-      scheduleKeyboardAvoidance();
-      setTimeout(() => {
-        updateKeyboardAvoidance();
-        ensureActiveFieldVisible();
-      }, 120);
-      setTimeout(ensureActiveFieldVisible, 360);
+      updateKeyboardAvoidance();
+      scheduleEnsureActiveFieldVisible(360);
     }, 30);
   });
 }
@@ -1648,8 +1645,10 @@ async function handleLogin(e) {
 
     if (isAdmin) {
       await enterAdminDashboard();
+      maybeShowOnboarding(true);
     } else {
       await enterParticipantDashboard();
+      maybeShowOnboarding(false);
     }
   })());
 }
@@ -1953,7 +1952,6 @@ async function enterParticipantDashboard() {
     showToast('載入資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
     finishLoading();
-    maybeShowOnboarding(false);
   }
 }
 
@@ -2157,7 +2155,6 @@ async function enterAdminDashboard() {
     switchAdminTab('dashboard');
   } finally {
     finishLoading();
-    maybeShowOnboarding(true);
   }
 }
 
@@ -2779,34 +2776,6 @@ function hideTrophyResultsModal() {
   syncBodyModalOpen();
 }
 
-function readOnboardingDismissed() {
-  try {
-    const raw = localStorage.getItem(CONFIG.ONBOARDING_DISMISSED_KEY);
-    if (!raw) return { participant: false, admin: false };
-    const data = JSON.parse(raw);
-    return {
-      participant: !!data.participant,
-      admin: !!data.admin
-    };
-  } catch (_) {
-    return { participant: false, admin: false };
-  }
-}
-
-function saveOnboardingDismissed(role) {
-  if (role !== 'participant' && role !== 'admin') return;
-  try {
-    const current = readOnboardingDismissed();
-    current[role] = true;
-    localStorage.setItem(CONFIG.ONBOARDING_DISMISSED_KEY, JSON.stringify(current));
-  } catch (_) { /* private mode / quota */ }
-}
-
-function isOnboardingDismissed(role) {
-  const dismissed = readOnboardingDismissed();
-  return !!dismissed[role];
-}
-
 function syncBodyModalOpen() {
   const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal]
     .some(el => el && !el.classList.contains('hidden'));
@@ -2960,7 +2929,6 @@ function showOnboarding(role) {
   onboardingState.role = role;
   onboardingState.step = 0;
   onboardingState.skipDirection = 1;
-  if (DOM.onboardingDismiss) DOM.onboardingDismiss.checked = false;
 
   DOM.onboardingCoach.classList.remove('hidden');
   DOM.onboardingCoach.setAttribute('aria-hidden', 'false');
@@ -2990,15 +2958,11 @@ function hideOnboarding() {
 }
 
 function finishOnboarding() {
-  if (DOM.onboardingDismiss?.checked && onboardingState.role) {
-    saveOnboardingDismissed(onboardingState.role);
-  }
   hideOnboarding();
 }
 
 function maybeShowOnboarding(isAdmin) {
   const role = isAdmin ? 'admin' : 'participant';
-  if (isOnboardingDismissed(role)) return;
   requestAnimationFrame(() => showOnboarding(role));
 }
 

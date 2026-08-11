@@ -88,7 +88,6 @@
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
-  scroll-behavior: smooth;
 }
 
 body {
@@ -123,16 +122,12 @@ body.admin-active { background: var(--bg); }
   max-height: 100dvh;
   overflow: hidden;
   padding-top: var(--safe-top);
-  padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom));
+  /* Prefer keyboard inset when open; otherwise reserve bottom nav.
+     Using max() avoids a sudden padding jump when the keyboard class toggles. */
+  padding-bottom: calc(var(--safe-bottom) + max(var(--bottom-nav-h), var(--keyboard-inset)));
   max-width: var(--max-width);
   margin: 0 auto;
   width: 100%;
-}
-
-/* Drop bottom-nav reservation while the keyboard is open; inset padding lives
-   on the scroll container (.app-main) so fields can scroll above the keyboard. */
-html.keyboard-open .screen-app {
-  padding-bottom: var(--safe-bottom);
 }
 
 html.keyboard-open .bottom-nav {
@@ -264,18 +259,13 @@ html.keyboard-open .bottom-nav {
 .login-inner {
   flex: 1;
   min-height: 0;
-  justify-content: center;
+  justify-content: flex-start;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding-top: var(--space-2xl);
+  padding-top: max(var(--space-2xl), 8vh);
   padding-bottom: calc(var(--space-xl) + var(--keyboard-inset));
-}
-
-html.keyboard-open .login-inner {
-  justify-content: flex-start;
-  padding-top: max(var(--space-md), var(--safe-top));
 }
 
 .login-header {
@@ -361,9 +351,10 @@ html.keyboard-open .login-inner {
 .app-main {
   flex: 1;
   min-height: 0;
-  padding: 0 var(--space-md) calc(var(--space-md) + var(--keyboard-inset));
+  padding: 0 var(--space-md) var(--space-md);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .app-view { display: none; }
@@ -1566,23 +1557,6 @@ textarea.input-field {
   color: var(--text-secondary);
   font-size: var(--fs-caption);
   line-height: 1.45;
-}
-
-.onboarding-dismiss-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-sm);
-  font-size: var(--fs-caption);
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.onboarding-dismiss-label input {
-  width: 0.95rem;
-  height: 0.95rem;
-  accent-color: var(--primary);
 }
 
 .onboarding-actions {
