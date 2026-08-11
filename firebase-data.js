@@ -754,17 +754,11 @@ export async function resetParticipantVote(participantId) {
  * refreshed on a heartbeat so "currently online" stays meaningful.
  */
 export async function touchPresence(participantId) {
-  const ref = doc(db, 'presence', participantId);
-  const existing = await getDoc(ref);
-  const payload = {
+  await setDoc(doc(db, 'presence', participantId), {
     participant_id: participantId,
     online: true,
     last_seen: serverTimestamp()
-  };
-  if (!existing.exists() || !(existing.data() || {}).first_seen) {
-    payload.first_seen = serverTimestamp();
-  }
-  await setDoc(ref, payload, { merge: true });
+  }, { merge: true });
 }
 
 export function markPresenceOffline(participantId) {
@@ -790,4 +784,17 @@ export function subscribePresence(onData, onError) {
       };
     }));
   }, onError);
+}
+
+export async function fetchPresence() {
+  const snapshot = await getDocs(collection(db, 'presence'));
+  return snapshot.docs.map(d => {
+    const data = d.data() || {};
+    return {
+      participant_id: data.participant_id || d.id,
+      online: data.online !== false,
+      first_seen: toIso(data.first_seen),
+      last_seen: toIso(data.last_seen)
+    };
+  });
 }
