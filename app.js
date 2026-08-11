@@ -126,68 +126,358 @@ let presenceHeartbeatTimer = null;
 const ONBOARDING_STEPS = {
   participant: [
     {
-      icon: 'heart',
-      title: '歡迎使用 Just For You',
-      body: '呢個 app 專為 HKCYS TINT 活動而設。你可以匿名留言鼓勵隊友，亦可以為隊友配對獎項。'
+      target: '[data-tour="participant-greeting"]',
+      prepare: 'home',
+      title: '你好',
+      body: '登入後會見你嘅名字。下面四個框框就係主要功能入口。'
     },
     {
-      icon: 'loveletter',
+      target: '#screen-participant .home-card[data-nav="send"]',
+      prepare: 'home',
       title: '匿名留言',
-      body: '喺首頁撳「匿名留言」，揀接收者同寫下你想講嘅話。對方只會收到內容，唔會知道邊個 send。'
+      body: '撳呢個框開始寫鼓勵說話畀隊友。對方只會見到內容，唔知邊個 send。'
     },
     {
-      icon: 'inbox',
-      title: '收件箱同已發送',
-      body: '「收件箱」睇收到嘅留言；「已發送」睇自己 send 咗嘅內容。有新留言時，底部 Inbox 會顯示提示。'
+      target: '#screen-participant .home-card[data-nav="inbox"]',
+      prepare: 'home',
+      title: '收件箱',
+      body: '睇收到嘅匿名留言。有新訊息時呢度同底部 Inbox 會有提示。'
     },
     {
-      icon: 'trophy',
+      target: '#screen-participant .home-card[data-nav="trophy"]',
+      prepare: 'home',
       title: '獎項配對',
-      body: '管理員開放投票後，喺「獎項配對」為每位隊友揀一個獎項。可以先儲存草稿，準備好再提交。'
+      body: '投票開放後，喺呢度為每位隊友配對獎項。'
     },
     {
-      icon: 'home',
-      title: '底部導航',
-      body: '底部有「首頁」「Inbox」「獎項」「我的」。喺「我的」可以改顯示名稱；登出亦喺嗰度。Staff 負責人仲會見到「本組管理」。'
+      target: '#screen-participant .home-card[data-nav="sent"]',
+      prepare: 'home',
+      title: '已發送',
+      body: '睇返自己已經 send 出嘅留言。'
+    },
+    {
+      target: '#home-staff-card',
+      prepare: 'home',
+      title: '本組管理',
+      body: 'Staff 負責人才會見呢個框：監控本組留言、改組名、控制本組投票。'
+    },
+    {
+      target: '#screen-participant .bottom-nav-item[data-tab="home"]',
+      prepare: 'home',
+      title: '底部・首頁',
+      body: '隨時返到首頁功能卡。'
+    },
+    {
+      target: '#screen-participant .bottom-nav-item[data-tab="inbox"]',
+      prepare: 'home',
+      title: '底部・Inbox',
+      body: '快捷入口去收件箱；有未讀會顯示數字。'
+    },
+    {
+      target: '#screen-participant .bottom-nav-item[data-tab="trophy"]',
+      prepare: 'home',
+      title: '底部・獎項',
+      body: '快捷入口去投票／睇得獎結果。'
+    },
+    {
+      target: '#screen-participant .bottom-nav-item[data-tab="profile"]',
+      prepare: 'home',
+      title: '底部・我的',
+      body: '個人資料、改名同登出都喺呢度。'
+    },
+    {
+      target: '[data-tour="send-receiver"]',
+      prepare: 'send',
+      title: '揀接收者',
+      body: '輸入或展開選單，揀你想留言嘅隊友。'
+    },
+    {
+      target: '[data-tour="send-content"]',
+      prepare: 'send',
+      title: '留言內容',
+      body: '最多 300 字。有唔恰當字眼會提示你改。'
+    },
+    {
+      target: '[data-tour="send-submit"]',
+      prepare: 'send',
+      title: '發送留言',
+      body: '寫好就撳呢度送出。送出後會去「已發送」。'
+    },
+    {
+      target: '[data-tour="inbox-toolbar"]',
+      prepare: 'inbox',
+      title: '收件箱頁面',
+      body: '呢度列出所有收到嘅留言；右邊掣可以手動重新整理。'
+    },
+    {
+      target: '[data-tour="inbox-list"], [data-tour="inbox-empty"]',
+      prepare: 'inbox',
+      title: '留言列表',
+      body: '有留言會一則一則顯示；暫時冇就會見空狀態提示。'
+    },
+    {
+      target: '[data-tour="sent-toolbar"]',
+      prepare: 'sent',
+      title: '已發送頁面',
+      body: '左邊返回首頁，右邊可重新整理已發清單。'
+    },
+    {
+      target: '[data-tour="sent-list"], [data-tour="sent-empty"]',
+      prepare: 'sent',
+      title: '已發列表',
+      body: '睇自己 send 過嘅內容同時間。'
+    },
+    {
+      target: '[data-tour="trophy-voting"], [data-tour="trophy-not-open"], [data-tour="trophy-results"]',
+      prepare: 'trophy',
+      title: '獎項頁面',
+      body: '投票未開始會見提示；開放後喺呢度配對；公布後可睇你嘅得獎。'
+    },
+    {
+      target: '[data-tour="trophy-progress"]',
+      prepare: 'trophy',
+      title: '配對進度',
+      body: '顯示你已經為幾多位隊友配咗獎項。'
+    },
+    {
+      target: '[data-tour="trophy-teammates"]',
+      prepare: 'trophy',
+      title: '隊友清單',
+      body: '每位隊友下面有獎項掣，揀一個配對（每位至少一個；每個獎項只能配一位）。'
+    },
+    {
+      target: '[data-tour="trophy-actions"]',
+      prepare: 'trophy',
+      title: '儲存／提交',
+      body: '「儲存草稿」可稍後再改；「提交投票」就正式交卷。'
+    },
+    {
+      target: '[data-tour="profile-header"]',
+      prepare: 'profile',
+      title: '個人資料卡',
+      body: '顯示名稱、組別同登入編號。'
+    },
+    {
+      target: '[data-tour="profile-rename"]',
+      prepare: 'profile',
+      title: '改顯示名稱',
+      body: '改名會出現喺名單同留言顯示；登入仍然用原本編號。'
+    },
+    {
+      target: '[data-tour="profile-stats"]',
+      prepare: 'profile',
+      title: '個人統計',
+      body: '已發／收到留言數量、組別同投票狀態。'
+    },
+    {
+      target: '[data-tour="profile-logout"]',
+      prepare: 'profile',
+      title: '登出',
+      body: '活動完或換機時撳呢度登出。'
     }
   ],
   admin: [
     {
-      icon: 'settings',
-      title: '歡迎使用管理員控制台',
-      body: '呢度可以即時監控留言、控制投票流程，同管理參加者資料。所有更新會自動同步，唔使手動重新整理。'
+      target: '[data-tour="admin-header"]',
+      prepare: 'dashboard',
+      title: '管理員控制台',
+      body: '呢度係現場控制室：監控留言、推動投票、睇結果同改設定。'
     },
     {
-      icon: 'chart',
-      title: 'Dashboard',
-      body: '睇參加者人數、留言量、邊個未登入，同近幾分鐘嘅活動節奏，方便現場掌握狀況。'
+      target: '[data-tour="admin-live-badge"]',
+      prepare: 'dashboard',
+      title: '即時同步',
+      body: '資料會自動更新，唔使手動 refresh。'
     },
     {
-      icon: 'chat',
-      title: 'Messages',
-      body: '監控全部留言，可按組別同狀態篩選。發現不當內容可以「撤回」，誤撤可以「取消撤回」。'
+      target: '[data-tour="admin-logout"]',
+      prepare: 'dashboard',
+      title: '登出',
+      body: '右上角可以登出管理員帳號。'
     },
     {
-      icon: 'trophy',
-      title: 'Voting',
-      body: '投票流程：草稿 → 開放投票 → 關閉投票 → 計算結果 → 公布。每步撳對應按鈕即可，參加者會即時見到狀態。'
+      target: '[data-tour="admin-stats"]',
+      prepare: 'dashboard',
+      title: '總覽數字',
+      body: '參加者人數、留言總數、有效留言同留言開關狀態。'
     },
     {
-      icon: 'clipboard',
-      title: 'Results',
-      body: '「投票審計」睇每票詳情；「個人檔案」睇每位參加者；「獎項摘要」睇各獎項得票同得獎者。'
+      target: '[data-tour="admin-login-status"]',
+      prepare: 'dashboard',
+      title: '登入狀況',
+      body: '邊個已上線／未登入，方便點名同跟進。'
     },
     {
-      icon: 'settings',
-      title: 'Settings',
-      body: '全域開關留言、設定各組 Staff 覆寫、管理參加者資料，同批量重置投票／刪除紀錄。'
+      target: '[data-tour="admin-live-load"]',
+      prepare: 'dashboard',
+      title: '即時負載',
+      body: '近幾分鐘留言同投票節奏，掌握場內氣氛。'
+    },
+    {
+      target: '[data-tour="admin-system-status"]',
+      prepare: 'dashboard',
+      title: '系統狀態',
+      body: '全域留言同投票而家開到邊一步。'
+    },
+    {
+      target: '[data-tour="admin-recent-activity"]',
+      prepare: 'dashboard',
+      title: '最近活動',
+      body: '最新幾則留言往來，方便快速掃一眼。'
+    },
+    {
+      target: '.admin-bottom-nav .bottom-nav-item[data-admin-tab="dashboard"]',
+      prepare: 'dashboard',
+      title: '導航・Dashboard',
+      body: '底部呢五個掣切換各大功能。'
+    },
+    {
+      target: '.admin-bottom-nav .bottom-nav-item[data-admin-tab="messages"]',
+      prepare: 'messages',
+      title: '導航・Messages',
+      body: '進入留言監控。'
+    },
+    {
+      target: '[data-tour="admin-msg-filters"]',
+      prepare: 'messages',
+      title: '搜尋同組別',
+      body: '用關鍵字搜留言，或者只睇某一組。'
+    },
+    {
+      target: '[data-tour="admin-msg-controls"]',
+      prepare: 'messages',
+      title: '狀態篩選',
+      body: '切換全部／有效／已撤回，右邊係同步時間同則數。'
+    },
+    {
+      target: '[data-tour="admin-msg-list"], #admin-msg-empty',
+      prepare: 'messages',
+      title: '留言列表',
+      body: '每則可撤回或取消撤回。內容會即時更新。'
+    },
+    {
+      target: '.admin-bottom-nav .bottom-nav-item[data-admin-tab="voting"]',
+      prepare: 'voting',
+      title: '導航・Voting',
+      body: '進入投票流程控制。'
+    },
+    {
+      target: '[data-tour="admin-voting-badge"]',
+      prepare: 'voting',
+      title: '投票狀態',
+      body: '而家全域投票停喺邊一步（草稿／開放／關閉／計算／公布）。'
+    },
+    {
+      target: '[data-tour="admin-voting-stepper"]',
+      prepare: 'voting',
+      title: '流程進度條',
+      body: '由草稿一路到公布，清楚見到而家去到邊。'
+    },
+    {
+      target: '[data-tour="admin-voting-stats"]',
+      prepare: 'voting',
+      title: '投票統計',
+      body: '提交進度、已投／未投等人數摘要。'
+    },
+    {
+      target: '[data-tour="admin-voting-controls"]',
+      prepare: 'voting',
+      title: '操作掣',
+      body: '開放 → 關閉 → 計算結果 → 公布結果。按場次節奏逐個撳。'
+    },
+    {
+      target: '[data-tour="admin-pending-voters"]',
+      prepare: 'voting',
+      title: '各组投票詳情',
+      body: '睇每組邊個未交；亦可打開投票總覽矩陣。'
+    },
+    {
+      target: '.admin-bottom-nav .bottom-nav-item[data-admin-tab="results"]',
+      prepare: 'results',
+      resultTab: 'audit',
+      title: '導航・Results',
+      body: '進入結果：審計、個人檔案、獎項摘要。'
+    },
+    {
+      target: '[data-tour="admin-result-tabs"]',
+      prepare: 'results',
+      resultTab: 'audit',
+      title: '結果分頁',
+      body: '三個分頁：投票審計、個人檔案、獎項摘要。'
+    },
+    {
+      target: '[data-tour="admin-audit-filters"]',
+      prepare: 'results',
+      resultTab: 'audit',
+      title: '審計篩選',
+      body: '搜參加者或揀某個獎項嚟睇票。'
+    },
+    {
+      target: '[data-tour="admin-audit-cards"]',
+      prepare: 'results',
+      resultTab: 'audit',
+      title: '投票審計',
+      body: '每票邊個投邊個、投咗咩獎，方便核對。'
+    },
+    {
+      target: '[data-tour="admin-profiles"]',
+      prepare: 'results',
+      resultTab: 'profiles',
+      title: '個人檔案',
+      body: '每位參加者攞到邊啲獎、得幾多票。'
+    },
+    {
+      target: '[data-tour="admin-summary"]',
+      prepare: 'results',
+      resultTab: 'summary',
+      title: '獎項摘要',
+      body: '每個獎項嘅得主同排行。展開後可以改獎項名稱。'
+    },
+    {
+      target: '.admin-bottom-nav .bottom-nav-item[data-admin-tab="settings"]',
+      prepare: 'settings',
+      title: '導航・Settings',
+      body: '進入設定同參加者管理。'
+    },
+    {
+      target: '[data-tour="admin-msg-toggle"]',
+      prepare: 'settings',
+      title: '全域留言開關',
+      body: '一鍵開／關全部組留言。Staff 仍可覆寫自己負責嗰組。'
+    },
+    {
+      target: '[data-tour="admin-group-overrides"]',
+      prepare: 'settings',
+      title: '各組狀態',
+      body: '睇每組留言／投票覆寫同 Staff 負責情況。'
+    },
+    {
+      target: '[data-tour="admin-bulk-actions"]',
+      prepare: 'settings',
+      title: '批量操作',
+      body: '重置全部投票或刪除全部紀錄——活動重設先用，要小心。'
+    },
+    {
+      target: '[data-tour="admin-pick-participant"]',
+      prepare: 'settings',
+      title: '揀參加者',
+      body: '揀一位之後可以改電話、組別，或刪除其留言／投票紀錄。'
+    },
+    {
+      target: '#admin-system-info',
+      prepare: 'settings',
+      title: '系統資訊',
+      body: '後端版本同參加者總人數。'
     }
   ]
 };
 
 const onboardingState = {
   role: null,
-  step: 0
+  step: 0,
+  targetEl: null,
+  repositionBound: null,
+  skipDirection: 1
 };
 
 // ─── DOM References ─────────────────────────────────────────────────────────
@@ -249,12 +539,13 @@ function cacheDOM() {
   DOM.trophyResultsList = document.getElementById('trophy-results-list');
   DOM.trophyResultsTitle = document.getElementById('trophy-results-title');
   DOM.trophyVotingSection = document.getElementById('trophy-voting-section');
-  DOM.onboardingModal = document.getElementById('onboarding-modal');
-  DOM.onboardingIcon = document.getElementById('onboarding-icon');
+  DOM.onboardingCoach = document.getElementById('onboarding-coach');
+  DOM.onboardingDim = document.getElementById('onboarding-dim');
+  DOM.onboardingSpotlight = document.getElementById('onboarding-spotlight');
+  DOM.onboardingTip = document.getElementById('onboarding-tip');
   DOM.onboardingStepLabel = document.getElementById('onboarding-step-label');
   DOM.onboardingTitle = document.getElementById('onboarding-title');
   DOM.onboardingBody = document.getElementById('onboarding-body');
-  DOM.onboardingDots = document.getElementById('onboarding-dots');
   DOM.onboardingDismiss = document.getElementById('onboarding-dismiss');
   DOM.onboardingPrev = document.getElementById('onboarding-prev');
   DOM.onboardingNext = document.getElementById('onboarding-next');
@@ -2517,54 +2808,185 @@ function isOnboardingDismissed(role) {
 }
 
 function syncBodyModalOpen() {
-  const anyOpen = [DOM.onboardingModal, DOM.trophyResultsModal, DOM.voteMatrixModal]
+  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal]
     .some(el => el && !el.classList.contains('hidden'));
   document.body.classList.toggle('modal-open', anyOpen);
 }
 
+function clearOnboardingTarget() {
+  if (onboardingState.targetEl) {
+    onboardingState.targetEl.classList.remove('onboarding-target');
+    onboardingState.targetEl = null;
+  }
+}
+
+function detachOnboardingReposition() {
+  if (!onboardingState.repositionBound) return;
+  window.removeEventListener('resize', onboardingState.repositionBound);
+  window.removeEventListener('scroll', onboardingState.repositionBound, true);
+  onboardingState.repositionBound = null;
+}
+
+function prepareOnboardingStep(step) {
+  if (!step) return;
+  if (onboardingState.role === 'admin') {
+    if (step.prepare) switchAdminTab(step.prepare);
+    if (step.resultTab) switchResultTab(step.resultTab);
+  } else if (step.prepare) {
+    switchParticipantView(step.prepare);
+  }
+}
+
+function isOnboardingTargetVisible(el) {
+  if (!el) return false;
+  if (el.classList.contains('hidden')) return false;
+  if (el.closest('.app-view.hidden, .admin-panel.hidden, .result-panel.hidden, .screen.hidden')) {
+    return false;
+  }
+  const style = getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+    return false;
+  }
+  const rect = el.getBoundingClientRect();
+  return rect.width >= 2 && rect.height >= 2;
+}
+
+function findOnboardingTarget(step) {
+  if (!step || !step.target) return null;
+  const nodes = document.querySelectorAll(step.target);
+  for (const el of nodes) {
+    if (isOnboardingTargetVisible(el)) return el;
+  }
+  return null;
+}
+
+function resolveOnboardingTarget() {
+  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
+  const direction = onboardingState.skipDirection >= 0 ? 1 : -1;
+  let guard = steps.length + 1;
+  while (guard-- > 0) {
+    const step = steps[onboardingState.step];
+    if (!step) return null;
+    prepareOnboardingStep(step);
+    const target = findOnboardingTarget(step);
+    if (target) return target;
+    const next = onboardingState.step + direction;
+    if (next < 0 || next >= steps.length) return null;
+    onboardingState.step = next;
+  }
+  return null;
+}
+
+function positionOnboardingAround(target) {
+  if (!DOM.onboardingSpotlight || !DOM.onboardingTip || !target) return;
+
+  const pad = 6;
+  const rect = target.getBoundingClientRect();
+  const spotTop = Math.max(8, rect.top - pad);
+  const spotLeft = Math.max(8, rect.left - pad);
+  const spotWidth = Math.min(window.innerWidth - spotLeft - 8, rect.width + pad * 2);
+  const spotHeight = Math.min(window.innerHeight - spotTop - 8, rect.height + pad * 2);
+
+  DOM.onboardingSpotlight.style.top = spotTop + 'px';
+  DOM.onboardingSpotlight.style.left = spotLeft + 'px';
+  DOM.onboardingSpotlight.style.width = spotWidth + 'px';
+  DOM.onboardingSpotlight.style.height = spotHeight + 'px';
+
+  const tip = DOM.onboardingTip;
+  tip.style.visibility = 'hidden';
+  tip.style.top = '0px';
+  tip.style.left = '0px';
+  const tipWidth = tip.offsetWidth || 280;
+  const tipHeight = tip.offsetHeight || 160;
+  const gap = 10;
+  const margin = 12;
+
+  let top = rect.bottom + gap;
+  let placeBelow = true;
+  if (top + tipHeight > window.innerHeight - margin && rect.top - gap - tipHeight > margin) {
+    top = rect.top - gap - tipHeight;
+    placeBelow = false;
+  }
+  top = Math.max(margin, Math.min(top, window.innerHeight - tipHeight - margin));
+
+  let left = rect.left + (rect.width - tipWidth) / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tipWidth - margin));
+
+  if (placeBelow && top < rect.bottom) top = Math.min(rect.bottom + gap, window.innerHeight - tipHeight - margin);
+  if (!placeBelow && top + tipHeight > rect.top) top = Math.max(margin, rect.top - gap - tipHeight);
+
+  tip.style.top = top + 'px';
+  tip.style.left = left + 'px';
+  tip.style.visibility = 'visible';
+}
+
 function renderOnboardingStep() {
   const steps = ONBOARDING_STEPS[onboardingState.role] || [];
-  const step = steps[onboardingState.step];
-  if (!step || !DOM.onboardingModal) return;
+  if (!DOM.onboardingCoach || !steps.length) return;
 
-  const iconClass = step.icon ? `app-icon app-icon-${step.icon}` : 'app-icon app-icon-heart';
-  DOM.onboardingIcon.className = `onboarding-icon ${iconClass}`;
+  clearOnboardingTarget();
+  const target = resolveOnboardingTarget();
+  const step = steps[onboardingState.step];
+  if (!target || !step) {
+    finishOnboarding();
+    return;
+  }
+
+  onboardingState.targetEl = target;
+  target.classList.add('onboarding-target');
+  try {
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  } catch (_) { /* older browsers */ }
+
   DOM.onboardingStepLabel.textContent = `${onboardingState.step + 1} / ${steps.length}`;
   DOM.onboardingTitle.textContent = step.title;
   DOM.onboardingBody.textContent = step.body;
-
-  if (DOM.onboardingDots) {
-    DOM.onboardingDots.innerHTML = steps.map((_, index) => `
-      <button type="button" class="onboarding-dot${index === onboardingState.step ? ' active' : ''}"
-        data-step="${index}" aria-label="第 ${index + 1} 步" aria-current="${index === onboardingState.step ? 'step' : 'false'}"></button>
-    `).join('');
-  }
 
   if (DOM.onboardingPrev) {
     DOM.onboardingPrev.classList.toggle('hidden', onboardingState.step === 0);
   }
   if (DOM.onboardingNext) {
-    DOM.onboardingNext.textContent = onboardingState.step >= steps.length - 1 ? '開始使用' : '下一步';
+    DOM.onboardingNext.textContent = onboardingState.step >= steps.length - 1 ? '知道了' : '下一步';
   }
+
+  requestAnimationFrame(() => {
+    positionOnboardingAround(target);
+    requestAnimationFrame(() => positionOnboardingAround(target));
+  });
 }
 
 function showOnboarding(role) {
-  if (!DOM.onboardingModal || (role !== 'participant' && role !== 'admin')) return;
+  if (!DOM.onboardingCoach || (role !== 'participant' && role !== 'admin')) return;
   onboardingState.role = role;
   onboardingState.step = 0;
+  onboardingState.skipDirection = 1;
   if (DOM.onboardingDismiss) DOM.onboardingDismiss.checked = false;
+
+  DOM.onboardingCoach.classList.remove('hidden');
+  DOM.onboardingCoach.setAttribute('aria-hidden', 'false');
+  if (DOM.onboardingDim) DOM.onboardingDim.style.display = '';
+
+  detachOnboardingReposition();
+  onboardingState.repositionBound = () => {
+    if (!onboardingState.targetEl) return;
+    positionOnboardingAround(onboardingState.targetEl);
+  };
+  window.addEventListener('resize', onboardingState.repositionBound);
+  window.addEventListener('scroll', onboardingState.repositionBound, true);
+
   renderOnboardingStep();
-  DOM.onboardingModal.classList.remove('hidden');
-  syncBodyModalOpen();
   DOM.onboardingNext?.focus();
 }
 
 function hideOnboarding() {
-  if (!DOM.onboardingModal) return;
-  DOM.onboardingModal.classList.add('hidden');
+  if (!DOM.onboardingCoach) return;
+  DOM.onboardingCoach.classList.add('hidden');
+  DOM.onboardingCoach.setAttribute('aria-hidden', 'true');
+  clearOnboardingTarget();
+  detachOnboardingReposition();
   onboardingState.role = null;
   onboardingState.step = 0;
-  syncBodyModalOpen();
+  onboardingState.skipDirection = 1;
 }
 
 function finishOnboarding() {
@@ -2577,7 +2999,6 @@ function finishOnboarding() {
 function maybeShowOnboarding(isAdmin) {
   const role = isAdmin ? 'admin' : 'participant';
   if (isOnboardingDismissed(role)) return;
-  // Wait until the loading overlay is gone so the guide sits on the dashboard.
   requestAnimationFrame(() => showOnboarding(role));
 }
 
@@ -2587,20 +3008,15 @@ function handleOnboardingNext() {
     finishOnboarding();
     return;
   }
+  onboardingState.skipDirection = 1;
   onboardingState.step += 1;
   renderOnboardingStep();
 }
 
 function handleOnboardingPrev() {
   if (onboardingState.step <= 0) return;
+  onboardingState.skipDirection = -1;
   onboardingState.step -= 1;
-  renderOnboardingStep();
-}
-
-function handleOnboardingDotClick(stepIndex) {
-  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
-  if (stepIndex < 0 || stepIndex >= steps.length) return;
-  onboardingState.step = stepIndex;
   renderOnboardingStep();
 }
 
@@ -3470,6 +3886,12 @@ function renderProfiles() {
 }
 
 function renderTrophySummary() {
+  const openIds = new Set(
+    [...DOM.summaryList.querySelectorAll('.summary-item.open')]
+      .map(el => el.dataset.trophyId)
+      .filter(Boolean)
+  );
+
   DOM.summaryList.innerHTML = state.adminTrophy.trophySummary.map((item, i) => {
     const winners = (item.winners || []);
     const winnerHtml = winners.map(w =>
@@ -3479,10 +3901,27 @@ function renderTrophySummary() {
     const ranking = (item.top_ranking || []).slice(0, 3).map((r, idx) =>
       `<div>${idx + 1}. ${escapeHtml(r.participant_id)} (${r.vote_count} 票)</div>`
     ).join('');
+    const isOpen = openIds.has(item.trophy_id);
 
-    return `<div class="summary-item" data-idx="${i}">
+    return `<div class="summary-item${isOpen ? ' open' : ''}" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
       <button type="button" class="summary-item-header">${escapeHtml(item.trophy_name)}</button>
       <div class="summary-item-body">
+        <div class="summary-rename">
+          <label class="summary-rename-label" for="summary-name-${escapeHtml(item.trophy_id)}">獎項名稱</label>
+          <div class="summary-rename-row">
+            <input type="text" id="summary-name-${escapeHtml(item.trophy_id)}"
+              class="input-field summary-rename-input" maxlength="40"
+              data-trophy-id="${escapeHtml(item.trophy_id)}"
+              value="${escapeHtml(item.trophy_name)}"
+              autocomplete="off">
+            <button type="button" class="btn btn-primary btn-sm btn-progress summary-rename-save"
+              data-trophy-id="${escapeHtml(item.trophy_id)}">
+              <span class="btn-label">儲存</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p class="form-hint">編號 ${escapeHtml(item.trophy_id)}；改名會即時套用到投票畫面同已計算結果。</p>
+        </div>
         ${tieNote}
         ${winnerHtml || '<p>暫無得主</p>'}
         ${ranking ? '<div style="margin-top:8px;font-weight:600">Top 3</div>' + ranking : ''}
@@ -3495,6 +3934,54 @@ function renderTrophySummary() {
       btn.closest('.summary-item').classList.toggle('open');
     });
   });
+
+  DOM.summaryList.querySelectorAll('.summary-rename-save').forEach(btn => {
+    btn.addEventListener('click', () => handleAdminRenameTrophy(btn));
+  });
+}
+
+function applyLocalTrophyName(trophyId, trophyName) {
+  const rename = list => {
+    (list || []).forEach(t => {
+      if (t && t.trophy_id === trophyId) t.trophy_name = trophyName;
+    });
+  };
+  rename(state.adminTrophy.trophies);
+  rename(state.trophy.trophies);
+  (state.adminTrophy.results || []).forEach(result => {
+    (result.awards || []).forEach(award => {
+      if (award && award.trophy_id === trophyId) award.trophy_name = trophyName;
+    });
+  });
+}
+
+async function handleAdminRenameTrophy(btn) {
+  const trophyId = btn?.dataset?.trophyId;
+  if (!trophyId) return;
+  const input = DOM.summaryList.querySelector(
+    `.summary-rename-input[data-trophy-id="${CSS.escape(trophyId)}"]`
+  );
+  const nextName = String(input?.value || '').trim();
+  const current = (state.adminTrophy.trophies || []).find(t => t.trophy_id === trophyId);
+  if (!nextName) {
+    showToast('獎項名稱不可空白', 'error');
+    return;
+  }
+  if (current && current.trophy_name === nextName) {
+    showToast('名稱沒有變更', 'info');
+    return;
+  }
+
+  await runProgressButton(btn, (async () => {
+    try {
+      const saved = await data.updateTrophyName(trophyId, nextName);
+      applyLocalTrophyName(trophyId, saved);
+      refreshAdminTrophyViews();
+      showToast('獎項名稱已更新', 'success');
+    } catch (err) {
+      showToast(err.message || data.describeFirestoreError(err), 'error');
+    }
+  })());
 }
 
 function updateVotingStepper() {
@@ -4160,17 +4647,8 @@ function bindEvents() {
   if (DOM.onboardingSkip) {
     DOM.onboardingSkip.addEventListener('click', finishOnboarding);
   }
-  if (DOM.onboardingDots) {
-    DOM.onboardingDots.addEventListener('click', (e) => {
-      const dot = e.target.closest('.onboarding-dot');
-      if (!dot) return;
-      handleOnboardingDotClick(Number(dot.dataset.step));
-    });
-  }
-  if (DOM.onboardingModal) {
-    DOM.onboardingModal.addEventListener('click', (e) => {
-      if (e.target === DOM.onboardingModal) finishOnboarding();
-    });
+  if (DOM.onboardingDim) {
+    DOM.onboardingDim.addEventListener('click', finishOnboarding);
   }
 
   if (DOM.voteMatrixModalClose) {

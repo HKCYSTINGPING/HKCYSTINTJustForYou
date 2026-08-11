@@ -387,6 +387,37 @@ export async function fetchTrophies() {
     .sort((a, b) => a.trophy_id.localeCompare(b.trophy_id));
 }
 
+/** Rename a trophy and rewrite any stored result snapshots that still show the old label. */
+export async function updateTrophyName(trophyId, trophyName) {
+  const id = String(trophyId || '').trim();
+  const name = String(trophyName || '').trim();
+  if (!id) throw new Error('缺少獎項編號');
+  if (!name) throw new Error('獎項名稱不可空白');
+  if (name.length > 40) throw new Error('獎項名稱最多 40 字');
+
+  await updateDoc(doc(db, 'trophies', id), {
+    trophy_id: id,
+    trophy_name: name
+  });
+
+  const snapshot = await getDocs(collection(db, 'results'));
+  const operations = [];
+  snapshot.docs.forEach(d => {
+    const raw = d.data() || {};
+    const awards = Array.isArray(raw.awards) ? raw.awards : [];
+    let changed = false;
+    const next = awards.map(award => {
+      if (!award || award.trophy_id !== id || award.trophy_name === name) return award;
+      changed = true;
+      return { ...award, trophy_name: name };
+    });
+    if (!changed) return;
+    operations.push(batch => batch.update(doc(db, 'results', d.id), { awards: next }));
+  });
+  if (operations.length) await commitAll(operations);
+  return name;
+}
+
 function submissionFromDoc(snapshot) {
   const data = snapshot.data() || {};
   return {

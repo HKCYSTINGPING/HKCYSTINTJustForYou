@@ -114,7 +114,7 @@
 
   <!-- ═══ PARTICIPANT APP ═══ -->
   <section id="screen-participant" class="screen screen-app hidden" aria-label="參加者主頁">
-    <header class="app-header">
+    <header class="app-header" data-tour="participant-greeting">
       <div class="app-header-content">
         <h1 id="participant-greeting" class="greeting-text">你好 <span class="app-icon app-icon-wave inline-icon" aria-hidden="true"></span></h1>
         <p id="participant-subgreeting" class="greeting-sub">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
@@ -168,8 +168,8 @@
           <p>管理員已暫時關閉留言功能，請稍後再試</p>
         </div>
         <div id="send-closed-banner" class="status-banner status-banner-warning hidden" role="alert"></div>
-        <form id="send-form" class="send-form card">
-          <div class="form-group">
+        <form id="send-form" class="send-form card" data-tour="send-form">
+          <div class="form-group" data-tour="send-receiver">
             <label for="send-receiver">接收者</label>
             <div class="combobox-wrapper" id="send-combobox">
               <input type="text" id="send-receiver" class="combobox-input input-field" autocomplete="off"
@@ -181,12 +181,12 @@
               <ul id="send-dropdown" class="combobox-dropdown hidden" role="listbox"></ul>
             </div>
           </div>
-          <div class="form-group">
+          <div class="form-group" data-tour="send-content">
             <label for="send-content">留言內容 <span id="char-counter" class="char-counter">0/300</span></label>
             <textarea id="send-content" class="input-field" maxlength="300" rows="5" placeholder="寫下你想說的話…"></textarea>
             <p id="bad-words-warning" class="form-hint form-hint-danger hidden">內容包含不適當用語，請修改後再發送</p>
           </div>
-          <button type="submit" id="send-submit" class="btn btn-primary btn-lg btn-progress">
+          <button type="submit" id="send-submit" class="btn btn-primary btn-lg btn-progress" data-tour="send-submit">
             <span class="btn-label">發送留言</span>
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
@@ -195,7 +195,7 @@
 
       <!-- Inbox -->
       <div id="view-inbox" class="app-view hidden" data-view="inbox">
-        <div class="view-toolbar">
+        <div class="view-toolbar" data-tour="inbox-toolbar">
           <h2 class="view-title">收件箱</h2>
           <button type="button" id="inbox-refresh" class="btn btn-ghost btn-sm btn-progress" aria-label="重新整理">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -203,8 +203,8 @@
             </svg>
           </button>
         </div>
-        <div id="inbox-list" class="message-list"></div>
-        <div id="inbox-empty" class="empty-state empty-illustration hidden">
+        <div id="inbox-list" class="message-list" data-tour="inbox-list"></div>
+        <div id="inbox-empty" class="empty-state empty-illustration hidden" data-tour="inbox-empty">
           <div class="illustration-circle"><span class="app-icon app-icon-mailbox" aria-hidden="true"></span></div>
           <h3>收件箱是空的</h3>
           <p>當有人給你留言時，會在這裡顯示</p>
@@ -213,7 +213,7 @@
 
       <!-- Sent -->
       <div id="view-sent" class="app-view hidden" data-view="sent">
-        <div class="view-toolbar">
+        <div class="view-toolbar" data-tour="sent-toolbar">
           <button type="button" class="btn btn-ghost btn-icon back-btn" data-back="home" aria-label="返回">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
           </button>
@@ -224,8 +224,8 @@
             </svg>
           </button>
         </div>
-        <div id="sent-list" class="message-list"></div>
-        <div id="sent-empty" class="empty-state empty-illustration hidden">
+        <div id="sent-list" class="message-list" data-tour="sent-list"></div>
+        <div id="sent-empty" class="empty-state empty-illustration hidden" data-tour="sent-empty">
           <div class="illustration-circle"><span class="app-icon app-icon-envelope" aria-hidden="true"></span></div>
           <h3>尚未發送任何留言</h3>
           <p>前往「匿名留言」開始寫給隊友</p>
@@ -234,15 +234,15 @@
 
       <!-- 獎項 -->
       <div id="view-trophy" class="app-view hidden" data-view="trophy">
-        <div id="trophy-status-banner" class="status-banner hidden" role="status"></div>
+        <div id="trophy-status-banner" class="status-banner hidden" role="status" data-tour="trophy-banner"></div>
 
-        <div id="trophy-not-open" class="empty-state empty-illustration hidden">
+        <div id="trophy-not-open" class="empty-state empty-illustration hidden" data-tour="trophy-not-open">
           <div class="illustration-circle"><span class="app-icon app-icon-trophy" aria-hidden="true"></span></div>
           <h3>投票尚未開始</h3>
           <p>管理員開放投票後，你可以為隊友配對獎項（每位隊友至少一個；每個獎項只能配一位）</p>
         </div>
 
-        <div id="trophy-results-panel" class="trophy-results-panel card hidden" aria-live="polite">
+        <div id="trophy-results-panel" class="trophy-results-panel card hidden" aria-live="polite" data-tour="trophy-results">
           <div class="trophy-results-header">
             <span class="trophy-results-icon app-icon app-icon-trophy" aria-hidden="true"></span>
             <h3 id="trophy-results-title">你的獎項結果</h3>
@@ -250,8 +250,8 @@
           <div id="trophy-results-list" class="trophy-results-list"></div>
         </div>
 
-        <div id="trophy-voting-section">
-          <div class="trophy-progress-wrap card">
+        <div id="trophy-voting-section" data-tour="trophy-voting">
+          <div class="trophy-progress-wrap card" data-tour="trophy-progress">
             <div class="trophy-progress-label">
               <span>配對進度</span>
               <span id="trophy-progress-text">0/0</span>
@@ -260,13 +260,13 @@
               <div id="trophy-progress-fill" class="progress-bar-fill" style="width:0%"></div>
             </div>
           </div>
-          <div id="trophy-teammates" class="trophy-teammates"></div>
+          <div id="trophy-teammates" class="trophy-teammates" data-tour="trophy-teammates"></div>
           <div id="trophy-empty" class="empty-state empty-illustration hidden">
             <div class="illustration-circle"><span class="app-icon app-icon-profile" aria-hidden="true"></span></div>
             <h3>暫無隊友資料</h3>
             <p>請聯絡管理員確認分組設定</p>
           </div>
-          <div id="trophy-actions" class="trophy-actions hidden">
+          <div id="trophy-actions" class="trophy-actions hidden" data-tour="trophy-actions">
             <button type="button" id="trophy-save-draft" class="btn btn-secondary btn-progress">
               <span class="btn-label">儲存草稿</span>
               <span class="btn-progress-bar" aria-hidden="true"></span>
@@ -291,13 +291,13 @@
 
       <!-- Profile -->
       <div id="view-profile" class="app-view hidden" data-view="profile">
-        <div class="profile-header card">
+        <div class="profile-header card" data-tour="profile-header">
           <div class="profile-avatar" id="profile-avatar">?</div>
           <h2 id="profile-name" class="profile-name">—</h2>
           <span id="profile-group" class="chip chip-secondary">—</span>
           <p id="profile-login-id" class="form-hint profile-login-id">登入編號：—</p>
         </div>
-        <div class="card profile-rename-card">
+        <div class="card profile-rename-card" data-tour="profile-rename">
           <h3 class="section-title">顯示名稱</h3>
           <p class="form-hint">改名後會套用到留言、獎項同名單；登入仍用原本編號。</p>
           <div class="form-group">
@@ -309,8 +309,8 @@
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
         </div>
-        <div id="profile-stats" class="profile-stats"></div>
-        <button type="button" id="participant-logout" class="btn btn-danger btn-lg">登出</button>
+        <div id="profile-stats" class="profile-stats" data-tour="profile-stats"></div>
+        <button type="button" id="participant-logout" class="btn btn-danger btn-lg" data-tour="profile-logout">登出</button>
       </div>
 
       <!-- Staff facilitator: monitor + per-group controls -->
@@ -424,23 +424,23 @@
     </nav>
   </section>
 
-  <!-- First-login app guide -->
-  <div id="onboarding-modal" class="modal-overlay glass-overlay onboarding-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-    <div class="modal-card glass-card onboarding-card">
-      <div id="onboarding-icon" class="onboarding-icon app-icon app-icon-heart" aria-hidden="true"></div>
+  <!-- First-login coach tips (small cards by each feature) -->
+  <div id="onboarding-coach" class="onboarding-coach hidden" aria-hidden="true">
+    <div id="onboarding-dim" class="onboarding-dim" aria-hidden="true"></div>
+    <div id="onboarding-spotlight" class="onboarding-spotlight" aria-hidden="true"></div>
+    <div id="onboarding-tip" class="onboarding-tip glass-card" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
       <p id="onboarding-step-label" class="onboarding-step-label">1 / 5</p>
-      <h2 id="onboarding-title">歡迎</h2>
+      <h2 id="onboarding-title" class="onboarding-title">歡迎</h2>
       <p id="onboarding-body" class="onboarding-body"></p>
-      <div id="onboarding-dots" class="onboarding-dots" role="tablist" aria-label="導覽步驟"></div>
       <label class="onboarding-dismiss-label">
         <input type="checkbox" id="onboarding-dismiss">
         <span>不要再顯示</span>
       </label>
       <div class="onboarding-actions">
         <button type="button" id="onboarding-prev" class="btn btn-secondary btn-sm">上一步</button>
-        <button type="button" id="onboarding-next" class="btn btn-primary">下一步</button>
+        <button type="button" id="onboarding-next" class="btn btn-primary btn-sm">下一步</button>
       </div>
-      <button type="button" id="onboarding-skip" class="btn btn-ghost btn-sm onboarding-skip">略過導覽</button>
+      <button type="button" id="onboarding-skip" class="btn btn-ghost btn-sm onboarding-skip">略過</button>
     </div>
   </div>
 
@@ -478,15 +478,15 @@
 
   <!-- ═══ ADMIN APP ═══ -->
   <section id="screen-admin" class="screen screen-app hidden" aria-label="管理員控制台">
-    <header class="app-header admin-header">
+    <header class="app-header admin-header" data-tour="admin-header">
       <div class="app-header-content">
         <h1 class="greeting-text">管理員控制台</h1>
-        <span id="admin-live-badge" class="badge badge-live">
+        <span id="admin-live-badge" class="badge badge-live" data-tour="admin-live-badge">
           <span class="live-dot"></span> 即時
         </span>
         <span id="admin-queue-pill" class="badge badge-queue hidden" role="status" aria-live="polite">排隊 0</span>
       </div>
-      <button type="button" id="admin-logout" class="btn btn-ghost btn-icon" aria-label="登出">
+      <button type="button" id="admin-logout" class="btn btn-ghost btn-icon" aria-label="登出" data-tour="admin-logout">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
         </svg>
@@ -496,20 +496,20 @@
     <main class="app-main">
       <!-- Dashboard -->
       <div id="admin-dashboard-panel" class="admin-panel active" data-admin-view="dashboard">
-        <div id="admin-dashboard-stats" class="stats-grid"></div>
-        <div class="card">
+        <div id="admin-dashboard-stats" class="stats-grid" data-tour="admin-stats"></div>
+        <div class="card" data-tour="admin-login-status">
           <div id="admin-login-status" class="admin-pending"></div>
         </div>
-        <div class="card">
+        <div class="card" data-tour="admin-live-load">
           <h3 class="section-title">即時負載</h3>
           <div id="admin-live-load" class="stats-grid"></div>
           <p class="hint-text">近幾分鐘留言同投票進度，方便活動當日掌握場內節奏。</p>
         </div>
-        <div class="card">
+        <div class="card" data-tour="admin-system-status">
           <h3 class="section-title">系統狀態</h3>
           <div id="admin-dashboard-status" class="status-row"></div>
         </div>
-        <div class="card">
+        <div class="card" data-tour="admin-recent-activity">
           <h3 class="section-title">最近活動</h3>
           <div id="admin-recent-activity" class="recent-activity"></div>
         </div>
@@ -517,13 +517,13 @@
 
       <!-- Messages -->
       <div id="admin-messages-panel" class="admin-panel hidden" data-admin-view="messages">
-        <div class="search-bar admin-msg-filters">
+        <div class="search-bar admin-msg-filters" data-tour="admin-msg-filters">
           <input type="search" id="admin-msg-search" class="input-field" placeholder="搜尋留言…" aria-label="搜尋留言">
           <select id="admin-msg-group-filter" class="input-field" aria-label="按組別篩選">
             <option value="">全部組別</option>
           </select>
         </div>
-        <div class="admin-controls">
+        <div class="admin-controls" data-tour="admin-msg-controls">
           <div class="filter-chips" role="group" aria-label="篩選">
             <button type="button" class="chip chip-filter active" data-filter="all">全部</button>
             <button type="button" class="chip chip-filter" data-filter="active">有效</button>
@@ -534,7 +534,7 @@
             <span id="admin-msg-count">共 0 則</span>
           </div>
         </div>
-        <div id="admin-message-list" class="admin-message-list"></div>
+        <div id="admin-message-list" class="admin-message-list" data-tour="admin-msg-list"></div>
         <div id="admin-msg-empty" class="empty-state empty-illustration hidden">
           <div class="illustration-circle"><span class="app-icon app-icon-chat" aria-hidden="true"></span></div>
           <h3>暫無留言</h3>
@@ -544,9 +544,9 @@
 
       <!-- Voting -->
       <div id="admin-trophy-panel" class="admin-panel hidden" data-admin-view="voting">
-        <div id="admin-voting-status-badge" class="voting-status-badge">—</div>
+        <div id="admin-voting-status-badge" class="voting-status-badge" data-tour="admin-voting-badge">—</div>
 
-        <div class="voting-stepper">
+        <div class="voting-stepper" data-tour="admin-voting-stepper">
           <div class="stepper-step" data-step="DRAFT"><span class="stepper-dot"></span><span class="stepper-label">草稿</span></div>
           <div class="stepper-line"></div>
           <div class="stepper-step" data-step="VOTING_OPEN"><span class="stepper-dot"></span><span class="stepper-label">開放投票</span></div>
@@ -558,8 +558,8 @@
           <div class="stepper-step" data-step="PUBLISHED"><span class="stepper-dot"></span><span class="stepper-label">公布</span></div>
         </div>
 
-        <div id="admin-trophy-stats" class="stats-grid"></div>
-        <div class="admin-trophy-controls">
+        <div id="admin-trophy-stats" class="stats-grid" data-tour="admin-voting-stats"></div>
+        <div class="admin-trophy-controls" data-tour="admin-voting-controls">
           <button type="button" id="admin-open-voting" class="btn btn-success btn-progress">
             <span class="btn-label">開放投票</span>
             <span class="btn-progress-bar" aria-hidden="true"></span>
@@ -577,25 +577,25 @@
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
         </div>
-        <div id="admin-pending-voters" class="admin-pending"></div>
+        <div id="admin-pending-voters" class="admin-pending" data-tour="admin-pending-voters"></div>
       </div>
 
       <!-- Results -->
       <div id="admin-results-panel" class="admin-panel hidden" data-admin-view="results">
-        <nav class="sub-tab-nav" role="tablist" aria-label="結果檢視">
+        <nav class="sub-tab-nav" role="tablist" aria-label="結果檢視" data-tour="admin-result-tabs">
           <button type="button" class="sub-tab-btn active" data-result-tab="audit">投票審計</button>
           <button type="button" class="sub-tab-btn" data-result-tab="profiles">個人檔案</button>
           <button type="button" class="sub-tab-btn" data-result-tab="summary">獎項摘要</button>
         </nav>
 
         <div id="result-audit" class="result-panel active">
-          <div class="audit-filters">
+          <div class="audit-filters" data-tour="admin-audit-filters">
             <input type="search" id="audit-search" class="input-field" placeholder="搜尋參加者…" aria-label="搜尋參加者">
             <select id="audit-trophy-filter" class="input-field" aria-label="篩選獎項">
               <option value="">全部獎項</option>
             </select>
           </div>
-          <div id="audit-cards" class="audit-cards"></div>
+          <div id="audit-cards" class="audit-cards" data-tour="admin-audit-cards"></div>
           <div class="table-wrap hidden">
             <table id="audit-table" class="data-table">
               <thead><tr><th>投票者</th><th>接收者</th><th>獎項</th></tr></thead>
@@ -605,17 +605,17 @@
         </div>
 
         <div id="result-profiles" class="result-panel hidden">
-          <div id="profiles-list" class="profiles-grid"></div>
+          <div id="profiles-list" class="profiles-grid" data-tour="admin-profiles"></div>
         </div>
 
         <div id="result-summary" class="result-panel hidden">
-          <div id="summary-list" class="summary-list accordion"></div>
+          <div id="summary-list" class="summary-list accordion" data-tour="admin-summary"></div>
         </div>
       </div>
 
       <!-- Settings -->
       <div id="admin-participants-panel" class="admin-panel hidden" data-admin-view="settings">
-        <div class="card">
+        <div class="card" data-tour="admin-msg-toggle">
           <h3 class="section-title">留言控制</h3>
           <p class="form-hint">全域關閉會停用所有組。Staff 可另外覆寫自己負責組別。</p>
           <div class="toggle-row">
@@ -633,17 +633,17 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" data-tour="admin-group-overrides">
           <h3 class="section-title">各組狀態（Staff 覆寫）</h3>
           <p class="form-hint">將 Staff（如 WILL）分到 GROUP_1…6 後，對方可改組名、監控組內留言，並獨立控制該組留言／投票。</p>
           <div id="admin-group-overrides" class="admin-group-overrides"></div>
         </div>
 
-        <div class="card admin-participant-form">
+        <div class="card admin-participant-form" data-tour="admin-participant-manage">
           <h3 class="section-title">參加者管理</h3>
           <p class="form-hint">選擇參加者以查看、修改資料或刪除其所有紀錄</p>
 
-          <div class="admin-participant-bulk">
+          <div class="admin-participant-bulk" data-tour="admin-bulk-actions">
             <h4>批量操作（全部參加者）</h4>
             <div class="admin-bulk-actions">
               <button type="button" id="admin-bulk-reset-votes" class="btn btn-danger btn-sm btn-progress">
@@ -657,7 +657,7 @@
             </div>
           </div>
 
-          <div class="form-group">
+          <div class="form-group" data-tour="admin-pick-participant">
             <label for="admin-participant-select">選擇參加者</label>
             <div class="combobox-wrapper" id="admin-participant-combobox">
               <input type="text" id="admin-participant-select" class="combobox-input input-field" autocomplete="off"
