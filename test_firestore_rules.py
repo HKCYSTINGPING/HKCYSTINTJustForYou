@@ -79,7 +79,7 @@ def query(collection, field=None, value=None):
 
 def main():
     print("以參加者 1A 登入…")
-    p = sign_in("1a@tnit.local", "98765432")
+    p = sign_in("1a@tnit.local", "1A1A1A")
     print("以管理員登入…")
     a = sign_in("admin@tnit.local", "23082026")
 

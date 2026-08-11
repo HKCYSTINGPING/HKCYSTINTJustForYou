@@ -130,6 +130,36 @@ export function describeAuthError(err) {
   }
 }
 
+/**
+ * Map Firestore failures to short Chinese copy. Never surface the SDK’s raw
+ * English "Missing or insufficient permissions." string in the UI.
+ */
+export function describeFirestoreError(err, fallback = '操作失敗，請再試一次') {
+  const code = err && err.code;
+  if (code === 'permission-denied') {
+    return '目前無法完成此操作，請確認功能已開放或稍後再試';
+  }
+  if (code === 'unauthenticated') {
+    return '登入已失效，請重新登入';
+  }
+  if (code === 'unavailable' || code === 'deadline-exceeded') {
+    return '網絡不穩，請稍後再試';
+  }
+  if (code === 'not-found') {
+    return '找不到相關資料';
+  }
+  const msg = String((err && err.message) || '').trim();
+  if (!msg) return fallback;
+  if (/missing or insufficient permissions/i.test(msg)) {
+    return '目前無法完成此操作，請確認功能已開放或稍後再試';
+  }
+  // Prefer the local fallback over Firebase’s English SDK phrasing.
+  if (/^(FirebaseError|[A-Z][A-Z0-9_]+):/.test(msg) || /firestore/i.test(msg)) {
+    return fallback;
+  }
+  return msg;
+}
+
 // ─── Shared helpers ─────────────────────────────────────────────────────────
 
 function toIso(value) {
