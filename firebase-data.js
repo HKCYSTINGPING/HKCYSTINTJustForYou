@@ -768,11 +768,14 @@ export async function touchPresence(participantId) {
 }
 
 export function markPresenceOffline(participantId) {
-  return setDoc(doc(db, 'presence', participantId), {
-    participant_id: participantId,
-    online: false,
-    last_seen: serverTimestamp()
-  }, { merge: true });
+  // Remove the presence doc so admin login status flips to「未登入」immediately.
+  return deleteDoc(doc(db, 'presence', participantId)).catch(() =>
+    setDoc(doc(db, 'presence', participantId), {
+      participant_id: participantId,
+      online: false,
+      last_seen: serverTimestamp()
+    }, { merge: true })
+  );
 }
 
 export function subscribePresence(onData, onError) {

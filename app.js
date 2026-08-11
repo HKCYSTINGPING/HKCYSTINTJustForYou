@@ -123,6 +123,7 @@ let resultUnsubscribe = null;
 let votingStatusPrimed = false;
 let messagingStatusPrimed = false;
 let presenceHeartbeatTimer = null;
+let adminLoginStatusRefreshTimer = null;
 
 const ONBOARDING_STEPS = {
   participant: [
@@ -978,6 +979,7 @@ function track(unsubscribe) {
 
 function stopAllSubscriptions() {
   stopPresenceHeartbeat();
+  stopAdminLoginStatusRefresh();
   subscriptions.forEach(stop => {
     try {
       stop();
@@ -993,6 +995,9 @@ async function startPresenceHeartbeat() {
   if (!state.participantId || state.isAdmin) return;
   stopPresenceHeartbeat();
   const pulse = () => {
+    // Skip if a force-logout is already being applied — otherwise the next
+    // heartbeat can recreate the presence doc and the admin panel flaps back.
+    if (state.handledForceLogoutRev) return;
     data.touchPresence(state.participantId).catch(() => { /* presence is best-effort */ });
   };
   pulse();
@@ -2148,8 +2153,30 @@ async function startAdminSubscriptions() {
       console.warn('登入狀況 listener error:', err && err.message);
       state.presence = [];
       renderAdminLoginStatus();
+      if (err && err.code === 'permission-denied') {
+        showToast('登入狀況未啟用：請發布最新 firestore.rules', 'info');
+      }
     }
   ));
+  startAdminLoginStatusRefresh();
+}
+
+function startAdminLoginStatusRefresh() {
+  stopAdminLoginStatusRefresh();
+  // Presence docs only push when they change; stale heartbeats need a local tick
+  // so「已登入」flips after PRESENCE_ONLINE_MS without a new snapshot.
+  adminLoginStatusRefreshTimer = setInterval(() => {
+    if (!state.isAdmin) return;
+    renderAdminLoginStatus();
+    renderAdminLiveLoad();
+  }, 15000);
+}
+
+function stopAdminLoginStatusRefresh() {
+  if (adminLoginStatusRefreshTimer) {
+    clearInterval(adminLoginStatusRefreshTimer);
+    adminLoginStatusRefreshTimer = null;
+  }
 }
 
 async function enterAdminDashboard() {
@@ -2664,12 +2691,8 @@ function renderAdminLiveLoad() {
     m => m.status === 'active' && m.created_at > recentCutoff
   ).length;
   const voted = state.adminTrophy.submissions.filter(s => s.status === 'submitted').length;
-  const onlineCutoff = Date.now() - CONFIG.PRESENCE_ONLINE_MS;
-  const online = state.presence.filter(p => {
-    if (!p.last_seen) return false;
-    return new Date(p.last_seen).getTime() >= onlineCutoff && p.online !== false;
-  }).length;
-  const loggedIn = state.presence.filter(p => !!p.first_seen).length;
+  const online = state.presence.filter(p => isPresenceCurrentlyLoggedIn(p)).length;
+  const loggedIn = online;
 
   if (DOM.adminQueuePill) {
     DOM.adminQueuePill.textContent = '在線 ' + online;
@@ -3786,26 +3809,30 @@ function renderAdminPendingVoters() {
   if (state.adminTrophy.matrixModal) renderVoteMatrixModal();
 }
 
+/** Current session: recent heartbeat and not explicitly marked offline. */
+function isPresenceCurrentlyLoggedIn(presence) {
+  if (!presence || presence.online === false) return false;
+  if (!presence.last_seen) return false;
+  const seenAt = new Date(presence.last_seen).getTime();
+  if (!Number.isFinite(seenAt)) return false;
+  return seenAt >= Date.now() - CONFIG.PRESENCE_ONLINE_MS;
+}
+
 function buildLoginStatusGroups() {
-  const loggedIn = new Set(
-    state.presence.filter(p => !!p.first_seen).map(p => p.participant_id)
-  );
-  const onlineCutoff = Date.now() - CONFIG.PRESENCE_ONLINE_MS;
-  const online = new Set(
-    state.presence.filter(p => {
-      if (!p.last_seen) return false;
-      return new Date(p.last_seen).getTime() >= onlineCutoff && p.online !== false;
-    }).map(p => p.participant_id)
+  const presenceById = new Map(
+    state.presence.map(p => [p.participant_id, p])
   );
 
   const byGroup = new Map();
   state.participants.forEach(p => {
     const group = p.group_id || '未分組';
     if (!byGroup.has(group)) byGroup.set(group, []);
+    const presence = presenceById.get(p.participant_id);
+    const loggedIn = isPresenceCurrentlyLoggedIn(presence);
     byGroup.get(group).push({
       participant_id: p.participant_id,
-      logged_in: loggedIn.has(p.participant_id),
-      online: online.has(p.participant_id),
+      logged_in: loggedIn,
+      online: loggedIn,
       force_logout_rev: Number(p.force_logout_rev || 0) || 0
     });
   });
@@ -3819,6 +3846,16 @@ function buildLoginStatusGroups() {
     }));
 }
 
+function removeLocalPresence(participantIds) {
+  const remove = new Set(
+    (participantIds || []).map(id => normalizeId(id)).filter(Boolean)
+  );
+  if (!remove.size) return;
+  state.presence = state.presence.filter(p => !remove.has(normalizeId(p.participant_id)));
+  renderAdminLoginStatus();
+  renderAdminLiveLoad();
+}
+
 function maybeHandleForcedLogout(rows) {
   if (state.isAdmin || !state.participantId) return;
   const me = (rows || []).find(p => p.participant_id === state.participantId);
@@ -3828,6 +3865,7 @@ function maybeHandleForcedLogout(rows) {
   const sessionStartedAt = Number(state.sessionStartedAt || 0) || 0;
   if (rev <= sessionStartedAt || rev === state.handledForceLogoutRev) return;
   state.handledForceLogoutRev = rev;
+  stopPresenceHeartbeat();
   setTimeout(() => handleLogout(), 50);
 }
 
@@ -4454,6 +4492,7 @@ async function handleAdminForceLogoutParticipant(participantId, btn) {
 
   const action = async () => {
     await data.forceLogoutParticipant(pid);
+    removeLocalPresence([pid]);
     closeForceLogoutModal();
   };
 
@@ -4474,7 +4513,7 @@ async function handleAdminForceLogoutParticipant(participantId, btn) {
 
 async function handleAdminForceLogoutAll() {
   const ids = state.presence
-    .filter(p => !!p.first_seen)
+    .filter(p => isPresenceCurrentlyLoggedIn(p))
     .map(p => normalizeId(p.participant_id))
     .filter(Boolean);
   if (!ids.length) {
@@ -4484,6 +4523,7 @@ async function handleAdminForceLogoutAll() {
   if (!window.confirm('確定要強制登出全部已登入參加者嗎？')) return;
   try {
     await data.forceLogoutParticipants(ids);
+    removeLocalPresence(ids);
   } catch (err) {
     showToast(data.describeFirestoreError(err), 'error');
   }
