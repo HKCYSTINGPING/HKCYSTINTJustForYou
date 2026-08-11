@@ -3812,8 +3812,12 @@ function renderAdminPendingVoters() {
 /** Current session: recent heartbeat and not explicitly marked offline. */
 function isPresenceCurrentlyLoggedIn(presence) {
   if (!presence || presence.online === false) return false;
-  if (!presence.last_seen) return false;
-  const seenAt = new Date(presence.last_seen).getTime();
+  // During the first moment after a write, `last_seen` can still be
+  // unresolved in some browser caches. Fall back to `first_seen` so
+  // 「已登入」shows quickly after a fresh login.
+  const seenAtRaw = presence.last_seen || presence.first_seen || '';
+  if (!seenAtRaw) return false;
+  const seenAt = new Date(seenAtRaw).getTime();
   if (!Number.isFinite(seenAt)) return false;
   return seenAt >= Date.now() - CONFIG.PRESENCE_ONLINE_MS;
 }
@@ -3879,15 +3883,44 @@ function renderAdminLoginStatus() {
     pendingLabel: '未登入',
     emptyAllDone: '所有參加者均已登入',
     emptyPendingTitle: '尚未登入',
-    titleActionHtml: `<button type="button" id="admin-force-logout-all" class="btn btn-danger btn-sm">全部強制登出</button>`,
+    titleActionHtml: `
+      <div class="admin-login-actions">
+        <button type="button" id="admin-refresh-login-status" class="btn btn-secondary btn-sm btn-progress">
+          <span class="btn-label">手動刷新</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="admin-force-logout-all" class="btn btn-danger btn-sm">全部強制登出</button>
+      </div>
+    `,
     onMemberClick: participantId => openForceLogoutModal(participantId),
     afterRender: container => {
+      const refreshBtn = container.querySelector('#admin-refresh-login-status');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => handleAdminRefreshLoginStatus(refreshBtn));
+      }
       const allBtn = container.querySelector('#admin-force-logout-all');
       if (allBtn) {
         allBtn.addEventListener('click', handleAdminForceLogoutAll);
       }
     }
   });
+}
+
+async function handleAdminRefreshLoginStatus(btn) {
+  const action = async () => {
+    state.presence = await data.fetchPresence();
+    renderAdminLoginStatus();
+    renderAdminLiveLoad();
+  };
+  try {
+    if (btn) {
+      await runProgressButton(btn, action());
+    } else {
+      await action();
+    }
+  } catch (err) {
+    showToast(data.describeFirestoreError(err), 'error');
+  }
 }
 
 function populateAuditTrophyFilter() {
