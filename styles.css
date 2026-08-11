@@ -1508,6 +1508,97 @@ textarea.input-field {
 
 .trophy-modal-card .trophy-results-list { margin-bottom: var(--space-lg); }
 
+/* ─── First-login onboarding ────────────────────────────────────────────── */
+
+.onboarding-overlay { z-index: 210; }
+
+.onboarding-card {
+  max-width: 400px;
+  max-height: min(90vh, 560px);
+  overflow-y: auto;
+  text-align: center;
+}
+
+.onboarding-icon.app-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto var(--space-sm);
+}
+
+.onboarding-step-label {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+
+.onboarding-card h2 {
+  font-size: var(--fs-title);
+  margin: 0 0 var(--space-sm);
+}
+
+.onboarding-body {
+  margin: 0 0 var(--space-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  text-align: left;
+}
+
+.onboarding-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: var(--space-md);
+}
+
+.onboarding-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-light);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.onboarding-dot.active {
+  background: var(--accent-primary);
+  transform: scale(1.15);
+}
+
+.onboarding-dismiss-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.onboarding-dismiss-label input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent-primary);
+}
+
+.onboarding-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+  margin-bottom: var(--space-xs);
+}
+
+.onboarding-actions .btn { flex: 1; max-width: 140px; }
+
+.onboarding-skip {
+  width: 100%;
+  color: var(--text-secondary);
+}
+
 .confetti-canvas {
   position: fixed;
   inset: 0;

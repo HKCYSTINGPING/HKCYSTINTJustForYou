@@ -424,6 +424,26 @@
     </nav>
   </section>
 
+  <!-- First-login app guide -->
+  <div id="onboarding-modal" class="modal-overlay glass-overlay onboarding-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+    <div class="modal-card glass-card onboarding-card">
+      <div id="onboarding-icon" class="onboarding-icon app-icon app-icon-heart" aria-hidden="true"></div>
+      <p id="onboarding-step-label" class="onboarding-step-label">1 / 5</p>
+      <h2 id="onboarding-title">歡迎</h2>
+      <p id="onboarding-body" class="onboarding-body"></p>
+      <div id="onboarding-dots" class="onboarding-dots" role="tablist" aria-label="導覽步驟"></div>
+      <label class="onboarding-dismiss-label">
+        <input type="checkbox" id="onboarding-dismiss">
+        <span>不要再顯示</span>
+      </label>
+      <div class="onboarding-actions">
+        <button type="button" id="onboarding-prev" class="btn btn-secondary btn-sm">上一步</button>
+        <button type="button" id="onboarding-next" class="btn btn-primary">下一步</button>
+      </div>
+      <button type="button" id="onboarding-skip" class="btn btn-ghost btn-sm onboarding-skip">略過導覽</button>
+    </div>
+  </div>
+
   <!-- Award Popup (Glass) -->
   <div id="trophy-results-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="trophy-results-modal-title">
     <div class="modal-card glass-card trophy-modal-card">

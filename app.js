@@ -32,7 +32,9 @@ const CONFIG = {
   PRESENCE_ONLINE_MS: 120000,
   // Admin message list: after the admin scrolls, pause live re-renders so they
   // can read / hit 撤回 without the list jumping. Resume after this idle time.
-  ADMIN_MSG_SCROLL_RESUME_MS: 3000
+  ADMIN_MSG_SCROLL_RESUME_MS: 3000,
+  // Per-role first-login guide; survives reload and logout on this browser.
+  ONBOARDING_DISMISSED_KEY: 'hkcy_onboarding_dismissed'
 };
 
 const BAD_WORDS = [
@@ -121,6 +123,73 @@ let votingStatusPrimed = false;
 let messagingStatusPrimed = false;
 let presenceHeartbeatTimer = null;
 
+const ONBOARDING_STEPS = {
+  participant: [
+    {
+      icon: 'heart',
+      title: '歡迎使用 Just For You',
+      body: '呢個 app 專為 HKCYS TINT 活動而設。你可以匿名留言鼓勵隊友，亦可以為隊友配對獎項。'
+    },
+    {
+      icon: 'loveletter',
+      title: '匿名留言',
+      body: '喺首頁撳「匿名留言」，揀接收者同寫下你想講嘅話。對方只會收到內容，唔會知道邊個 send。'
+    },
+    {
+      icon: 'inbox',
+      title: '收件箱同已發送',
+      body: '「收件箱」睇收到嘅留言；「已發送」睇自己 send 咗嘅內容。有新留言時，底部 Inbox 會顯示提示。'
+    },
+    {
+      icon: 'trophy',
+      title: '獎項配對',
+      body: '管理員開放投票後，喺「獎項配對」為每位隊友揀一個獎項。可以先儲存草稿，準備好再提交。'
+    },
+    {
+      icon: 'home',
+      title: '底部導航',
+      body: '底部有「首頁」「Inbox」「獎項」「我的」。喺「我的」可以改顯示名稱；登出亦喺嗰度。Staff 負責人仲會見到「本組管理」。'
+    }
+  ],
+  admin: [
+    {
+      icon: 'settings',
+      title: '歡迎使用管理員控制台',
+      body: '呢度可以即時監控留言、控制投票流程，同管理參加者資料。所有更新會自動同步，唔使手動重新整理。'
+    },
+    {
+      icon: 'chart',
+      title: 'Dashboard',
+      body: '睇參加者人數、留言量、邊個未登入，同近幾分鐘嘅活動節奏，方便現場掌握狀況。'
+    },
+    {
+      icon: 'chat',
+      title: 'Messages',
+      body: '監控全部留言，可按組別同狀態篩選。發現不當內容可以「撤回」，誤撤可以「取消撤回」。'
+    },
+    {
+      icon: 'trophy',
+      title: 'Voting',
+      body: '投票流程：草稿 → 開放投票 → 關閉投票 → 計算結果 → 公布。每步撳對應按鈕即可，參加者會即時見到狀態。'
+    },
+    {
+      icon: 'clipboard',
+      title: 'Results',
+      body: '「投票審計」睇每票詳情；「個人檔案」睇每位參加者；「獎項摘要」睇各獎項得票同得獎者。'
+    },
+    {
+      icon: 'settings',
+      title: 'Settings',
+      body: '全域開關留言、設定各組 Staff 覆寫、管理參加者資料，同批量重置投票／刪除紀錄。'
+    }
+  ]
+};
+
+const onboardingState = {
+  role: null,
+  step: 0
+};
+
 // ─── DOM References ─────────────────────────────────────────────────────────
 
 const DOM = {};
@@ -180,6 +249,17 @@ function cacheDOM() {
   DOM.trophyResultsList = document.getElementById('trophy-results-list');
   DOM.trophyResultsTitle = document.getElementById('trophy-results-title');
   DOM.trophyVotingSection = document.getElementById('trophy-voting-section');
+  DOM.onboardingModal = document.getElementById('onboarding-modal');
+  DOM.onboardingIcon = document.getElementById('onboarding-icon');
+  DOM.onboardingStepLabel = document.getElementById('onboarding-step-label');
+  DOM.onboardingTitle = document.getElementById('onboarding-title');
+  DOM.onboardingBody = document.getElementById('onboarding-body');
+  DOM.onboardingDots = document.getElementById('onboarding-dots');
+  DOM.onboardingDismiss = document.getElementById('onboarding-dismiss');
+  DOM.onboardingPrev = document.getElementById('onboarding-prev');
+  DOM.onboardingNext = document.getElementById('onboarding-next');
+  DOM.onboardingSkip = document.getElementById('onboarding-skip');
+
   DOM.trophyResultsModal = document.getElementById('trophy-results-modal');
   DOM.trophyResultsModalList = document.getElementById('trophy-results-modal-list');
   DOM.trophyResultsModalClose = document.getElementById('trophy-results-modal-close');
@@ -1582,6 +1662,7 @@ async function enterParticipantDashboard() {
     showToast('載入資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
     finishLoading();
+    maybeShowOnboarding(false);
   }
 }
 
@@ -1785,6 +1866,7 @@ async function enterAdminDashboard() {
     switchAdminTab('dashboard');
   } finally {
     finishLoading();
+    maybeShowOnboarding(true);
   }
 }
 
@@ -1858,6 +1940,7 @@ function handleLogout() {
   state.monitorViewFilter = 'all';
   state.monitorGroupFilter = '';
   hideTrophyResultsModal();
+  hideOnboarding();
   state.trophy = {
     loaded: false,
     loading: false,
@@ -2394,7 +2477,7 @@ function showTrophyResultsModal(awards) {
   if (!DOM.trophyResultsModal) return;
   DOM.trophyResultsModalList.innerHTML = buildAwardsHtml(awards);
   DOM.trophyResultsModal.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  syncBodyModalOpen();
   state.trophy.resultsModalRevision = state.trophy.trophyRevision;
   launchConfetti();
 }
@@ -2402,7 +2485,123 @@ function showTrophyResultsModal(awards) {
 function hideTrophyResultsModal() {
   if (!DOM.trophyResultsModal) return;
   DOM.trophyResultsModal.classList.add('hidden');
-  document.body.classList.remove('modal-open');
+  syncBodyModalOpen();
+}
+
+function readOnboardingDismissed() {
+  try {
+    const raw = localStorage.getItem(CONFIG.ONBOARDING_DISMISSED_KEY);
+    if (!raw) return { participant: false, admin: false };
+    const data = JSON.parse(raw);
+    return {
+      participant: !!data.participant,
+      admin: !!data.admin
+    };
+  } catch (_) {
+    return { participant: false, admin: false };
+  }
+}
+
+function saveOnboardingDismissed(role) {
+  if (role !== 'participant' && role !== 'admin') return;
+  try {
+    const current = readOnboardingDismissed();
+    current[role] = true;
+    localStorage.setItem(CONFIG.ONBOARDING_DISMISSED_KEY, JSON.stringify(current));
+  } catch (_) { /* private mode / quota */ }
+}
+
+function isOnboardingDismissed(role) {
+  const dismissed = readOnboardingDismissed();
+  return !!dismissed[role];
+}
+
+function syncBodyModalOpen() {
+  const anyOpen = [DOM.onboardingModal, DOM.trophyResultsModal, DOM.voteMatrixModal]
+    .some(el => el && !el.classList.contains('hidden'));
+  document.body.classList.toggle('modal-open', anyOpen);
+}
+
+function renderOnboardingStep() {
+  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
+  const step = steps[onboardingState.step];
+  if (!step || !DOM.onboardingModal) return;
+
+  const iconClass = step.icon ? `app-icon app-icon-${step.icon}` : 'app-icon app-icon-heart';
+  DOM.onboardingIcon.className = `onboarding-icon ${iconClass}`;
+  DOM.onboardingStepLabel.textContent = `${onboardingState.step + 1} / ${steps.length}`;
+  DOM.onboardingTitle.textContent = step.title;
+  DOM.onboardingBody.textContent = step.body;
+
+  if (DOM.onboardingDots) {
+    DOM.onboardingDots.innerHTML = steps.map((_, index) => `
+      <button type="button" class="onboarding-dot${index === onboardingState.step ? ' active' : ''}"
+        data-step="${index}" aria-label="第 ${index + 1} 步" aria-current="${index === onboardingState.step ? 'step' : 'false'}"></button>
+    `).join('');
+  }
+
+  if (DOM.onboardingPrev) {
+    DOM.onboardingPrev.classList.toggle('hidden', onboardingState.step === 0);
+  }
+  if (DOM.onboardingNext) {
+    DOM.onboardingNext.textContent = onboardingState.step >= steps.length - 1 ? '開始使用' : '下一步';
+  }
+}
+
+function showOnboarding(role) {
+  if (!DOM.onboardingModal || (role !== 'participant' && role !== 'admin')) return;
+  onboardingState.role = role;
+  onboardingState.step = 0;
+  if (DOM.onboardingDismiss) DOM.onboardingDismiss.checked = false;
+  renderOnboardingStep();
+  DOM.onboardingModal.classList.remove('hidden');
+  syncBodyModalOpen();
+  DOM.onboardingNext?.focus();
+}
+
+function hideOnboarding() {
+  if (!DOM.onboardingModal) return;
+  DOM.onboardingModal.classList.add('hidden');
+  onboardingState.role = null;
+  onboardingState.step = 0;
+  syncBodyModalOpen();
+}
+
+function finishOnboarding() {
+  if (DOM.onboardingDismiss?.checked && onboardingState.role) {
+    saveOnboardingDismissed(onboardingState.role);
+  }
+  hideOnboarding();
+}
+
+function maybeShowOnboarding(isAdmin) {
+  const role = isAdmin ? 'admin' : 'participant';
+  if (isOnboardingDismissed(role)) return;
+  // Wait until the loading overlay is gone so the guide sits on the dashboard.
+  requestAnimationFrame(() => showOnboarding(role));
+}
+
+function handleOnboardingNext() {
+  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
+  if (onboardingState.step >= steps.length - 1) {
+    finishOnboarding();
+    return;
+  }
+  onboardingState.step += 1;
+  renderOnboardingStep();
+}
+
+function handleOnboardingPrev() {
+  if (onboardingState.step <= 0) return;
+  onboardingState.step -= 1;
+  renderOnboardingStep();
+}
+
+function handleOnboardingDotClick(stepIndex) {
+  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
+  if (stepIndex < 0 || stepIndex >= steps.length) return;
+  onboardingState.step = stepIndex;
+  renderOnboardingStep();
 }
 
 function maybeShowPublishedModal(isNewPublish) {
@@ -2843,7 +3042,7 @@ function closeVoteMatrixModal() {
   if (DOM.voteMatrixModal) {
     DOM.voteMatrixModal.classList.add('hidden');
   }
-  document.body.classList.remove('modal-open');
+  syncBodyModalOpen();
   if (DOM.adminPendingVoters) {
     DOM.adminPendingVoters.querySelectorAll('.voter-member.is-focus').forEach(btn => {
       btn.classList.remove('is-focus');
@@ -2890,7 +3089,7 @@ function renderVoteMatrixModal() {
   }
 
   DOM.voteMatrixModal.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  syncBodyModalOpen();
 }
 
 /** How many submitted/draft nominations each member received per trophy. */
@@ -3951,6 +4150,28 @@ function bindEvents() {
   DOM.trophyResultsModal.addEventListener('click', (e) => {
     if (e.target === DOM.trophyResultsModal) hideTrophyResultsModal();
   });
+
+  if (DOM.onboardingNext) {
+    DOM.onboardingNext.addEventListener('click', handleOnboardingNext);
+  }
+  if (DOM.onboardingPrev) {
+    DOM.onboardingPrev.addEventListener('click', handleOnboardingPrev);
+  }
+  if (DOM.onboardingSkip) {
+    DOM.onboardingSkip.addEventListener('click', finishOnboarding);
+  }
+  if (DOM.onboardingDots) {
+    DOM.onboardingDots.addEventListener('click', (e) => {
+      const dot = e.target.closest('.onboarding-dot');
+      if (!dot) return;
+      handleOnboardingDotClick(Number(dot.dataset.step));
+    });
+  }
+  if (DOM.onboardingModal) {
+    DOM.onboardingModal.addEventListener('click', (e) => {
+      if (e.target === DOM.onboardingModal) finishOnboarding();
+    });
+  }
 
   if (DOM.voteMatrixModalClose) {
     DOM.voteMatrixModalClose.addEventListener('click', closeVoteMatrixModal);
