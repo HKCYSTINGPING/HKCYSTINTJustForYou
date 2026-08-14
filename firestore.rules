@@ -231,6 +231,8 @@ service cloud.firestore {
           isFacilitatorOf(participantDoc(participantId).data.group_id)
         );
       allow write: if isAdmin() || (isParticipant()
+        && isSeatId(pid())
+        && isSeatId(participantId)
         && participantId == pid()
         && myVotingStatus() == 'VOTING_OPEN');
     }

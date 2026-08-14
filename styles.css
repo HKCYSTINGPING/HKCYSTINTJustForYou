@@ -1181,7 +1181,7 @@ textarea.input-field {
   grid-column: 1 / -1;
 }
 
-#screen-participant.is-staff-facilitator [data-staff-hide="anon"] {
+#screen-participant.is-staff-facilitator [data-staff-hide] {
   display: none !important;
 }
 

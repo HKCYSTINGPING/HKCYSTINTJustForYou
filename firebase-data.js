@@ -203,13 +203,19 @@ async function commitAll(operations) {
 
 // ─── Groups and teammates ───────────────────────────────────────────────────
 
+export function isSeatParticipantId(participantId) {
+  return /^[0-9][A-H]$/i.test(String(participantId || '').trim());
+}
+
 export function getTeammates(participantId, allParticipants) {
   const me = (allParticipants || []).find(p => p.participant_id === participantId);
   if (!me) return [];
   const group = String(me.group_id || '').trim();
   if (!group) return [];
   return allParticipants.filter(
-    p => p.participant_id !== participantId && String(p.group_id || '').trim() === group
+    p => p.participant_id !== participantId
+      && String(p.group_id || '').trim() === group
+      && isSeatParticipantId(p.participant_id)
   );
 }
 
@@ -519,22 +525,26 @@ export function subscribeAllResults(onData, onError) {
  * count inside their own group (ties included). No consolation / fallback awards.
  */
 export function computeResults(participants, trophies, submissions) {
+  const roster = (participants || []).filter(p => isSeatParticipantId(p.participant_id));
+  const seatIds = new Set(roster.map(p => p.participant_id));
   const voteCounts = new Map();
   const key = (receiver, trophy) => receiver + '|' + trophy;
 
   submissions.forEach(submission => {
+    if (!seatIds.has(submission.participant_id)) return;
     (submission.pairings || []).forEach(pair => {
       if (!pair || !pair.receiver_id || !pair.trophy_id) return;
+      if (!seatIds.has(pair.receiver_id)) return;
       const k = key(pair.receiver_id, pair.trophy_id);
       voteCounts.set(k, (voteCounts.get(k) || 0) + 1);
     });
   });
 
   const countFor = (participantId, trophyId) => voteCounts.get(key(participantId, trophyId)) || 0;
-  const awarded = new Map(participants.map(p => [p.participant_id, []]));
+  const awarded = new Map(roster.map(p => [p.participant_id, []]));
 
   const byGroup = new Map();
-  participants.forEach(p => {
+  roster.forEach(p => {
     const group = p.group_id || '未分組';
     if (!byGroup.has(group)) byGroup.set(group, []);
     byGroup.get(group).push(p);
@@ -560,11 +570,11 @@ export function computeResults(participants, trophies, submissions) {
   });
 
   const trophySummary = trophies.map(trophy => {
-    const ranking = participants
+    const ranking = roster
       .map(p => ({ participant_id: p.participant_id, vote_count: countFor(p.participant_id, trophy.trophy_id) }))
       .filter(entry => entry.vote_count > 0)
       .sort((a, b) => b.vote_count - a.vote_count);
-    const winners = participants
+    const winners = roster
       .filter(p => awarded.get(p.participant_id).some(a => a.trophy_id === trophy.trophy_id))
       .map(p => ({ participant_id: p.participant_id, vote_count: countFor(p.participant_id, trophy.trophy_id) }));
     return {
@@ -576,7 +586,7 @@ export function computeResults(participants, trophies, submissions) {
     };
   });
 
-  const profiles = participants.map(p => ({
+  const profiles = roster.map(p => ({
     participant_id: p.participant_id,
     trophies: awarded.get(p.participant_id),
     vote_count: awarded.get(p.participant_id).reduce((sum, a) => sum + (a.vote_count || 0), 0)

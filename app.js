@@ -193,6 +193,7 @@ const ONBOARDING_STEPS = {
     {
       target: '#screen-participant .bottom-nav-item[data-tab="trophy"]',
       prepare: 'home',
+      skipIfStaff: true,
       title: '底部・獎項',
       body: '快捷入口去投票／睇得獎結果。'
     },
@@ -254,24 +255,28 @@ const ONBOARDING_STEPS = {
     {
       target: '[data-tour="trophy-voting"], [data-tour="trophy-not-open"], [data-tour="trophy-results"]',
       prepare: 'trophy',
+      skipIfStaff: true,
       title: '獎項頁面',
       body: '投票未開始會見提示；開放後喺呢度配對；公布後可睇你嘅得獎。'
     },
     {
       target: '[data-tour="trophy-progress"]',
       prepare: 'trophy',
+      skipIfStaff: true,
       title: '配對進度',
       body: '顯示你已經為幾多位隊友配咗獎項。'
     },
     {
       target: '[data-tour="trophy-teammates"]',
       prepare: 'trophy',
+      skipIfStaff: true,
       title: '隊友清單',
       body: '每位隊友下面有獎項掣，揀一個配對（每位至少一個；每個獎項只能配一位）。'
     },
     {
       target: '[data-tour="trophy-actions"]',
       prepare: 'trophy',
+      skipIfStaff: true,
       title: '儲存／提交',
       body: '「儲存草稿」可稍後再改；「提交投票」就正式交卷。'
     },
@@ -1158,12 +1163,12 @@ function getFacilitatorGroupMembers(groupId = getFacilitatorGroupId()) {
 }
 
 function applyStaffParticipantChrome() {
-  const hideAnon = isStaffPerson(state.participantId);
-  document.querySelectorAll('[data-staff-hide="anon"]').forEach(el => {
-    el.classList.toggle('hidden', hideAnon);
+  const hideForStaff = isStaffPerson(state.participantId);
+  document.querySelectorAll('[data-staff-hide]').forEach(el => {
+    el.classList.toggle('hidden', hideForStaff);
   });
   if (DOM.screenParticipant) {
-    DOM.screenParticipant.classList.toggle('is-staff-facilitator', hideAnon);
+    DOM.screenParticipant.classList.toggle('is-staff-facilitator', hideForStaff);
   }
 }
 
@@ -1252,8 +1257,12 @@ function effectiveVotingConfigForMe() {
  * server to run code on, but the admin already holds every submission through
  * a listener, so the same numbers are derived here for free.
  */
+function getVotingParticipants(list = state.participants) {
+  return (list || []).filter(p => isSeatParticipantId(p.participant_id));
+}
+
 function buildTrophyOverview(submissions, trophies, participants = state.participants, votingStatus = state.votingConfig.voting_status) {
-  const roster = participants || [];
+  const roster = getVotingParticipants(participants);
   const rosterIds = new Set(roster.map(p => p.participant_id));
   const submitted = new Set(
     submissions
@@ -1299,7 +1308,9 @@ function buildAuditVotes(submissions, trophies) {
   const names = new Map(trophies.map(t => [t.trophy_id, t.trophy_name]));
   const rows = [];
   submissions.forEach(submission => {
+    if (!isSeatParticipantId(submission.participant_id)) return;
     submission.pairings.forEach(pair => {
+      if (!isSeatParticipantId(pair.receiver_id)) return;
       rows.push({
         sender_id: submission.participant_id,
         receiver_id: pair.receiver_id,
@@ -2061,6 +2072,8 @@ async function startParticipantSubscriptions() {
       state.trophy.trophies.length ? state.trophy.trophies : []
     );
     const memberIds = () => getFacilitatorGroupMembers(facilitateGroup).map(p => p.participant_id);
+    const voterIds = () => getVotingParticipants(getFacilitatorGroupMembers(facilitateGroup))
+      .map(p => p.participant_id);
     track(data.subscribeGroupThreadMessages(
       facilitateGroup,
       messages => {
@@ -2090,7 +2103,7 @@ async function startParticipantSubscriptions() {
       }
     ));
     track(data.subscribeSubmissionsForParticipants(
-      memberIds(),
+      voterIds(),
       submissions => {
         state.staffTrophy.submissions = submissions;
         refreshStaffTrophyViews();
@@ -2100,7 +2113,7 @@ async function startParticipantSubscriptions() {
       }
     ));
     track(data.subscribeResultsForParticipants(
-      memberIds(),
+      voterIds(),
       results => {
         state.staffTrophy.results = results;
         refreshStaffTrophyViews();
@@ -2205,7 +2218,8 @@ function renderProfile() {
 
   const sentCount = state.sentMessages.filter(m => m.status === 'active').length;
   const receivedCount = state.inboxMessages.length;
-  const votingLabel = state.trophy.submissionStatus === 'submitted' ? '已提交' :
+  const votingLabel = isStaffPerson(state.participantId) ? '不適用' :
+    state.trophy.submissionStatus === 'submitted' ? '已提交' :
     (state.trophy.editable ? '進行中' : VOTING_STATUS_LABELS[state.trophy.votingStatus] || '—');
 
   DOM.profileStats.innerHTML = `
@@ -2233,7 +2247,7 @@ function refreshAdminTrophyViews() {
 
   // Once results have been calculated the stored awards are what counts;
   // before that, show what calculating now would produce.
-  const stored = state.adminTrophy.results;
+  const stored = state.adminTrophy.results.filter(r => isSeatParticipantId(r.participant_id));
   state.adminTrophy.profiles = stored.length > 0
     ? stored
       .map(r => {
@@ -2260,7 +2274,7 @@ function refreshAdminTrophyViews() {
 
 function refreshStaffTrophyViews() {
   const groupId = getFacilitatorGroupId();
-  const members = getFacilitatorGroupMembers(groupId);
+  const members = getVotingParticipants(getFacilitatorGroupMembers(groupId));
   const trophies = state.staffTrophy.trophies.length
     ? state.staffTrophy.trophies
     : filterValidTrophies(state.trophy.trophies);
@@ -2955,7 +2969,10 @@ function renderAdminLiveLoad() {
   const recent = state.monitorMessages.filter(
     m => m.status === 'active' && m.created_at > recentCutoff
   ).length;
-  const voted = state.adminTrophy.submissions.filter(s => s.status === 'submitted').length;
+  const voted = state.adminTrophy.submissions.filter(
+    s => s.status === 'submitted' && isSeatParticipantId(s.participant_id)
+  ).length;
+  const voterCount = getVotingParticipants().length;
   const online = state.presence.filter(p => isPresenceCurrentlyLoggedIn(p)).length;
   const loggedIn = online;
 
@@ -2969,7 +2986,7 @@ function renderAdminLiveLoad() {
     DOM.adminLiveLoad.innerHTML = `
       <div class="stat-card"><div class="stat-value">${loggedIn}/${state.participants.length}</div><div class="stat-label">已登入</div></div>
       <div class="stat-card"><div class="stat-value">${online}</div><div class="stat-label">現正線上</div></div>
-      <div class="stat-card"><div class="stat-value">${voted}/${state.participants.length}</div><div class="stat-label">已完成投票</div></div>
+      <div class="stat-card"><div class="stat-value">${voted}/${voterCount}</div><div class="stat-label">已完成投票</div></div>
       <div class="stat-card"><div class="stat-value">${recent}</div><div class="stat-label">近 5 分鐘留言</div></div>
     `;
   }
@@ -3296,6 +3313,7 @@ function handleOnboardingPrev() {
 }
 
 function maybeShowPublishedModal(isNewPublish) {
+  if (isStaffPerson(state.participantId)) return;
   if (state.trophy.votingStatus !== 'PUBLISHED') return;
   if (state.trophy.resultsModalRevision === state.trophy.trophyRevision) return;
   showTrophyResultsModal(state.trophy.myAwards);
@@ -3348,6 +3366,7 @@ const TROPHY_IDLE_COPY = {
 };
 
 function notifyVotingStatusChange(status) {
+  if (isStaffPerson(state.participantId)) return;
   const messages = {
     VOTING_OPEN: '投票已開放，可以開始配對獎項',
     VOTING_CLOSED: '投票已關閉；你仍可查看自己投咗咩',
@@ -3532,6 +3551,10 @@ function renderTrophyTeammates() {
 }
 
 async function handleTrophySaveDraft() {
+  if (isStaffPerson(state.participantId)) {
+    showToast('Staff 不參與投票', 'info');
+    return;
+  }
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
   await runProgressButton(DOM.trophySaveDraft, (async () => {
     try {
@@ -3544,6 +3567,10 @@ async function handleTrophySaveDraft() {
 }
 
 async function handleTrophySubmitAll() {
+  if (isStaffPerson(state.participantId)) {
+    showToast('Staff 不參與投票', 'info');
+    return;
+  }
   const teammates = state.trophy.teammates;
   const trophies = filterValidTrophies(state.trophy.trophies);
 
@@ -4645,12 +4672,16 @@ function renderStaffLiveLoad() {
   const recent = state.staffMonitorMessages.filter(
     m => m.status === 'active' && m.created_at > recentCutoff
   ).length;
-  const voted = state.staffTrophy.submissions.filter(s => s.status === 'submitted').length;
+  const voters = getVotingParticipants(members);
+  const voterIds = new Set(voters.map(p => p.participant_id));
+  const voted = state.staffTrophy.submissions.filter(
+    s => s.status === 'submitted' && voterIds.has(s.participant_id)
+  ).length;
   const online = state.presence.filter(p => memberIds.has(p.participant_id) && isPresenceCurrentlyLoggedIn(p)).length;
   DOM.staffLiveLoad.innerHTML = `
     <div class="stat-card"><div class="stat-value">${online}/${members.length || 0}</div><div class="stat-label">已登入</div></div>
     <div class="stat-card"><div class="stat-value">${online}</div><div class="stat-label">現正線上</div></div>
-    <div class="stat-card"><div class="stat-value">${voted}/${members.length || 0}</div><div class="stat-label">已完成投票</div></div>
+    <div class="stat-card"><div class="stat-value">${voted}/${voters.length || 0}</div><div class="stat-label">已完成投票</div></div>
     <div class="stat-card"><div class="stat-value">${recent}</div><div class="stat-label">近 5 分鐘留言</div></div>
   `;
 }
@@ -4865,7 +4896,9 @@ async function handleStaffCalculate(btn) {
   if (!groupId) return;
   await runProgressButton(btn, (async () => {
     try {
-      const members = state.participants.filter(p => p.group_id === groupId);
+      const members = getVotingParticipants(
+        state.participants.filter(p => p.group_id === groupId)
+      );
       const memberIds = members.map(p => p.participant_id);
       const submissions = await data.fetchSubmissionsForParticipants(memberIds);
       const trophies = filterValidTrophies(
@@ -5205,7 +5238,7 @@ function initAdminParticipantsPanel() {
 const BOTTOM_NAV_TABS = ['home', 'inbox', 'trophy', 'profile'];
 
 function switchParticipantView(viewName) {
-  if (isStaffPerson(state.participantId) && (viewName === 'send' || viewName === 'inbox' || viewName === 'sent')) {
+  if (isStaffPerson(state.participantId) && (viewName === 'send' || viewName === 'inbox' || viewName === 'sent' || viewName === 'trophy' || viewName === 'trophy-submitted')) {
     viewName = isGroupFacilitator() ? 'staff' : 'home';
   }
   document.querySelectorAll('#screen-participant .app-view').forEach(view => {
