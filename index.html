@@ -125,12 +125,12 @@
       <!-- Home -->
       <div id="view-home" class="app-view active" data-view="home">
         <div class="home-cards">
-          <button type="button" class="home-card" data-nav="send" data-staff-hide="anon">
+          <button type="button" class="home-card" data-nav="send">
             <span class="home-card-icon app-icon app-icon-loveletter" aria-hidden="true"></span>
             <span class="home-card-label">匿名留言</span>
             <span class="home-card-desc">寫給隊友的鼓勵</span>
           </button>
-          <button type="button" class="home-card" data-nav="inbox" data-staff-hide="anon">
+          <button type="button" class="home-card" data-nav="inbox">
             <span class="home-card-icon app-icon app-icon-inbox" aria-hidden="true"></span>
             <span class="home-card-label">收件箱</span>
             <span class="home-card-desc">查看收到的留言</span>
@@ -141,7 +141,7 @@
             <span class="home-card-label">獎項配對</span>
             <span class="home-card-desc">為隊友投票</span>
           </button>
-          <button type="button" class="home-card" data-nav="sent" data-staff-hide="anon">
+          <button type="button" class="home-card" data-nav="sent">
             <span class="home-card-icon app-icon app-icon-outbox" aria-hidden="true"></span>
             <span class="home-card-label">已發送</span>
             <span class="home-card-desc">查看已發留言</span>
@@ -389,7 +389,7 @@
                 <h3 class="section-title">組內留言監控</h3>
                 <span id="staff-msg-count" class="form-hint">共 0 則</span>
               </div>
-              <p class="form-hint">即時顯示同組成員之間嘅留言，連發送者同接收者姓名。</p>
+              <p class="form-hint">即時顯示同組成員之間嘅留言，連發送者同接收者姓名。參加者自己嘅收件箱仍然匿名。</p>
               <div id="staff-message-list" class="admin-message-list"></div>
               <div id="staff-msg-empty" class="empty-state empty-illustration">
                 <div class="illustration-circle"><span class="app-icon app-icon-chat" aria-hidden="true"></span></div>
@@ -459,7 +459,7 @@
         <span class="bottom-nav-icon app-icon app-icon-home" aria-hidden="true"></span>
         <span class="bottom-nav-label">首頁</span>
       </button>
-      <button type="button" class="bottom-nav-item" data-tab="inbox" role="tab" aria-selected="false" data-staff-hide="anon">
+      <button type="button" class="bottom-nav-item" data-tab="inbox" role="tab" aria-selected="false">
         <span class="bottom-nav-icon app-icon app-icon-inbox" aria-hidden="true"></span>
         <span class="bottom-nav-label">Inbox</span>
         <span id="inbox-badge" class="bottom-nav-badge hidden">0</span>

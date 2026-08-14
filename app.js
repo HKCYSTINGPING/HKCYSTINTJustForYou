@@ -147,27 +147,25 @@ const ONBOARDING_STEPS = {
     {
       target: '#screen-participant .home-card[data-nav="send"]',
       prepare: 'home',
-      skipIfStaff: true,
       title: '匿名留言',
       body: '撳呢個框開始寫鼓勵說話畀隊友。對方只會見到內容，唔知邊個 send。'
     },
     {
       target: '#screen-participant .home-card[data-nav="inbox"]',
       prepare: 'home',
-      skipIfStaff: true,
       title: '收件箱',
       body: '睇收到嘅匿名留言。有新訊息時呢度同底部 Inbox 會有提示。'
     },
     {
       target: '#screen-participant .home-card[data-nav="trophy"]',
       prepare: 'home',
+      skipIfStaff: true,
       title: '獎項配對',
       body: '投票開放後，喺呢度為每位隊友配對獎項。'
     },
     {
       target: '#screen-participant .home-card[data-nav="sent"]',
       prepare: 'home',
-      skipIfStaff: true,
       title: '已發送',
       body: '睇返自己已經 send 出嘅留言。'
     },
@@ -186,7 +184,6 @@ const ONBOARDING_STEPS = {
     {
       target: '#screen-participant .bottom-nav-item[data-tab="inbox"]',
       prepare: 'home',
-      skipIfStaff: true,
       title: '底部・Inbox',
       body: '快捷入口去收件箱；有未讀會顯示數字。'
     },
@@ -206,49 +203,42 @@ const ONBOARDING_STEPS = {
     {
       target: '[data-tour="send-receiver"]',
       prepare: 'send',
-      skipIfStaff: true,
       title: '揀接收者',
       body: '輸入或展開選單，揀你想留言嘅隊友。'
     },
     {
       target: '[data-tour="send-content"]',
       prepare: 'send',
-      skipIfStaff: true,
       title: '留言內容',
       body: '最多 300 字。有唔恰當字眼會提示你改。'
     },
     {
       target: '[data-tour="send-submit"]',
       prepare: 'send',
-      skipIfStaff: true,
       title: '發送留言',
       body: '寫好就撳呢度送出。送出後會去「已發送」。'
     },
     {
       target: '[data-tour="inbox-toolbar"]',
       prepare: 'inbox',
-      skipIfStaff: true,
       title: '收件箱頁面',
-      body: '呢度列出所有收到嘅留言；右邊掣可以手動重新整理。'
+      body: '呢度列出所有收到嘅留言；右邊掣可以手動重新整理。對方唔會見到你係邊個。'
     },
     {
       target: '[data-tour="inbox-list"], [data-tour="inbox-empty"]',
       prepare: 'inbox',
-      skipIfStaff: true,
       title: '留言列表',
-      body: '有留言會一則一則顯示；暫時冇就會見空狀態提示。'
+      body: '有留言會一則一則顯示；暫時冇就會見空狀態提示。收件箱只顯示內容，唔顯示邊個寄。'
     },
     {
       target: '[data-tour="sent-toolbar"]',
       prepare: 'sent',
-      skipIfStaff: true,
       title: '已發送頁面',
       body: '左邊返回首頁，右邊可重新整理已發清單。'
     },
     {
       target: '[data-tour="sent-list"], [data-tour="sent-empty"]',
       prepare: 'sent',
-      skipIfStaff: true,
       title: '已發列表',
       body: '睇自己 send 過嘅內容同時間。'
     },
@@ -351,7 +341,7 @@ const ONBOARDING_STEPS = {
       prepare: 'staff',
       staffSection: 'messages',
       title: '組內留言監控',
-      body: '即時睇同組成員之間嘅留言，會顯示發送者同接收者姓名。'
+      body: '即時睇同組成員之間嘅留言，會顯示發送者同接收者姓名。參加者自己嘅收件箱仍然匿名。'
     },
     {
       target: '[data-tour="staff-voting-controls"]',
@@ -5238,7 +5228,7 @@ function initAdminParticipantsPanel() {
 const BOTTOM_NAV_TABS = ['home', 'inbox', 'trophy', 'profile'];
 
 function switchParticipantView(viewName) {
-  if (isStaffPerson(state.participantId) && (viewName === 'send' || viewName === 'inbox' || viewName === 'sent' || viewName === 'trophy' || viewName === 'trophy-submitted')) {
+  if (isStaffPerson(state.participantId) && (viewName === 'trophy' || viewName === 'trophy-submitted')) {
     viewName = isGroupFacilitator() ? 'staff' : 'home';
   }
   document.querySelectorAll('#screen-participant .app-view').forEach(view => {
