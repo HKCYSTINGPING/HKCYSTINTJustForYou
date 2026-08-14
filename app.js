@@ -759,8 +759,10 @@ function isAdminLogin(participantId) {
   return String(participantId || '').trim().toLowerCase() === 'admin';
 }
 
+let splashActive = true;
+
 function showScreen(name) {
-  if (DOM.screenSplash) DOM.screenSplash.classList.add('hidden');
+  if (DOM.screenSplash && !splashActive) DOM.screenSplash.classList.add('hidden');
   DOM.screenLogin.classList.toggle('hidden', name !== 'login');
   DOM.screenParticipant.classList.toggle('hidden', name !== 'participant');
   DOM.screenAdmin.classList.toggle('hidden', name !== 'admin');
@@ -844,13 +846,28 @@ function finishLoading() {
   setTimeout(() => showLoading(false), 120);
 }
 
-/** Plays the splash animation and resolves when it has finished exiting. */
+const APP_FONT_FAMILY = '"Canva Handwriting Style TC"';
+const APP_FONT_TIMEOUT_MS = 6000;
+
+function waitForAppFont() {
+  if (!document.fonts || typeof document.fonts.load !== 'function') {
+    return Promise.resolve();
+  }
+  return Promise.race([
+    document.fonts.load('16px ' + APP_FONT_FAMILY).then(() => document.fonts.ready),
+    new Promise(resolve => setTimeout(resolve, APP_FONT_TIMEOUT_MS))
+  ]).catch(() => {});
+}
+
+/** Plays the splash animation and resolves when the font is ready and splash has exited. */
 function runSplashAnimation() {
   return new Promise(resolve => {
     if (!DOM.screenSplash) {
+      splashActive = false;
       resolve();
       return;
     }
+    splashActive = true;
     DOM.screenSplash.classList.remove('hidden', 'splash-exit');
     DOM.screenLogin.classList.add('hidden');
     if (DOM.screenParticipant) DOM.screenParticipant.classList.add('hidden');
@@ -860,21 +877,23 @@ function runSplashAnimation() {
     if (splashTickTimer) clearInterval(splashTickTimer);
     splashTickTimer = setInterval(() => {
       const current = parseInt(DOM.splashPercent?.textContent || '0', 10) || 0;
-      if (current < 100) setSplashPercent(current + 2);
-    }, 36);
+      if (current < 90) setSplashPercent(current + 2);
+    }, 40);
 
-    setTimeout(() => {
+    const minDelay = new Promise(r => setTimeout(r, 800));
+    Promise.all([waitForAppFont(), minDelay]).then(() => {
       if (splashTickTimer) {
         clearInterval(splashTickTimer);
         splashTickTimer = null;
       }
       setSplashPercent(100);
+      splashActive = false;
       DOM.screenSplash.classList.add('splash-exit');
       setTimeout(() => {
         DOM.screenSplash.classList.add('hidden');
         resolve();
       }, 400);
-    }, 1800);
+    });
   });
 }
 

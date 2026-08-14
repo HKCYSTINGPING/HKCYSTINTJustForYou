@@ -8,7 +8,7 @@
   src: url("fonts/CanvaHandwritingStyleTC.woff2") format("woff2");
   font-weight: 400 700;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 :root {
@@ -146,6 +146,7 @@ html.keyboard-open .bottom-nav {
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
   transition: opacity var(--duration-slow) var(--ease-out), visibility var(--duration-slow);
 }
 
