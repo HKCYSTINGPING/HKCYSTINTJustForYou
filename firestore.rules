@@ -118,7 +118,8 @@ service cloud.firestore {
     }
 
     // Roster: readable by everyone signed in. Admin may edit freely; each
-    // participant may only change their own display_name.
+    // participant may only change their own display_name. Staff facilitators
+    // may bump force_logout_rev on seats in their numbered group.
     match /participants/{participantId} {
       allow read: if signedIn();
       allow create, delete: if isAdmin();
@@ -128,6 +129,12 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['display_name'])
         && request.resource.data.display_name is string
         && request.resource.data.display_name.size() <= 40
+        && request.resource.data.participant_id == resource.data.participant_id
+        && request.resource.data.group_id == resource.data.group_id
+      ) || (
+        isFacilitatorOf(resource.data.group_id)
+        && isSeatId(participantId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['force_logout_rev'])
         && request.resource.data.participant_id == resource.data.participant_id
         && request.resource.data.group_id == resource.data.group_id
       );
@@ -240,14 +247,21 @@ service cloud.firestore {
         || isFacilitatorOf(participantDoc(participantId).data.group_id);
     }
 
-    // Login presence: each participant may only touch their own document.
-    // The admin dashboard reads the whole collection to show who is in.
+    // Login presence: each participant may only write their own document.
+    // Admin reads the whole collection. Staff facilitators read / delete
+    // presence for seats in the numbered group they facilitate.
     match /presence/{participantId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin()
+        || isFacilitatorOf(participantDoc(participantId).data.group_id);
       allow create, update: if isParticipant()
         && participantId == pid()
         && request.resource.data.participant_id == pid();
-      allow delete: if isAdmin() || (isParticipant() && participantId == pid());
+      allow delete: if isAdmin()
+        || (isParticipant() && participantId == pid())
+        || (
+          isFacilitatorOf(participantDoc(participantId).data.group_id)
+          && isSeatId(participantId)
+        );
     }
 
     // Anything not named above is closed.

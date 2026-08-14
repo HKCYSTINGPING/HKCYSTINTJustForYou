@@ -606,6 +606,24 @@ export async function writeResults(awarded, options = {}) {
   }, { merge: true });
 }
 
+/** Listen to a small set of documents by id (Staff cannot query whole collections). */
+function subscribeDocsByIds(collectionName, ids, fromDoc, onData, onError) {
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  if (!unique.length) {
+    onData([]);
+    return () => {};
+  }
+  const cache = new Map();
+  const unsubs = unique.map(id => onSnapshot(doc(db, collectionName, id), snapshot => {
+    if (snapshot.exists()) cache.set(id, fromDoc(snapshot));
+    else cache.delete(id);
+    onData(unique.map(pid => cache.get(pid)).filter(Boolean));
+  }, onError));
+  return () => unsubs.forEach(stop => {
+    try { stop(); } catch (_) { /* already closed */ }
+  });
+}
+
 /** One-shot reads for Staff facilitators (collection listens are admin-only). */
 export async function fetchSubmissionsForParticipants(participantIds) {
   const ids = [...new Set((participantIds || []).filter(Boolean))];
@@ -620,6 +638,46 @@ export async function fetchSubmissionsForParticipants(participantIds) {
     };
   }));
   return rows;
+}
+
+export function subscribeSubmissionsForParticipants(participantIds, onData, onError) {
+  return subscribeDocsByIds('submissions', participantIds, submissionFromDoc, onData, onError);
+}
+
+export async function fetchResultsForParticipants(participantIds) {
+  const ids = [...new Set((participantIds || []).filter(Boolean))];
+  const rows = await Promise.all(ids.map(async id => {
+    const snapshot = await getDoc(doc(db, 'results', id));
+    return snapshot.exists() ? resultFromDoc(snapshot) : null;
+  }));
+  return rows.filter(Boolean);
+}
+
+export function subscribeResultsForParticipants(participantIds, onData, onError) {
+  return subscribeDocsByIds('results', participantIds, resultFromDoc, onData, onError);
+}
+
+function presenceFromDoc(snapshot) {
+  const data = snapshot.data() || {};
+  return {
+    participant_id: data.participant_id || snapshot.id,
+    online: data.online !== false,
+    first_seen: toIso(data.first_seen),
+    last_seen: toIso(data.last_seen)
+  };
+}
+
+export function subscribePresenceForParticipants(participantIds, onData, onError) {
+  return subscribeDocsByIds('presence', participantIds, presenceFromDoc, onData, onError);
+}
+
+export async function fetchPresenceForParticipants(participantIds) {
+  const ids = [...new Set((participantIds || []).filter(Boolean))];
+  const rows = await Promise.all(ids.map(async id => {
+    const snapshot = await getDoc(doc(db, 'presence', id));
+    return snapshot.exists() ? presenceFromDoc(snapshot) : null;
+  }));
+  return rows.filter(Boolean);
 }
 
 // ─── Admin: participants and contacts ───────────────────────────────────────
@@ -790,27 +848,11 @@ export function markPresenceOffline(participantId) {
 
 export function subscribePresence(onData, onError) {
   return onSnapshot(collection(db, 'presence'), snapshot => {
-    onData(snapshot.docs.map(d => {
-      const data = d.data() || {};
-      return {
-        participant_id: data.participant_id || d.id,
-        online: data.online !== false,
-        first_seen: toIso(data.first_seen),
-        last_seen: toIso(data.last_seen)
-      };
-    }));
+    onData(snapshot.docs.map(presenceFromDoc));
   }, onError);
 }
 
 export async function fetchPresence() {
   const snapshot = await getDocs(collection(db, 'presence'));
-  return snapshot.docs.map(d => {
-    const data = d.data() || {};
-    return {
-      participant_id: data.participant_id || d.id,
-      online: data.online !== false,
-      first_seen: toIso(data.first_seen),
-      last_seen: toIso(data.last_seen)
-    };
-  });
+  return snapshot.docs.map(presenceFromDoc);
 }

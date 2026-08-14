@@ -125,12 +125,12 @@
       <!-- Home -->
       <div id="view-home" class="app-view active" data-view="home">
         <div class="home-cards">
-          <button type="button" class="home-card" data-nav="send">
+          <button type="button" class="home-card" data-nav="send" data-staff-hide="anon">
             <span class="home-card-icon app-icon app-icon-loveletter" aria-hidden="true"></span>
             <span class="home-card-label">匿名留言</span>
             <span class="home-card-desc">寫給隊友的鼓勵</span>
           </button>
-          <button type="button" class="home-card" data-nav="inbox">
+          <button type="button" class="home-card" data-nav="inbox" data-staff-hide="anon">
             <span class="home-card-icon app-icon app-icon-inbox" aria-hidden="true"></span>
             <span class="home-card-label">收件箱</span>
             <span class="home-card-desc">查看收到的留言</span>
@@ -141,7 +141,7 @@
             <span class="home-card-label">獎項配對</span>
             <span class="home-card-desc">為隊友投票</span>
           </button>
-          <button type="button" class="home-card" data-nav="sent">
+          <button type="button" class="home-card" data-nav="sent" data-staff-hide="anon">
             <span class="home-card-icon app-icon app-icon-outbox" aria-hidden="true"></span>
             <span class="home-card-label">已發送</span>
             <span class="home-card-desc">查看已發留言</span>
@@ -149,7 +149,7 @@
           <button type="button" id="home-staff-card" class="home-card home-card-staff hidden" data-nav="staff">
             <span class="home-card-icon app-icon app-icon-chat" aria-hidden="true"></span>
             <span class="home-card-label">本組管理</span>
-            <span class="home-card-desc">監控留言／控制投票</span>
+            <span class="home-card-desc">登入／投票／留言監控</span>
           </button>
         </div>
       </div>
@@ -337,6 +337,18 @@
             </button>
           </div>
 
+          <div id="staff-dashboard-stats" class="stats-grid" data-tour="staff-stats"></div>
+
+          <div class="card" data-tour="staff-login-status">
+            <div id="staff-login-status" class="admin-pending"></div>
+          </div>
+
+          <div class="card" data-tour="staff-live-load">
+            <h3 class="section-title">即時負載</h3>
+            <div id="staff-live-load" class="stats-grid"></div>
+            <p class="hint-text">只計算你負責嘅組：登入、投票同近幾分鐘留言。</p>
+          </div>
+
           <div class="card" data-tour="staff-message-controls">
             <h3 class="section-title">本組留言</h3>
             <p class="form-hint">只影響你負責嘅組；Admin 全域關閉仍然會停用全部組。</p>
@@ -366,6 +378,7 @@
               <div class="stepper-line"></div>
               <div class="stepper-step" data-step="PUBLISHED"><span class="stepper-dot"></span><span class="stepper-label">公布</span></div>
             </div>
+            <div id="staff-trophy-stats" class="stats-grid"></div>
             <div class="admin-trophy-controls">
               <button type="button" id="staff-open-voting" class="btn btn-success btn-sm btn-progress">
                 <span class="btn-label">開放投票</span>
@@ -384,6 +397,25 @@
                 <span class="btn-progress-bar" aria-hidden="true"></span>
               </button>
             </div>
+            <div id="staff-pending-voters" class="admin-pending"></div>
+          </div>
+
+          <div class="card" data-tour="staff-results">
+            <h3 class="section-title">本組結果</h3>
+            <nav class="sub-tab-nav" role="tablist" aria-label="本組結果檢視">
+              <button type="button" class="sub-tab-btn staff-result-tab active" data-staff-result-tab="audit">投票審計</button>
+              <button type="button" class="sub-tab-btn staff-result-tab" data-staff-result-tab="profiles">個人檔案</button>
+              <button type="button" class="sub-tab-btn staff-result-tab" data-staff-result-tab="summary">獎項摘要</button>
+            </nav>
+            <div id="staff-result-audit" class="result-panel active">
+              <div id="staff-audit-cards" class="audit-cards"></div>
+            </div>
+            <div id="staff-result-profiles" class="result-panel hidden">
+              <div id="staff-profiles-list" class="profiles-grid"></div>
+            </div>
+            <div id="staff-result-summary" class="result-panel hidden">
+              <div id="staff-summary-list" class="summary-list accordion"></div>
+            </div>
           </div>
 
           <div class="card" data-tour="staff-monitor">
@@ -391,12 +423,12 @@
               <h3 class="section-title">組內留言監控</h3>
               <span id="staff-msg-count" class="form-hint">共 0 則</span>
             </div>
-            <p class="form-hint">即時顯示同組成員之間嘅留言（新發送先會帶組別標記）。</p>
+            <p class="form-hint">即時顯示同組成員之間嘅留言，連發送者同接收者姓名。</p>
             <div id="staff-message-list" class="admin-message-list"></div>
             <div id="staff-msg-empty" class="empty-state empty-illustration">
               <div class="illustration-circle"><span class="app-icon app-icon-chat" aria-hidden="true"></span></div>
               <h3>暫無組內留言</h3>
-              <p>組員互傳留言後會即時顯示</p>
+              <p>組員互傳留言後會即時顯示發送者同接收者</p>
             </div>
           </div>
         </div>
@@ -408,7 +440,7 @@
         <span class="bottom-nav-icon app-icon app-icon-home" aria-hidden="true"></span>
         <span class="bottom-nav-label">首頁</span>
       </button>
-      <button type="button" class="bottom-nav-item" data-tab="inbox" role="tab" aria-selected="false">
+      <button type="button" class="bottom-nav-item" data-tab="inbox" role="tab" aria-selected="false" data-staff-hide="anon">
         <span class="bottom-nav-icon app-icon app-icon-inbox" aria-hidden="true"></span>
         <span class="bottom-nav-label">Inbox</span>
         <span id="inbox-badge" class="bottom-nav-badge hidden">0</span>

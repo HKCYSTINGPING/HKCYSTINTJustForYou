@@ -1181,14 +1181,20 @@ textarea.input-field {
   grid-column: 1 / -1;
 }
 
+#screen-participant.is-staff-facilitator [data-staff-hide="anon"] {
+  display: none !important;
+}
+
 .staff-facilitator-panel .card {
   margin-bottom: var(--space-md);
 }
 
-.staff-group-title {
-  font-size: var(--fs-subtitle);
-  font-weight: 700;
-  margin: 0 0 var(--space-sm);
+.staff-facilitator-panel .sub-tab-nav {
+  margin: var(--space-sm) 0 var(--space-md);
+}
+
+.staff-facilitator-panel .result-panel {
+  padding: 0;
 }
 
 .admin-group-overrides {

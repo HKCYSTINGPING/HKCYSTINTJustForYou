@@ -68,6 +68,15 @@ const state = {
   staffMonitorMessages: [],
   staffMonitorBootstrapped: false,
   staffKnownMessageIds: new Set(),
+  staffTrophy: {
+    overview: null,
+    auditVotes: [],
+    profiles: [],
+    trophySummary: [],
+    trophies: [],
+    submissions: [],
+    results: []
+  },
   adminLoad: null,
   votingConfig: { voting_status: 'DRAFT', allow_resubmit: false, calculated_at: '', published_at: '' },
   knownMessageIds: new Set(),
@@ -138,12 +147,14 @@ const ONBOARDING_STEPS = {
     {
       target: '#screen-participant .home-card[data-nav="send"]',
       prepare: 'home',
+      skipIfStaff: true,
       title: '匿名留言',
       body: '撳呢個框開始寫鼓勵說話畀隊友。對方只會見到內容，唔知邊個 send。'
     },
     {
       target: '#screen-participant .home-card[data-nav="inbox"]',
       prepare: 'home',
+      skipIfStaff: true,
       title: '收件箱',
       body: '睇收到嘅匿名留言。有新訊息時呢度同底部 Inbox 會有提示。'
     },
@@ -156,6 +167,7 @@ const ONBOARDING_STEPS = {
     {
       target: '#screen-participant .home-card[data-nav="sent"]',
       prepare: 'home',
+      skipIfStaff: true,
       title: '已發送',
       body: '睇返自己已經 send 出嘅留言。'
     },
@@ -174,6 +186,7 @@ const ONBOARDING_STEPS = {
     {
       target: '#screen-participant .bottom-nav-item[data-tab="inbox"]',
       prepare: 'home',
+      skipIfStaff: true,
       title: '底部・Inbox',
       body: '快捷入口去收件箱；有未讀會顯示數字。'
     },
@@ -192,42 +205,49 @@ const ONBOARDING_STEPS = {
     {
       target: '[data-tour="send-receiver"]',
       prepare: 'send',
+      skipIfStaff: true,
       title: '揀接收者',
       body: '輸入或展開選單，揀你想留言嘅隊友。'
     },
     {
       target: '[data-tour="send-content"]',
       prepare: 'send',
+      skipIfStaff: true,
       title: '留言內容',
       body: '最多 300 字。有唔恰當字眼會提示你改。'
     },
     {
       target: '[data-tour="send-submit"]',
       prepare: 'send',
+      skipIfStaff: true,
       title: '發送留言',
       body: '寫好就撳呢度送出。送出後會去「已發送」。'
     },
     {
       target: '[data-tour="inbox-toolbar"]',
       prepare: 'inbox',
+      skipIfStaff: true,
       title: '收件箱頁面',
       body: '呢度列出所有收到嘅留言；右邊掣可以手動重新整理。'
     },
     {
       target: '[data-tour="inbox-list"], [data-tour="inbox-empty"]',
       prepare: 'inbox',
+      skipIfStaff: true,
       title: '留言列表',
       body: '有留言會一則一則顯示；暫時冇就會見空狀態提示。'
     },
     {
       target: '[data-tour="sent-toolbar"]',
       prepare: 'sent',
+      skipIfStaff: true,
       title: '已發送頁面',
       body: '左邊返回首頁，右邊可重新整理已發清單。'
     },
     {
       target: '[data-tour="sent-list"], [data-tour="sent-empty"]',
       prepare: 'sent',
+      skipIfStaff: true,
       title: '已發列表',
       body: '睇自己 send 過嘅內容同時間。'
     },
@@ -283,13 +303,31 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="staff-toolbar"]',
       prepare: 'staff',
       title: 'Staff 頁面',
-      body: '呢度係你負責組別嘅控制台，睇組名、留言開關、投票流程同組內留言。'
+      body: '呢度係你負責組別嘅控制台：登入狀況、投票進度、留言監控，同 Admin 一樣但只限本組。'
     },
     {
       target: '[data-tour="staff-group-card"]',
       prepare: 'staff',
       title: '負責組別',
       body: '可以睇目前負責邊一組，同埋改呢組顯示名稱。'
+    },
+    {
+      target: '[data-tour="staff-stats"]',
+      prepare: 'staff',
+      title: '本組數字',
+      body: '組員人數、留言同投票狀態會即時更新。'
+    },
+    {
+      target: '[data-tour="staff-login-status"]',
+      prepare: 'staff',
+      title: '登入狀況',
+      body: '睇本組成員邊個已登入。可以強制登出個別參加者，或一次過登出全組。'
+    },
+    {
+      target: '[data-tour="staff-live-load"]',
+      prepare: 'staff',
+      title: '即時負載',
+      body: '本組近幾分鐘留言同投票進度。'
     },
     {
       target: '[data-tour="staff-message-controls"]',
@@ -301,13 +339,19 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="staff-voting-controls"]',
       prepare: 'staff',
       title: '本組投票控制',
-      body: '可以幫自己負責嗰組開放投票、關閉、計算結果同公布。'
+      body: '可以幫自己負責嗰組開放投票、關閉、計算結果同公布，亦會見到投票進度。'
+    },
+    {
+      target: '[data-tour="staff-results"]',
+      prepare: 'staff',
+      title: '本組結果',
+      body: '審計、個人檔案同獎項摘要，只顯示你負責嗰組。'
     },
     {
       target: '[data-tour="staff-monitor"]',
       prepare: 'staff',
       title: '組內留言監控',
-      body: '即時睇同組成員之間嘅留言，方便你現場跟進。'
+      body: '即時睇同組成員之間嘅留言，會顯示發送者同接收者姓名。'
     }
   ],
   admin: [
@@ -634,6 +678,14 @@ function cacheDOM() {
   DOM.staffMessageList = document.getElementById('staff-message-list');
   DOM.staffMsgEmpty = document.getElementById('staff-msg-empty');
   DOM.staffMsgCount = document.getElementById('staff-msg-count');
+  DOM.staffDashboardStats = document.getElementById('staff-dashboard-stats');
+  DOM.staffLoginStatus = document.getElementById('staff-login-status');
+  DOM.staffLiveLoad = document.getElementById('staff-live-load');
+  DOM.staffTrophyStats = document.getElementById('staff-trophy-stats');
+  DOM.staffPendingVoters = document.getElementById('staff-pending-voters');
+  DOM.staffAuditCards = document.getElementById('staff-audit-cards');
+  DOM.staffProfilesList = document.getElementById('staff-profiles-list');
+  DOM.staffSummaryList = document.getElementById('staff-summary-list');
   DOM.adminGroupOverrides = document.getElementById('admin-group-overrides');
 
   DOM.adminLogout = document.getElementById('admin-logout');
@@ -1091,6 +1143,21 @@ function formatGroupLabel(label) {
   return label || '未分組';
 }
 
+function getFacilitatorGroupMembers(groupId = getFacilitatorGroupId()) {
+  if (!groupId) return [];
+  return state.participants.filter(p => p.group_id === groupId);
+}
+
+function applyStaffParticipantChrome() {
+  const hideAnon = isStaffPerson(state.participantId);
+  document.querySelectorAll('[data-staff-hide="anon"]').forEach(el => {
+    el.classList.toggle('hidden', hideAnon);
+  });
+  if (DOM.screenParticipant) {
+    DOM.screenParticipant.classList.toggle('is-staff-facilitator', hideAnon);
+  }
+}
+
 /** Seat ids are 1A…6H. Named people (WILL, …) are Staff. */
 function isSeatParticipantId(participantId) {
   return /^[0-9][A-H]$/i.test(String(participantId || '').trim());
@@ -1176,14 +1243,20 @@ function effectiveVotingConfigForMe() {
  * server to run code on, but the admin already holds every submission through
  * a listener, so the same numbers are derived here for free.
  */
-function buildTrophyOverview(submissions, trophies) {
+function buildTrophyOverview(submissions, trophies, participants = state.participants, votingStatus = state.votingConfig.voting_status) {
+  const roster = participants || [];
+  const rosterIds = new Set(roster.map(p => p.participant_id));
   const submitted = new Set(
-    submissions.filter(s => s.status === 'submitted').map(s => s.participant_id)
+    submissions
+      .filter(s => s.status === 'submitted' && rosterIds.has(s.participant_id))
+      .map(s => s.participant_id)
   );
-  const totalVotes = submissions.reduce((sum, s) => sum + s.pairings.length, 0);
+  const totalVotes = submissions
+    .filter(s => rosterIds.has(s.participant_id))
+    .reduce((sum, s) => sum + s.pairings.length, 0);
 
   const byGroup = new Map();
-  state.participants.forEach(p => {
+  roster.forEach(p => {
     const group = p.group_id || '未分組';
     if (!byGroup.has(group)) byGroup.set(group, []);
     byGroup.get(group).push({
@@ -1193,10 +1266,10 @@ function buildTrophyOverview(submissions, trophies) {
   });
 
   return {
-    voting_status: state.votingConfig.voting_status,
+    voting_status: votingStatus,
     stats: {
       completed_voters: submitted.size,
-      total_participants: state.participants.length,
+      total_participants: roster.length,
       total_votes: totalVotes,
       trophy_count: trophies.length
     },
@@ -1207,7 +1280,7 @@ function buildTrophyOverview(submissions, trophies) {
         display_label: formatGroupLabel(group_label),
         members
       })),
-    pending_participants: state.participants
+    pending_participants: roster
       .filter(p => !submitted.has(p.participant_id))
       .map(p => p.participant_id)
   };
@@ -1974,6 +2047,11 @@ async function startParticipantSubscriptions() {
 
   const facilitateGroup = getFacilitatorGroupId(pid);
   if (facilitateGroup) {
+    applyStaffParticipantChrome();
+    state.staffTrophy.trophies = filterValidTrophies(
+      state.trophy.trophies.length ? state.trophy.trophies : []
+    );
+    const memberIds = () => getFacilitatorGroupMembers(facilitateGroup).map(p => p.participant_id);
     track(data.subscribeGroupThreadMessages(
       facilitateGroup,
       messages => {
@@ -1990,6 +2068,40 @@ async function startParticipantSubscriptions() {
         state.staffMonitorMessages = [];
       }
     ));
+    track(data.subscribePresenceForParticipants(
+      memberIds(),
+      rows => {
+        state.presence = rows;
+        renderStaffLoginStatus();
+        renderStaffLiveLoad();
+      },
+      err => {
+        console.warn('本組登入狀況 listener error:', err && err.message);
+        state.presence = [];
+      }
+    ));
+    track(data.subscribeSubmissionsForParticipants(
+      memberIds(),
+      submissions => {
+        state.staffTrophy.submissions = submissions;
+        refreshStaffTrophyViews();
+      },
+      err => {
+        console.warn('本組投票紀錄 listener error:', err && err.message);
+      }
+    ));
+    track(data.subscribeResultsForParticipants(
+      memberIds(),
+      results => {
+        state.staffTrophy.results = results;
+        refreshStaffTrophyViews();
+      },
+      err => {
+        console.warn('本組得獎結果 listener error:', err && err.message);
+      }
+    ));
+  } else {
+    applyStaffParticipantChrome();
   }
 }
 
@@ -2040,6 +2152,7 @@ async function enterParticipantDashboard() {
   initSendCombobox();
   updateSendFormState();
   updateCharCounter();
+  applyStaffParticipantChrome();
   switchParticipantView('home');
 
   try {
@@ -2134,6 +2247,43 @@ function refreshAdminTrophyViews() {
   updateAdminVotingButtons();
   updateVotingStepper();
   renderAdminDashboard();
+}
+
+function refreshStaffTrophyViews() {
+  const groupId = getFacilitatorGroupId();
+  const members = getFacilitatorGroupMembers(groupId);
+  const trophies = state.staffTrophy.trophies.length
+    ? state.staffTrophy.trophies
+    : filterValidTrophies(state.trophy.trophies);
+  state.staffTrophy.trophies = trophies;
+  const submissions = state.staffTrophy.submissions;
+  const voting = effectiveVotingConfigForGroup(groupId);
+
+  state.staffTrophy.overview = buildTrophyOverview(submissions, trophies, members, voting.voting_status);
+  state.staffTrophy.auditVotes = buildAuditVotes(submissions, trophies);
+
+  const projection = data.computeResults(members, trophies, submissions);
+  state.staffTrophy.trophySummary = projection.trophySummary;
+
+  const stored = state.staffTrophy.results.filter(r => members.some(p => p.participant_id === r.participant_id));
+  state.staffTrophy.profiles = stored.length > 0
+    ? stored
+      .map(r => {
+        const awards = (r.awards || []).filter(a => a.award_source !== 'fallback');
+        return {
+          participant_id: r.participant_id,
+          trophies: awards,
+          vote_count: awards.reduce((sum, a) => sum + (a.vote_count || 0), 0)
+        };
+      })
+      .sort((a, b) => a.participant_id.localeCompare(b.participant_id))
+    : projection.profiles.filter(p => members.some(m => m.participant_id === p.participant_id));
+
+  renderStaffTrophyStats();
+  renderStaffPendingVoters();
+  renderStaffResults();
+  renderStaffLiveLoad();
+  if (state.adminTrophy.matrixModal) renderVoteMatrixModal();
 }
 
 async function startAdminSubscriptions() {
@@ -2353,6 +2503,15 @@ async function handleLogout() {
   state.staffMonitorMessages = [];
   state.staffMonitorBootstrapped = false;
   state.staffKnownMessageIds = new Set();
+  state.staffTrophy = {
+    overview: null,
+    auditVotes: [],
+    profiles: [],
+    trophySummary: [],
+    trophies: [],
+    submissions: [],
+    results: []
+  };
   state.groupMeta = {};
   state.presence = [];
   state.adminTrophy.matrixModal = null;
@@ -2971,6 +3130,12 @@ function resolveOnboardingTarget() {
   while (guard-- > 0) {
     const step = steps[onboardingState.step];
     if (!step) return null;
+    if (step.skipIfStaff && isStaffPerson(state.participantId)) {
+      const next = onboardingState.step + direction;
+      if (next < 0 || next >= steps.length) return null;
+      onboardingState.step = next;
+      continue;
+    }
     prepareOnboardingStep(step);
     const target = findOnboardingTarget(step);
     if (target) return target;
@@ -3546,8 +3711,12 @@ function renderGroupStatusCards(options) {
   if (afterRender) afterRender(container);
 }
 
+function trophyStore() {
+  return state.isAdmin ? state.adminTrophy : state.staffTrophy;
+}
+
 function findAdminVotingGroup(groupLabel) {
-  const groups = state.adminTrophy.overview?.group_voting_status || [];
+  const groups = trophyStore().overview?.group_voting_status || [];
   return groups.find(g => g.group_label === groupLabel) || null;
 }
 
@@ -3665,7 +3834,7 @@ function renderVoteMatrixModal() {
 function buildNominationCountMap(memberIds) {
   const members = new Set(memberIds);
   const counts = new Map();
-  state.adminTrophy.submissions.forEach(submission => {
+  trophyStore().submissions.forEach(submission => {
     (submission.pairings || []).forEach(pair => {
       if (!members.has(pair.receiver_id)) return;
       const key = pair.trophy_id + '\0' + pair.receiver_id;
@@ -3679,7 +3848,7 @@ function buildNominationCountMap(memberIds) {
 function buildBallotMap(memberIds) {
   const members = new Set(memberIds);
   const map = new Map();
-  state.adminTrophy.submissions.forEach(submission => {
+  trophyStore().submissions.forEach(submission => {
     const sender = submission.participant_id;
     if (!members.has(sender)) return;
     (submission.pairings || []).forEach(pair => {
@@ -3818,7 +3987,7 @@ function buildGroupWinnersHtml(group) {
   if (!memberIds.length) return '';
 
   const profilesById = new Map(
-    (state.adminTrophy.profiles || []).map(p => [p.participant_id, p])
+    (trophyStore().profiles || []).map(p => [p.participant_id, p])
   );
 
   const rows = memberIds.map(id => {
@@ -3848,7 +4017,7 @@ function buildGroupWinnersHtml(group) {
 
 function buildGroupNominationMatrixHtml(group) {
   const members = group.members.map(m => m.participant_id);
-  const trophies = state.adminTrophy.trophies || [];
+  const trophies = trophyStore().trophies || [];
   if (!members.length) return '<p class="group-vote-matrix-empty">此組沒有參加者</p>';
   if (!trophies.length) return '<p class="group-vote-matrix-empty">尚未載入獎項清單</p>';
 
@@ -3976,6 +4145,8 @@ function removeLocalPresence(participantIds) {
   state.presence = state.presence.filter(p => !remove.has(normalizeId(p.participant_id)));
   renderAdminLoginStatus();
   renderAdminLiveLoad();
+  renderStaffLoginStatus();
+  renderStaffLiveLoad();
 }
 
 function maybeHandleForcedLogout(rows) {
@@ -4310,8 +4481,10 @@ function renderStaffFacilitatorPanel() {
   const show = !!groupId && !state.isAdmin;
   panel.classList.toggle('hidden', !show);
   if (DOM.homeStaffCard) DOM.homeStaffCard.classList.toggle('hidden', !show);
+  applyStaffParticipantChrome();
   if (!show) return;
 
+  const members = getFacilitatorGroupMembers(groupId);
   const meta = state.groupMeta[groupId] || {};
   const voting = effectiveVotingConfigForGroup(groupId);
   const msgOpen = isMessagingOpenForGroup(groupId);
@@ -4328,6 +4501,15 @@ function renderStaffFacilitatorPanel() {
       <div class="status-item"><span>組內留言</span><span>${state.staffMonitorMessages.length} 則</span></div>
     `;
   }
+  if (DOM.staffDashboardStats) {
+    const activeCount = state.staffMonitorMessages.filter(m => m.status === 'active').length;
+    DOM.staffDashboardStats.innerHTML = `
+      <div class="stat-card"><div class="stat-value">${members.length || '—'}</div><div class="stat-label">本組成員</div></div>
+      <div class="stat-card"><div class="stat-value">${state.staffMonitorMessages.length}</div><div class="stat-label">留言</div></div>
+      <div class="stat-card"><div class="stat-value">${activeCount}</div><div class="stat-label">有效留言</div></div>
+      <div class="stat-card"><div class="stat-value">${msgOpen ? '開啟' : '關閉'}</div><div class="stat-label">留言狀態</div></div>
+    `;
+  }
   if (DOM.staffVotingBadge) {
     DOM.staffVotingBadge.textContent = VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status;
     DOM.staffVotingBadge.className = 'voting-status-badge ' + votingStatusToneClass(voting.voting_status);
@@ -4339,6 +4521,207 @@ function renderStaffFacilitatorPanel() {
     step.classList.toggle('active', stepIdx === idx);
     step.classList.toggle('done', stepIdx >= 0 && stepIdx < idx);
   });
+  renderStaffLoginStatus();
+  renderStaffLiveLoad();
+  renderStaffTrophyStats();
+  renderStaffPendingVoters();
+  renderStaffResults();
+}
+
+function renderStaffTrophyStats() {
+  if (!DOM.staffTrophyStats) return;
+  const stats = state.staffTrophy.overview?.stats || {};
+  const votingStatus = state.staffTrophy.overview?.voting_status
+    || effectiveVotingConfigForGroup(getFacilitatorGroupId()).voting_status
+    || 'DRAFT';
+  const statusTone = votingStatusToneClass(votingStatus);
+  DOM.staffTrophyStats.innerHTML = `
+    <div class="stat-card"><div class="stat-value">${stats.completed_voters || 0}/${stats.total_participants || 0}</div><div class="stat-label">已完成投票</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.total_votes || 0}</div><div class="stat-label">總投票數</div></div>
+    <div class="stat-card"><div class="stat-value">${stats.trophy_count || 0}</div><div class="stat-label">獎項種類</div></div>
+    <div class="stat-card voting-status-card ${statusTone}"><div class="stat-value">${VOTING_STATUS_LABELS[votingStatus] || votingStatus}</div><div class="stat-label">投票狀態</div></div>
+  `;
+}
+
+function renderStaffPendingVoters() {
+  renderGroupStatusCards({
+    container: DOM.staffPendingVoters,
+    title: '投票進度（本組）',
+    groups: state.staffTrophy.overview?.group_voting_status || [],
+    doneKey: 'voted',
+    doneLabel: '已投',
+    pendingLabel: '未投',
+    emptyAllDone: '本組參加者均已完成投票',
+    emptyPendingTitle: '尚未完成投票',
+    voteMatrix: true
+  });
+  if (state.adminTrophy.matrixModal) renderVoteMatrixModal();
+}
+
+function renderStaffLoginStatus() {
+  const groupId = getFacilitatorGroupId();
+  const groups = buildLoginStatusGroups().filter(g => g.group_label === groupId);
+  renderGroupStatusCards({
+    container: DOM.staffLoginStatus,
+    title: '登入狀況（本組）',
+    groups,
+    doneKey: 'logged_in',
+    doneLabel: '已登入',
+    pendingLabel: '未登入',
+    emptyAllDone: '本組參加者均已登入',
+    emptyPendingTitle: '尚未登入',
+    titleActionHtml: `
+      <div class="admin-login-actions">
+        <button type="button" id="staff-refresh-login-status" class="btn btn-secondary btn-sm btn-progress">
+          <span class="btn-label">手動刷新</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="staff-force-logout-group" class="btn btn-danger btn-sm">本組全部登出</button>
+      </div>
+    `,
+    onMemberClick: participantId => openForceLogoutModal(participantId),
+    canMemberClick: member => isSeatParticipantId(member.participant_id),
+    afterRender: container => {
+      const refreshBtn = container.querySelector('#staff-refresh-login-status');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => handleStaffRefreshLoginStatus(refreshBtn));
+      }
+      const allBtn = container.querySelector('#staff-force-logout-group');
+      if (allBtn) {
+        allBtn.addEventListener('click', handleStaffForceLogoutGroup);
+      }
+    }
+  });
+}
+
+function renderStaffLiveLoad() {
+  if (!DOM.staffLiveLoad) return;
+  const members = getFacilitatorGroupMembers();
+  const memberIds = new Set(members.map(p => p.participant_id));
+  const recentCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const recent = state.staffMonitorMessages.filter(
+    m => m.status === 'active' && m.created_at > recentCutoff
+  ).length;
+  const voted = state.staffTrophy.submissions.filter(s => s.status === 'submitted').length;
+  const online = state.presence.filter(p => memberIds.has(p.participant_id) && isPresenceCurrentlyLoggedIn(p)).length;
+  DOM.staffLiveLoad.innerHTML = `
+    <div class="stat-card"><div class="stat-value">${online}/${members.length || 0}</div><div class="stat-label">已登入</div></div>
+    <div class="stat-card"><div class="stat-value">${online}</div><div class="stat-label">現正線上</div></div>
+    <div class="stat-card"><div class="stat-value">${voted}/${members.length || 0}</div><div class="stat-label">已完成投票</div></div>
+    <div class="stat-card"><div class="stat-value">${recent}</div><div class="stat-label">近 5 分鐘留言</div></div>
+  `;
+}
+
+function renderStaffResults() {
+  const audit = state.staffTrophy.auditVotes || [];
+  if (DOM.staffAuditCards) {
+    DOM.staffAuditCards.innerHTML = audit.length === 0
+      ? '<p class="form-hint">暫無投票紀錄</p>'
+      : audit.map(v => `
+        <div class="audit-card">
+          <div class="audit-card-route">${escapeHtml(displayLabelOf(v.sender_id))} → ${escapeHtml(displayLabelOf(v.receiver_id))}</div>
+          <div class="audit-card-trophy">${appIcon('trophy')}${escapeHtml(v.trophy_name)}</div>
+          ${v.submitted_at ? `<div class="audit-card-time">${formatDateTime(v.submitted_at)}</div>` : ''}
+        </div>
+      `).join('');
+  }
+  if (DOM.staffProfilesList) {
+    const profiles = state.staffTrophy.profiles || [];
+    DOM.staffProfilesList.innerHTML = profiles.length === 0
+      ? '<p class="form-hint">暫無個人檔案</p>'
+      : profiles.map(profile => {
+        const trophies = (profile.trophies || []).map(t => `
+          <li class="profile-trophy-item">
+            <span>${escapeHtml(t.trophy_name)} (${t.vote_count} 票)</span>
+          </li>
+        `).join('');
+        return `<div class="profile-card">
+          <div class="profile-card-header">
+            <span>${escapeHtml(displayLabelOf(profile.participant_id))}</span>
+            <span class="chip chip-secondary">${profile.vote_count || 0} 票</span>
+          </div>
+          <ul class="profile-trophy-list">${trophies || '<li>尚未獲得獎項</li>'}</ul>
+        </div>`;
+      }).join('');
+  }
+  if (DOM.staffSummaryList) {
+    const items = state.staffTrophy.trophySummary || [];
+    DOM.staffSummaryList.innerHTML = items.length === 0
+      ? '<p class="form-hint">暫無獎項摘要</p>'
+      : items.map((item, i) => {
+        const winners = (item.winners || []);
+        const winnerHtml = winners.map(w =>
+          `<div class="summary-winner">${escapeHtml(displayLabelOf(w.participant_id))} · ${w.vote_count || 0} 票</div>`
+        ).join('');
+        const tieNote = item.is_tie ? '<div class="summary-tie">' + appIcon('warning') + ' 平票</div>' : '';
+        const ranking = (item.top_ranking || []).slice(0, 3).map((r, idx) =>
+          `<div>${idx + 1}. ${escapeHtml(displayLabelOf(r.participant_id))} (${r.vote_count} 票)</div>`
+        ).join('');
+        return `<div class="summary-item" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
+          <button type="button" class="summary-item-header">${escapeHtml(item.trophy_name)}</button>
+          <div class="summary-item-body">
+            ${tieNote}
+            ${winnerHtml || '<p>暫無得主</p>'}
+            ${ranking ? '<div style="margin-top:8px;font-weight:600">Top 3</div>' + ranking : ''}
+          </div>
+        </div>`;
+      }).join('');
+    DOM.staffSummaryList.querySelectorAll('.summary-item-header').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.closest('.summary-item').classList.toggle('open');
+      });
+    });
+  }
+}
+
+function switchStaffResultTab(tabName) {
+  document.querySelectorAll('.staff-result-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.staffResultTab === tabName);
+  });
+  ['audit', 'profiles', 'summary'].forEach(name => {
+    const panel = document.getElementById('staff-result-' + name);
+    if (!panel) return;
+    const on = name === tabName;
+    panel.classList.toggle('active', on);
+    panel.classList.toggle('hidden', !on);
+  });
+}
+
+async function handleStaffRefreshLoginStatus(btn) {
+  const action = async () => {
+    const ids = getFacilitatorGroupMembers().map(p => p.participant_id);
+    state.presence = await data.fetchPresenceForParticipants(ids);
+    renderStaffLoginStatus();
+    renderStaffLiveLoad();
+  };
+  try {
+    if (btn) await runProgressButton(btn, action());
+    else await action();
+  } catch (err) {
+    showToast(data.describeFirestoreError(err), 'error');
+  }
+}
+
+async function handleStaffForceLogoutGroup() {
+  const ids = getFacilitatorGroupMembers()
+    .map(p => normalizeId(p.participant_id))
+    .filter(id => !!id && isSeatParticipantId(id));
+  const loggedIn = ids.filter(id => {
+    const presence = state.presence.find(p => p.participant_id === id);
+    return isPresenceCurrentlyLoggedIn(presence);
+  });
+  if (!loggedIn.length) {
+    showToast('本組目前沒有已登入參加者', 'info');
+    return;
+  }
+  if (!window.confirm('確定要強制登出本組 ' + loggedIn.length + ' 位已登入參加者嗎？Staff 不受影響。')) return;
+  try {
+    await data.forceLogoutParticipants(loggedIn);
+    removeLocalPresence(loggedIn);
+    showToast('已強制登出本組參加者', 'success');
+  } catch (err) {
+    showToast(data.describeFirestoreError(err), 'error');
+  }
 }
 
 function renderStaffGroupMessages() {
@@ -4456,6 +4839,8 @@ async function handleStaffCalculate(btn) {
       );
       const outcome = data.computeResults(members, trophies, submissions);
       await data.writeResults(outcome.awarded, { groupId });
+      state.staffTrophy.submissions = submissions;
+      refreshStaffTrophyViews();
       showToast('本組結果計算完成', 'success');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
@@ -4786,6 +5171,9 @@ function initAdminParticipantsPanel() {
 const BOTTOM_NAV_TABS = ['home', 'inbox', 'trophy', 'profile'];
 
 function switchParticipantView(viewName) {
+  if (isStaffPerson(state.participantId) && (viewName === 'send' || viewName === 'inbox' || viewName === 'sent')) {
+    viewName = isGroupFacilitator() ? 'staff' : 'home';
+  }
   document.querySelectorAll('#screen-participant .app-view').forEach(view => {
     const isActive = view.dataset.view === viewName;
     view.classList.toggle('active', isActive);
@@ -4853,7 +5241,7 @@ function switchAdminTab(tabName) {
 }
 
 function switchResultTab(tabName) {
-  document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+  document.querySelectorAll('#admin-results-panel .sub-tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.resultTab === tabName);
   });
   document.getElementById('result-audit').classList.toggle('active', tabName === 'audit');
@@ -4988,6 +5376,10 @@ function bindEvents() {
   if (DOM.profileSaveName) {
     DOM.profileSaveName.addEventListener('click', handleSaveDisplayName);
   }
+  document.querySelectorAll('.staff-result-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchStaffResultTab(btn.dataset.staffResultTab));
+  });
+
   if (DOM.staffSaveGroupName) {
     DOM.staffSaveGroupName.addEventListener('click', handleStaffSaveGroupName);
   }
