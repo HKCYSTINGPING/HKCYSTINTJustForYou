@@ -302,56 +302,65 @@ const ONBOARDING_STEPS = {
     {
       target: '[data-tour="staff-toolbar"]',
       prepare: 'staff',
+      staffSection: 'dashboard',
       title: 'Staff 頁面',
-      body: '呢度係你負責組別嘅控制台：登入狀況、投票進度、留言監控，同 Admin 一樣但只限本組。'
+      body: '同 Admin 控制台一樣：上面切換 Dashboard、Messages、Voting、Results，只係範圍限於你負責嗰組。'
     },
     {
       target: '[data-tour="staff-group-card"]',
       prepare: 'staff',
+      staffSection: 'dashboard',
       title: '負責組別',
       body: '可以睇目前負責邊一組，同埋改呢組顯示名稱。'
     },
     {
       target: '[data-tour="staff-stats"]',
       prepare: 'staff',
+      staffSection: 'dashboard',
       title: '本組數字',
       body: '組員人數、留言同投票狀態會即時更新。'
     },
     {
       target: '[data-tour="staff-login-status"]',
       prepare: 'staff',
+      staffSection: 'dashboard',
       title: '登入狀況',
       body: '睇本組成員邊個已登入。可以強制登出個別參加者，或一次過登出全組。'
     },
     {
       target: '[data-tour="staff-live-load"]',
       prepare: 'staff',
+      staffSection: 'dashboard',
       title: '即時負載',
       body: '本組近幾分鐘留言同投票進度。'
     },
     {
       target: '[data-tour="staff-message-controls"]',
       prepare: 'staff',
+      staffSection: 'messages',
       title: '本組留言控制',
       body: '只會影響你負責嗰組；Admin 全域關閉時仍然會全部停用。'
     },
     {
+      target: '[data-tour="staff-monitor"]',
+      prepare: 'staff',
+      staffSection: 'messages',
+      title: '組內留言監控',
+      body: '即時睇同組成員之間嘅留言，會顯示發送者同接收者姓名。'
+    },
+    {
       target: '[data-tour="staff-voting-controls"]',
       prepare: 'staff',
+      staffSection: 'voting',
       title: '本組投票控制',
       body: '可以幫自己負責嗰組開放投票、關閉、計算結果同公布，亦會見到投票進度。'
     },
     {
       target: '[data-tour="staff-results"]',
       prepare: 'staff',
+      staffSection: 'results',
       title: '本組結果',
-      body: '審計、個人檔案同獎項摘要，只顯示你負責嗰組。'
-    },
-    {
-      target: '[data-tour="staff-monitor"]',
-      prepare: 'staff',
-      title: '組內留言監控',
-      body: '即時睇同組成員之間嘅留言，會顯示發送者同接收者姓名。'
+      body: '同 Admin 結果頁一樣：審計、個人檔案、獎項摘要，只顯示你負責嗰組。'
     }
   ],
   admin: [
@@ -3097,13 +3106,15 @@ function prepareOnboardingStep(step) {
     if (step.resultTab) switchResultTab(step.resultTab);
   } else if (step.prepare) {
     switchParticipantView(step.prepare);
+    if (step.staffSection) switchStaffSection(step.staffSection);
+    if (step.staffResultTab) switchStaffResultTab(step.staffResultTab);
   }
 }
 
 function isOnboardingTargetVisible(el) {
   if (!el) return false;
   if (el.classList.contains('hidden')) return false;
-  if (el.closest('.app-view.hidden, .admin-panel.hidden, .result-panel.hidden, .screen.hidden')) {
+  if (el.closest('.app-view.hidden, .admin-panel.hidden, .result-panel.hidden, .staff-section.hidden, .screen.hidden')) {
     return false;
   }
   const style = getComputedStyle(el);
@@ -4279,31 +4290,37 @@ function renderProfiles() {
   }).join('');
 }
 
-function renderTrophySummary() {
+function renderTrophySummaryInto(container, items, options = {}) {
+  if (!container) return;
+  const { allowRename = false, idPrefix = 'summary', onRename = null } = options;
+  const list = items || [];
   const openIds = new Set(
-    [...DOM.summaryList.querySelectorAll('.summary-item.open')]
+    [...container.querySelectorAll('.summary-item.open')]
       .map(el => el.dataset.trophyId)
       .filter(Boolean)
   );
 
-  DOM.summaryList.innerHTML = state.adminTrophy.trophySummary.map((item, i) => {
+  if (list.length === 0) {
+    container.innerHTML = '<p class="form-hint">暫無獎項摘要</p>';
+    return;
+  }
+
+  container.innerHTML = list.map((item, i) => {
     const winners = (item.winners || []);
     const winnerHtml = winners.map(w =>
-      `<div class="summary-winner">${escapeHtml(w.participant_id)} · ${w.vote_count || 0} 票</div>`
+      `<div class="summary-winner">${escapeHtml(displayLabelOf(w.participant_id))} · ${w.vote_count || 0} 票</div>`
     ).join('');
     const tieNote = item.is_tie ? '<div class="summary-tie">' + appIcon('warning') + ' 平票</div>' : '';
     const ranking = (item.top_ranking || []).slice(0, 3).map((r, idx) =>
-      `<div>${idx + 1}. ${escapeHtml(r.participant_id)} (${r.vote_count} 票)</div>`
+      `<div>${idx + 1}. ${escapeHtml(displayLabelOf(r.participant_id))} (${r.vote_count} 票)</div>`
     ).join('');
     const isOpen = openIds.has(item.trophy_id);
-
-    return `<div class="summary-item${isOpen ? ' open' : ''}" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
-      <button type="button" class="summary-item-header">${escapeHtml(item.trophy_name)}</button>
-      <div class="summary-item-body">
+    const fieldId = `${idPrefix}-name-${escapeHtml(item.trophy_id)}`;
+    const renameHtml = allowRename ? `
         <div class="summary-rename">
-          <label class="summary-rename-label" for="summary-name-${escapeHtml(item.trophy_id)}">獎項名稱</label>
+          <label class="summary-rename-label" for="${fieldId}">獎項名稱</label>
           <div class="summary-rename-row">
-            <input type="text" id="summary-name-${escapeHtml(item.trophy_id)}"
+            <input type="text" id="${fieldId}"
               class="input-field summary-rename-input" maxlength="40"
               data-trophy-id="${escapeHtml(item.trophy_id)}"
               value="${escapeHtml(item.trophy_name)}"
@@ -4315,7 +4332,12 @@ function renderTrophySummary() {
             </button>
           </div>
           <p class="form-hint">編號 ${escapeHtml(item.trophy_id)}；改名會即時套用到投票畫面同已計算結果。</p>
-        </div>
+        </div>` : '';
+
+    return `<div class="summary-item${isOpen ? ' open' : ''}" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
+      <button type="button" class="summary-item-header">${escapeHtml(item.trophy_name)}</button>
+      <div class="summary-item-body">
+        ${renameHtml}
         ${tieNote}
         ${winnerHtml || '<p>暫無得主</p>'}
         ${ranking ? '<div style="margin-top:8px;font-weight:600">Top 3</div>' + ranking : ''}
@@ -4323,14 +4345,24 @@ function renderTrophySummary() {
     </div>`;
   }).join('');
 
-  DOM.summaryList.querySelectorAll('.summary-item-header').forEach(btn => {
+  container.querySelectorAll('.summary-item-header').forEach(btn => {
     btn.addEventListener('click', () => {
       btn.closest('.summary-item').classList.toggle('open');
     });
   });
 
-  DOM.summaryList.querySelectorAll('.summary-rename-save').forEach(btn => {
-    btn.addEventListener('click', () => handleAdminRenameTrophy(btn));
+  if (allowRename && onRename) {
+    container.querySelectorAll('.summary-rename-save').forEach(btn => {
+      btn.addEventListener('click', () => onRename(btn));
+    });
+  }
+}
+
+function renderTrophySummary() {
+  renderTrophySummaryInto(DOM.summaryList, state.adminTrophy.trophySummary, {
+    allowRename: true,
+    idPrefix: 'summary',
+    onRename: handleAdminRenameTrophy
   });
 }
 
@@ -4341,22 +4373,32 @@ function applyLocalTrophyName(trophyId, trophyName) {
     });
   };
   rename(state.adminTrophy.trophies);
+  rename(state.staffTrophy.trophies);
   rename(state.trophy.trophies);
-  (state.adminTrophy.results || []).forEach(result => {
-    (result.awards || []).forEach(award => {
-      if (award && award.trophy_id === trophyId) award.trophy_name = trophyName;
+  const patchResults = results => {
+    (results || []).forEach(result => {
+      (result.awards || []).forEach(award => {
+        if (award && award.trophy_id === trophyId) award.trophy_name = trophyName;
+      });
     });
-  });
+  };
+  patchResults(state.adminTrophy.results);
+  patchResults(state.staffTrophy.results);
 }
 
 async function handleAdminRenameTrophy(btn) {
   const trophyId = btn?.dataset?.trophyId;
   if (!trophyId) return;
-  const input = DOM.summaryList.querySelector(
+  if (!state.isAdmin) {
+    showToast('獎項名稱由管理員管理', 'info');
+    return;
+  }
+  const input = btn.closest('.summary-item')?.querySelector(
     `.summary-rename-input[data-trophy-id="${CSS.escape(trophyId)}"]`
   );
   const nextName = String(input?.value || '').trim();
-  const current = (state.adminTrophy.trophies || []).find(t => t.trophy_id === trophyId);
+  const current = (state.adminTrophy.trophies || state.trophy.trophies || [])
+    .find(t => t.trophy_id === trophyId);
   if (!nextName) {
     showToast('獎項名稱不可空白', 'error');
     return;
@@ -4371,6 +4413,7 @@ async function handleAdminRenameTrophy(btn) {
       const saved = await data.updateTrophyName(trophyId, nextName);
       applyLocalTrophyName(trophyId, saved);
       refreshAdminTrophyViews();
+      refreshStaffTrophyViews();
       showToast('獎項名稱已更新', 'success');
     } catch (err) {
       showToast(err.message || data.describeFirestoreError(err), 'error');
@@ -4546,7 +4589,7 @@ function renderStaffTrophyStats() {
 function renderStaffPendingVoters() {
   renderGroupStatusCards({
     container: DOM.staffPendingVoters,
-    title: '投票進度（本組）',
+    title: '投票進度（按組別）',
     groups: state.staffTrophy.overview?.group_voting_status || [],
     doneKey: 'voted',
     doneLabel: '已投',
@@ -4563,7 +4606,7 @@ function renderStaffLoginStatus() {
   const groups = buildLoginStatusGroups().filter(g => g.group_label === groupId);
   renderGroupStatusCards({
     container: DOM.staffLoginStatus,
-    title: '登入狀況（本組）',
+    title: '登入狀況（按組別）',
     groups,
     doneKey: 'logged_in',
     doneLabel: '已登入',
@@ -4576,7 +4619,7 @@ function renderStaffLoginStatus() {
           <span class="btn-label">手動刷新</span>
           <span class="btn-progress-bar" aria-hidden="true"></span>
         </button>
-        <button type="button" id="staff-force-logout-group" class="btn btn-danger btn-sm">本組全部登出</button>
+        <button type="button" id="staff-force-logout-group" class="btn btn-danger btn-sm">全部強制登出</button>
       </div>
     `,
     onMemberClick: participantId => openForceLogoutModal(participantId),
@@ -4644,34 +4687,25 @@ function renderStaffResults() {
         </div>`;
       }).join('');
   }
-  if (DOM.staffSummaryList) {
-    const items = state.staffTrophy.trophySummary || [];
-    DOM.staffSummaryList.innerHTML = items.length === 0
-      ? '<p class="form-hint">暫無獎項摘要</p>'
-      : items.map((item, i) => {
-        const winners = (item.winners || []);
-        const winnerHtml = winners.map(w =>
-          `<div class="summary-winner">${escapeHtml(displayLabelOf(w.participant_id))} · ${w.vote_count || 0} 票</div>`
-        ).join('');
-        const tieNote = item.is_tie ? '<div class="summary-tie">' + appIcon('warning') + ' 平票</div>' : '';
-        const ranking = (item.top_ranking || []).slice(0, 3).map((r, idx) =>
-          `<div>${idx + 1}. ${escapeHtml(displayLabelOf(r.participant_id))} (${r.vote_count} 票)</div>`
-        ).join('');
-        return `<div class="summary-item" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
-          <button type="button" class="summary-item-header">${escapeHtml(item.trophy_name)}</button>
-          <div class="summary-item-body">
-            ${tieNote}
-            ${winnerHtml || '<p>暫無得主</p>'}
-            ${ranking ? '<div style="margin-top:8px;font-weight:600">Top 3</div>' + ranking : ''}
-          </div>
-        </div>`;
-      }).join('');
-    DOM.staffSummaryList.querySelectorAll('.summary-item-header').forEach(btn => {
-      btn.addEventListener('click', () => {
-        btn.closest('.summary-item').classList.toggle('open');
-      });
-    });
-  }
+  renderTrophySummaryInto(DOM.staffSummaryList, state.staffTrophy.trophySummary, {
+    allowRename: true,
+    idPrefix: 'staff-summary',
+    onRename: handleAdminRenameTrophy
+  });
+}
+
+function switchStaffSection(sectionName) {
+  const name = sectionName || 'dashboard';
+  document.querySelectorAll('.staff-module-nav .bottom-nav-item').forEach(btn => {
+    const on = btn.dataset.staffSection === name;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on);
+  });
+  document.querySelectorAll('.staff-section').forEach(panel => {
+    const on = panel.dataset.staffSection === name;
+    panel.classList.toggle('active', on);
+    panel.classList.toggle('hidden', !on);
+  });
 }
 
 function switchStaffResultTab(tabName) {
@@ -5357,8 +5391,12 @@ function bindEvents() {
     DOM.trophySubmittedHome.addEventListener('click', () => switchParticipantView('home'));
   }
 
-  document.querySelectorAll('#screen-participant .bottom-nav-item').forEach(btn => {
+  document.querySelectorAll('#screen-participant .bottom-nav .bottom-nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchParticipantView(btn.dataset.tab));
+  });
+
+  document.querySelectorAll('.staff-module-nav .bottom-nav-item').forEach(btn => {
+    btn.addEventListener('click', () => switchStaffSection(btn.dataset.staffSection));
   });
 
   document.querySelectorAll('#screen-participant .home-card').forEach(card => {

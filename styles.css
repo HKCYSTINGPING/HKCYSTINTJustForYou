@@ -1189,12 +1189,26 @@ textarea.input-field {
   margin-bottom: var(--space-md);
 }
 
-.staff-facilitator-panel .sub-tab-nav {
-  margin: var(--space-sm) 0 var(--space-md);
+.staff-module-nav {
+  display: flex;
+  align-items: stretch;
+  margin: calc(-1 * var(--space-sm)) calc(-1 * var(--space-md)) var(--space-md);
+  padding: 0 var(--space-xs);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
 }
 
-.staff-facilitator-panel .result-panel {
-  padding: 0;
+.staff-module-nav .bottom-nav-item {
+  min-height: 56px;
+}
+
+.staff-section { display: none; }
+.staff-section.active { display: block; }
+
+.staff-group-title {
+  font-size: var(--fs-subtitle);
+  font-weight: 700;
+  margin: 0 0 var(--space-sm);
 }
 
 .admin-group-overrides {
@@ -2030,6 +2044,10 @@ textarea.input-field {
   gap: 6px;
 }
 
+.staff-facilitator-panel .group-voter-grid {
+  grid-template-columns: 1fr;
+}
+
 .group-voter-card {
   background: var(--surface);
   border: 1px solid var(--border-light);
@@ -2053,7 +2071,7 @@ textarea.input-field {
   margin: 0;
   padding: 8px 6px;
   border: none;
-  background: transparent;
+  background: var(--surface-warm);
   font: inherit;
   color: inherit;
   text-align: left;
@@ -2321,6 +2339,7 @@ button.group-voter-header:hover {
 }
 
 .sub-tab-btn {
+  flex: 1;
   flex-shrink: 0;
   padding: 10px var(--space-md);
   border: none;
@@ -2332,6 +2351,7 @@ button.group-voter-header:hover {
   color: var(--text-muted);
   cursor: pointer;
   border: 1.5px solid var(--border);
+  text-align: center;
 }
 
 .sub-tab-btn.active {
@@ -2627,6 +2647,7 @@ button.group-voter-header:hover {
   justify-content: space-between;
   gap: var(--space-sm);
   margin-bottom: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .admin-pending-title-row .admin-pending-title {
