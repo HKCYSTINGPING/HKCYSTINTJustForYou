@@ -398,7 +398,9 @@ html.keyboard-open .bottom-nav {
   text-align: left;
   font-family: var(--font);
   color: var(--text);
-  min-height: 160px;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 0;
   transition: transform var(--duration-fast) var(--ease-out),
               box-shadow var(--duration-fast);
   -webkit-tap-highlight-color: transparent;
@@ -1176,10 +1178,6 @@ textarea.input-field {
 
 .profile-rename-card .section-title {
   margin-bottom: var(--space-xs);
-}
-
-.home-card-staff {
-  grid-column: 1 / -1;
 }
 
 #screen-participant.is-staff-facilitator [data-staff-hide] {
