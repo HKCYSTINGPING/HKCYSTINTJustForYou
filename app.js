@@ -682,6 +682,8 @@ function cacheDOM() {
   DOM.staffEnableMsg = document.getElementById('staff-enable-msg');
   DOM.staffDisableMsg = document.getElementById('staff-disable-msg');
   DOM.staffVotingBadge = document.getElementById('staff-voting-badge');
+  DOM.staffVotingSource = document.getElementById('staff-voting-source');
+  DOM.staffFollowGlobalVoting = document.getElementById('staff-follow-global-voting');
   DOM.staffOpenVoting = document.getElementById('staff-open-voting');
   DOM.staffCloseVoting = document.getElementById('staff-close-voting');
   DOM.staffCalculate = document.getElementById('staff-calculate');
@@ -1331,6 +1333,76 @@ function effectiveVotingConfigForGroup(groupId) {
 
 function effectiveVotingConfigForMe() {
   return effectiveVotingConfigForGroup(myGroupId());
+}
+
+/** Optimistic group voting writes that must survive stale groups snapshots. */
+const pendingGroupVotingWrites = new Map(); // groupId -> status, or '' to follow global
+
+function applyGroupsSnapshot(map) {
+  const next = { ...(map || {}) };
+  pendingGroupVotingWrites.forEach((pendingStatus, groupId) => {
+    const serverStatus = next[groupId]?.voting_status || '';
+    if (serverStatus === pendingStatus) {
+      pendingGroupVotingWrites.delete(groupId);
+      return;
+    }
+    if (!next[groupId]) {
+      next[groupId] = {
+        group_id: groupId,
+        display_name: '',
+        messaging_status: 'OPEN',
+        voting_status: pendingStatus,
+        allow_resubmit: pendingStatus === 'VOTING_OPEN',
+        calculated_at: '',
+        published_at: ''
+      };
+      return;
+    }
+    next[groupId] = {
+      ...next[groupId],
+      voting_status: pendingStatus,
+      allow_resubmit: pendingStatus === 'VOTING_OPEN'
+        ? true
+        : (pendingStatus ? !!next[groupId].allow_resubmit : false)
+    };
+  });
+  state.groupMeta = next;
+}
+
+function rememberPendingGroupVoting(groupId, status) {
+  const nextStatus = status || '';
+  pendingGroupVotingWrites.set(groupId, nextStatus);
+  if (!state.groupMeta[groupId]) {
+    state.groupMeta[groupId] = {
+      group_id: groupId,
+      display_name: '',
+      messaging_status: 'OPEN',
+      voting_status: '',
+      allow_resubmit: false,
+      calculated_at: '',
+      published_at: ''
+    };
+  }
+  state.groupMeta[groupId] = {
+    ...state.groupMeta[groupId],
+    voting_status: nextStatus,
+    allow_resubmit: nextStatus === 'VOTING_OPEN'
+      ? true
+      : (nextStatus ? !!state.groupMeta[groupId].allow_resubmit : false)
+  };
+}
+
+function groupVotingOverrideInfo(groupId) {
+  const meta = state.groupMeta[groupId] || {};
+  const overridden = !!(meta.voting_status);
+  const voting = effectiveVotingConfigForGroup(groupId);
+  const globalStatus = state.votingConfig.voting_status || 'DRAFT';
+  return {
+    status: voting.voting_status || 'DRAFT',
+    overridden,
+    globalStatus,
+    sourceLabel: overridden ? '本組覆寫' : '跟隨全域'
+  };
 }
 
 /**
@@ -2128,7 +2200,7 @@ async function startParticipantSubscriptions() {
     };
     track(data.subscribeGroups(
       map => {
-        state.groupMeta = map || {};
+        applyGroupsSnapshot(map);
         updateSendFormState();
         updateCharCounter();
         applyEffectiveVotingToTrophyState();
@@ -2140,7 +2212,7 @@ async function startParticipantSubscriptions() {
       },
       err => {
         console.warn('組別設定 listener error:', err && err.message);
-        state.groupMeta = {};
+        applyGroupsSnapshot({});
         finish();
       }
     ));
@@ -2472,7 +2544,7 @@ async function startAdminSubscriptions() {
   // the admin console must still open instead of failing the whole login.
   track(data.subscribeGroups(
     map => {
-      state.groupMeta = map || {};
+      applyGroupsSnapshot(map);
       refreshAdminTrophyViews();
       renderAdminDashboard();
       renderAdminGroupOverrides();
@@ -2481,7 +2553,7 @@ async function startAdminSubscriptions() {
     },
     err => {
       console.warn('組別設定 listener error:', err && err.message);
-      state.groupMeta = {};
+      applyGroupsSnapshot({});
       renderAdminGroupOverrides();
     }
   ));
@@ -2620,6 +2692,7 @@ async function handleLogout() {
     results: []
   };
   state.groupMeta = {};
+  pendingGroupVotingWrites.clear();
   state.presence = [];
   state.adminTrophy.matrixModal = null;
   state.knownMessageIds = new Set();
@@ -4784,7 +4857,7 @@ function renderStaffFacilitatorPanel() {
 
   const members = getFacilitatorGroupMembers(groupId);
   const meta = state.groupMeta[groupId] || {};
-  const voting = effectiveVotingConfigForGroup(groupId);
+  const votingInfo = groupVotingOverrideInfo(groupId);
   const msgOpen = isMessagingOpenForGroup(groupId);
   if (DOM.staffGroupTitle) {
     DOM.staffGroupTitle.textContent = formatGroupLabel(groupId);
@@ -4795,7 +4868,7 @@ function renderStaffFacilitatorPanel() {
   if (DOM.staffGroupStatus) {
     DOM.staffGroupStatus.innerHTML = `
       <div class="status-item"><span>本組留言</span><span>${msgOpen ? appIcon('dot-green') + ' 開啟' : appIcon('dot-red') + ' 關閉'}</span></div>
-      <div class="status-item"><span>本組投票</span><span>${escapeHtml(VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status)}</span></div>
+      <div class="status-item"><span>本組投票</span><span>${escapeHtml(VOTING_STATUS_LABELS[votingInfo.status] || votingInfo.status)}（${escapeHtml(votingInfo.sourceLabel)}）</span></div>
       <div class="status-item"><span>組內留言</span><span>${state.staffMonitorMessages.length} 則</span></div>
     `;
   }
@@ -4808,17 +4881,31 @@ function renderStaffFacilitatorPanel() {
       <div class="stat-card"><div class="stat-value">${msgOpen ? '開啟' : '關閉'}</div><div class="stat-label">留言狀態</div></div>
     `;
   }
-  if (DOM.staffVotingBadge) {
-    DOM.staffVotingBadge.textContent = VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status;
-    DOM.staffVotingBadge.className = 'voting-status-badge ' + votingStatusToneClass(voting.voting_status);
-  }
-  updateStaffVotingStepper(voting.voting_status);
-  updateStaffVotingButtons(voting.voting_status);
+  syncStaffVotingControls(groupId);
   renderStaffLoginStatus();
   renderStaffLiveLoad();
   renderStaffTrophyStats();
   renderStaffPendingVoters();
   renderStaffResults();
+}
+
+function syncStaffVotingControls(groupId = getFacilitatorGroupId()) {
+  if (!groupId) return;
+  const info = groupVotingOverrideInfo(groupId);
+  if (DOM.staffVotingBadge) {
+    DOM.staffVotingBadge.textContent = VOTING_STATUS_LABELS[info.status] || info.status;
+    DOM.staffVotingBadge.className = 'voting-status-badge ' + votingStatusToneClass(info.status);
+  }
+  if (DOM.staffVotingSource) {
+    DOM.staffVotingSource.textContent = info.overridden
+      ? `目前為本組覆寫（全域：${VOTING_STATUS_LABELS[info.globalStatus] || info.globalStatus}）`
+      : `目前跟隨全域（${VOTING_STATUS_LABELS[info.globalStatus] || info.globalStatus}）`;
+  }
+  if (DOM.staffFollowGlobalVoting) {
+    DOM.staffFollowGlobalVoting.classList.toggle('hidden', !info.overridden);
+  }
+  updateStaffVotingStepper(info.status);
+  updateStaffVotingButtons(info.status);
 }
 
 function updateStaffVotingStepper(status) {
@@ -5132,26 +5219,37 @@ async function handleStaffVotingAction(status, btn) {
   const groupId = getFacilitatorGroupId();
   if (!groupId) return;
   const confirmMessages = {
-    VOTING_OPEN: '確定要為本組開放投票嗎？',
-    VOTING_CLOSED: '確定要為本組關閉投票嗎？',
-    PUBLISHED: '確定要為本組公布結果嗎？'
+    VOTING_OPEN: '確定要為本組開放投票嗎？這會寫入本組覆寫，不再跟隨全域。',
+    VOTING_CLOSED: '確定要為本組關閉投票嗎？這會寫入本組覆寫，不再跟隨全域。',
+    PUBLISHED: '確定要為本組公布結果嗎？這會寫入本組覆寫，不再跟隨全域。'
   };
   if (confirmMessages[status] && !window.confirm(confirmMessages[status])) return;
   await runProgressButton(btn, (async () => {
     try {
       await data.setGroupVotingStatus(groupId, status);
-      if (!state.groupMeta[groupId]) state.groupMeta[groupId] = { group_id: groupId };
-      state.groupMeta[groupId] = {
-        ...state.groupMeta[groupId],
-        voting_status: status,
-        allow_resubmit: status === 'VOTING_OPEN'
-          ? true
-          : !!state.groupMeta[groupId].allow_resubmit
-      };
+      rememberPendingGroupVoting(groupId, status);
       applyEffectiveVotingToTrophyState();
       renderStaffFacilitatorPanel();
       refreshStaffTrophyViews();
-      showToast('本組投票狀態：' + (VOTING_STATUS_LABELS[status] || status), 'success');
+      showToast('本組覆寫：' + (VOTING_STATUS_LABELS[status] || status), 'success');
+    } catch (err) {
+      showToast(data.describeFirestoreError(err), 'error');
+    }
+  })());
+}
+
+async function handleStaffFollowGlobalVoting(btn) {
+  const groupId = getFacilitatorGroupId();
+  if (!groupId) return;
+  if (!window.confirm('確定清除本組投票覆寫，改為跟隨全域嗎？')) return;
+  await runProgressButton(btn, (async () => {
+    try {
+      await data.clearGroupVotingStatus(groupId);
+      rememberPendingGroupVoting(groupId, '');
+      applyEffectiveVotingToTrophyState();
+      renderStaffFacilitatorPanel();
+      refreshStaffTrophyViews();
+      showToast('已恢復跟隨全域投票', 'success');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -5173,16 +5271,12 @@ async function handleStaffCalculate(btn) {
       );
       const outcome = data.computeResults(members, trophies, submissions);
       await data.writeResults(outcome.awarded, { groupId });
-      if (!state.groupMeta[groupId]) state.groupMeta[groupId] = { group_id: groupId };
-      state.groupMeta[groupId] = {
-        ...state.groupMeta[groupId],
-        voting_status: 'CALCULATED'
-      };
+      rememberPendingGroupVoting(groupId, 'CALCULATED');
       state.staffTrophy.submissions = submissions;
       applyEffectiveVotingToTrophyState();
       renderStaffFacilitatorPanel();
       refreshStaffTrophyViews();
-      showToast('本組結果計算完成', 'success');
+      showToast('本組結果計算完成（本組覆寫）', 'success');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -5755,6 +5849,10 @@ function bindEvents() {
   }
   if (DOM.staffPublish) {
     DOM.staffPublish.addEventListener('click', () => handleStaffVotingAction('PUBLISHED', DOM.staffPublish));
+  }
+  if (DOM.staffFollowGlobalVoting) {
+    DOM.staffFollowGlobalVoting.addEventListener('click', () =>
+      handleStaffFollowGlobalVoting(DOM.staffFollowGlobalVoting));
   }
 
   document.querySelectorAll('.admin-bottom-nav .bottom-nav-item').forEach(btn => {

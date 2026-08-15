@@ -2933,19 +2933,28 @@ button.group-voter-header:hover {
 .view-enter .trophy-actions .btn:nth-child(1) { animation-delay: 0.12s; }
 .view-enter .trophy-actions .btn:nth-child(2) { animation-delay: 0.18s; }
 
-/* Staff / admin voting controls: animate only when their section is shown */
-.staff-section.active .admin-trophy-controls .btn,
-.admin-panel.active .admin-trophy-controls .btn {
+/* Staff / admin voting controls: animate only on section enter, not while active */
+.staff-section.view-enter .admin-trophy-controls .btn,
+.admin-panel.view-enter .admin-trophy-controls .btn {
   animation: listItemIn 0.36s var(--ease-out) both;
 }
-.staff-section.active .admin-trophy-controls .btn:nth-child(1),
-.admin-panel.active .admin-trophy-controls .btn:nth-child(1) { animation-delay: 0.04s; }
-.staff-section.active .admin-trophy-controls .btn:nth-child(2),
-.admin-panel.active .admin-trophy-controls .btn:nth-child(2) { animation-delay: 0.1s; }
-.staff-section.active .admin-trophy-controls .btn:nth-child(3),
-.admin-panel.active .admin-trophy-controls .btn:nth-child(3) { animation-delay: 0.16s; }
-.staff-section.active .admin-trophy-controls .btn:nth-child(4),
-.admin-panel.active .admin-trophy-controls .btn:nth-child(4) { animation-delay: 0.22s; }
+.staff-section.view-enter .admin-trophy-controls .btn:nth-child(1),
+.admin-panel.view-enter .admin-trophy-controls .btn:nth-child(1) { animation-delay: 0.04s; }
+.staff-section.view-enter .admin-trophy-controls .btn:nth-child(2),
+.admin-panel.view-enter .admin-trophy-controls .btn:nth-child(2) { animation-delay: 0.1s; }
+.staff-section.view-enter .admin-trophy-controls .btn:nth-child(3),
+.admin-panel.view-enter .admin-trophy-controls .btn:nth-child(3) { animation-delay: 0.16s; }
+.staff-section.view-enter .admin-trophy-controls .btn:nth-child(4),
+.admin-panel.view-enter .admin-trophy-controls .btn:nth-child(4) { animation-delay: 0.22s; }
+
+.staff-voting-source {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.staff-follow-global-voting {
+  margin-top: 0.75rem;
+  width: 100%;
+}
 
 .home-card:hover {
   transform: translateY(-2px);

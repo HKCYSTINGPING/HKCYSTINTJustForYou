@@ -32,6 +32,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  deleteField,
   where,
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
@@ -396,6 +397,17 @@ export async function setGroupVotingStatus(groupId, votingStatus, allowResubmit)
   }
   if (votingStatus === 'CALCULATED') patch.calculated_at = serverTimestamp();
   await setDoc(doc(db, 'groups', groupId), patch, { merge: true });
+}
+
+/** Remove the group voting override so the group follows the global config again. */
+export async function clearGroupVotingStatus(groupId) {
+  await setDoc(doc(db, 'groups', groupId), {
+    group_id: groupId,
+    voting_status: deleteField(),
+    allow_resubmit: deleteField(),
+    calculated_at: deleteField(),
+    published_at: deleteField()
+  }, { merge: true });
 }
 
 // ─── Trophies ───────────────────────────────────────────────────────────────
