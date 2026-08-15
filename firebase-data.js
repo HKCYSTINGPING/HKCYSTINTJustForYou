@@ -338,6 +338,9 @@ export function subscribeVotingConfig(onData, onError) {
 }
 
 export async function setVotingStatus(votingStatus, allowResubmit) {
+  // Clear group overrides first so nobody stays stuck on a stale staff override
+  // while the new global status is already live.
+  await clearAllGroupVotingOverrides();
   const patch = { voting_status: votingStatus };
   if (allowResubmit !== undefined) patch.allow_resubmit = !!allowResubmit;
   if (votingStatus === 'PUBLISHED') patch.published_at = serverTimestamp();
@@ -347,7 +350,35 @@ export async function setVotingStatus(votingStatus, allowResubmit) {
     patch.published_at = '';
     patch.allow_resubmit = true;
   }
+  if (votingStatus === 'CALCULATED') {
+    patch.calculated_at = serverTimestamp();
+    patch.fallback_activated = false;
+  }
   await setDoc(doc(db, 'config', 'voting'), patch, { merge: true });
+}
+
+/** Remove every group's voting override so all groups follow the global config. */
+export async function clearAllGroupVotingOverrides() {
+  const snapshot = await getDocs(collection(db, 'groups'));
+  const operations = [];
+  snapshot.docs.forEach(d => {
+    const raw = d.data() || {};
+    if (
+      !('voting_status' in raw)
+      && !('allow_resubmit' in raw)
+      && !('calculated_at' in raw)
+      && !('published_at' in raw)
+    ) {
+      return;
+    }
+    operations.push(batch => batch.set(d.ref, {
+      voting_status: deleteField(),
+      allow_resubmit: deleteField(),
+      calculated_at: deleteField(),
+      published_at: deleteField()
+    }, { merge: true }));
+  });
+  if (operations.length) await commitAll(operations);
 }
 
 /** Per-group display names and messaging / voting overrides. */
@@ -629,11 +660,7 @@ export async function writeResults(awarded, options = {}) {
     await setGroupVotingStatus(options.groupId, 'CALCULATED');
     return;
   }
-  await setDoc(doc(db, 'config', 'voting'), {
-    voting_status: 'CALCULATED',
-    fallback_activated: false,
-    calculated_at: serverTimestamp()
-  }, { merge: true });
+  await setVotingStatus('CALCULATED');
 }
 
 /** Listen to a small set of documents by id (Staff cannot query whole collections). */
@@ -812,6 +839,7 @@ export async function clearAllRecords() {
     published_at: '',
     fallback_activated: false
   }, { merge: true });
+  await clearAllGroupVotingOverrides();
   return operations.length;
 }
 
@@ -840,6 +868,7 @@ export async function resetAllVotes() {
     patch.voting_status = 'VOTING_CLOSED';
   }
   await setDoc(votingRef, patch, { merge: true });
+  await clearAllGroupVotingOverrides();
   return operations.length;
 }
 

@@ -1365,13 +1365,21 @@ function effectiveVotingConfigForMe() {
 }
 
 /** Optimistic group voting writes that must survive stale groups snapshots. */
-const pendingGroupVotingWrites = new Map(); // groupId -> status, or '' to follow global
+const pendingGroupVotingWrites = new Map(); // groupId -> { status, at }
+const PENDING_GROUP_VOTING_GRACE_MS = 3000;
 
 function applyGroupsSnapshot(map) {
   const next = { ...(map || {}) };
-  pendingGroupVotingWrites.forEach((pendingStatus, groupId) => {
+  const now = Date.now();
+  pendingGroupVotingWrites.forEach((pending, groupId) => {
+    const pendingStatus = pending.status;
     const serverStatus = next[groupId]?.voting_status || '';
     if (serverStatus === pendingStatus) {
+      pendingGroupVotingWrites.delete(groupId);
+      return;
+    }
+    // Drop stale optimism (e.g. Admin already wiped overrides worldwide).
+    if (now - pending.at > PENDING_GROUP_VOTING_GRACE_MS) {
       pendingGroupVotingWrites.delete(groupId);
       return;
     }
@@ -1400,7 +1408,7 @@ function applyGroupsSnapshot(map) {
 
 function rememberPendingGroupVoting(groupId, status) {
   const nextStatus = status || '';
-  pendingGroupVotingWrites.set(groupId, nextStatus);
+  pendingGroupVotingWrites.set(groupId, { status: nextStatus, at: Date.now() });
   if (!state.groupMeta[groupId]) {
     state.groupMeta[groupId] = {
       group_id: groupId,
@@ -1419,6 +1427,20 @@ function rememberPendingGroupVoting(groupId, status) {
       ? true
       : (nextStatus ? !!state.groupMeta[groupId].allow_resubmit : false)
   };
+}
+
+/** Admin global voting changes wipe every local group override in memory. */
+function clearLocalGroupVotingOverrides() {
+  pendingGroupVotingWrites.clear();
+  Object.keys(state.groupMeta).forEach(groupId => {
+    state.groupMeta[groupId] = {
+      ...state.groupMeta[groupId],
+      voting_status: '',
+      allow_resubmit: false,
+      calculated_at: '',
+      published_at: ''
+    };
+  });
 }
 
 function groupVotingOverrideInfo(groupId) {
@@ -2194,7 +2216,12 @@ async function startParticipantSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeVotingConfig(cb, err),
       config => {
+        const prevStatus = state.votingConfig.voting_status;
         state.votingConfig = config;
+        // Admin global changes clear every group override — drop stale local ones too.
+        if (prevStatus !== config.voting_status) {
+          clearLocalGroupVotingOverrides();
+        }
         applyEffectiveVotingToTrophyState();
       },
       '投票狀態'
@@ -2545,7 +2572,12 @@ async function startAdminSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeVotingConfig(cb, err),
       config => {
+        const prevStatus = state.votingConfig.voting_status;
         state.votingConfig = config;
+        if (prevStatus !== config.voting_status) {
+          clearLocalGroupVotingOverrides();
+          renderAdminGroupOverrides();
+        }
         refreshAdminTrophyViews();
       },
       '投票狀態'
@@ -4817,16 +4849,25 @@ function updateAdminVotingButtons() {
 
 async function handleAdminVotingAction(status, btn) {
   const confirmMessages = {
-    VOTING_OPEN: '確定要開放投票嗎？若先前已公布結果，將清除公布狀態並允許重新提交。',
-    VOTING_CLOSED: '確定要關閉投票嗎？參加者將無法再提交。',
-    PUBLISHED: '確定要公布結果嗎？'
+    VOTING_OPEN: '確定要開放投票嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。若先前已公布結果，亦會清除公布狀態並允許重新提交。',
+    VOTING_CLOSED: '確定要關閉投票嗎？會覆蓋所有組別的投票覆寫；參加者將無法再提交。',
+    PUBLISHED: '確定要公布結果嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。'
   };
   if (confirmMessages[status] && !window.confirm(confirmMessages[status])) return;
 
   await runProgressButton(btn, (async () => {
     try {
       await data.setVotingStatus(status);
-      showToast('投票狀態已更新：' + (VOTING_STATUS_LABELS[status] || status), status);
+      clearLocalGroupVotingOverrides();
+      state.votingConfig = {
+        ...state.votingConfig,
+        voting_status: status,
+        allow_resubmit: status === 'VOTING_OPEN' ? true : !!state.votingConfig.allow_resubmit
+      };
+      applyEffectiveVotingToTrophyState();
+      refreshAdminTrophyViews();
+      renderAdminGroupOverrides();
+      showToast('全域投票已更新（已覆蓋各組覆寫）：' + (VOTING_STATUS_LABELS[status] || status), status);
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -4842,7 +4883,15 @@ async function handleAdminCalculate(btn) {
         state.participants, state.adminTrophy.trophies, state.adminTrophy.submissions
       );
       await data.writeResults(outcome.awarded);
-      showToast('結果計算完成', 'CALCULATED');
+      clearLocalGroupVotingOverrides();
+      state.votingConfig = {
+        ...state.votingConfig,
+        voting_status: 'CALCULATED'
+      };
+      applyEffectiveVotingToTrophyState();
+      refreshAdminTrophyViews();
+      renderAdminGroupOverrides();
+      showToast('結果計算完成（已覆蓋各組覆寫）', 'CALCULATED');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -4927,8 +4976,8 @@ function syncStaffVotingControls(groupId = getFacilitatorGroupId()) {
   }
   if (DOM.staffVotingSource) {
     DOM.staffVotingSource.textContent = info.overridden
-      ? `目前為本組覆寫（全域：${VOTING_STATUS_LABELS[info.globalStatus] || info.globalStatus}）`
-      : `目前跟隨全域（${VOTING_STATUS_LABELS[info.globalStatus] || info.globalStatus}）`;
+      ? `目前為本組覆寫（全域：${VOTING_STATUS_LABELS[info.globalStatus] || info.globalStatus}）。Admin 再改全域會覆蓋本組。`
+      : `目前跟隨全域（${VOTING_STATUS_LABELS[info.globalStatus] || info.globalStatus}）。撳下面掣可改為本組覆寫。`;
   }
   if (DOM.staffFollowGlobalVoting) {
     DOM.staffFollowGlobalVoting.classList.toggle('hidden', !info.overridden);
