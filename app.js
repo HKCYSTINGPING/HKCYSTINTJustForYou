@@ -3157,8 +3157,9 @@ function getCurrentOnboardingContext() {
   }
   if (DOM.screenParticipant && !DOM.screenParticipant.classList.contains('hidden')) {
     const view = document.querySelector('#screen-participant .app-view.active');
-    let viewName = view?.dataset.view || 'home';
-    if (viewName === 'trophy-submitted') viewName = 'trophy';
+    const viewName = view?.dataset.view || 'home';
+    // Submitted success screen is transient — wait until they open Trophy again.
+    if (viewName === 'trophy-submitted') return null;
     if (viewName === 'staff') {
       const section = document.querySelector('.staff-module-nav .bottom-nav-item.active')?.dataset.staffSection || 'dashboard';
       return { role: 'participant', page: 'staff:' + section };
