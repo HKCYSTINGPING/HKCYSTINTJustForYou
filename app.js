@@ -556,11 +556,15 @@ const ONBOARDING_STEPS = {
 
 const onboardingState = {
   role: null,
+  page: null,
+  steps: [],
   step: 0,
   targetEl: null,
   repositionBound: null,
   skipDirection: 1
 };
+
+const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v2';
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -1817,10 +1821,8 @@ async function handleLogin(e) {
 
     if (isAdmin) {
       await enterAdminDashboard();
-      maybeShowOnboarding(true);
     } else {
       await enterParticipantDashboard();
-      maybeShowOnboarding(false);
     }
   })());
 }
@@ -3125,15 +3127,70 @@ function detachOnboardingReposition() {
   onboardingState.repositionBound = null;
 }
 
+function readSeenOnboardingPages() {
+  try {
+    const raw = localStorage.getItem(ONBOARDING_SEEN_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    return data && typeof data === 'object' ? data : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function hasSeenPageOnboarding(role, page) {
+  return !!readSeenOnboardingPages()[role + ':' + page];
+}
+
+function markPageOnboardingSeen(role, page) {
+  if (!role || !page) return;
+  try {
+    const seen = readSeenOnboardingPages();
+    seen[role + ':' + page] = true;
+    localStorage.setItem(ONBOARDING_SEEN_KEY, JSON.stringify(seen));
+  } catch (_) { /* private mode / quota */ }
+}
+
+function getCurrentOnboardingContext() {
+  if (state.isAdmin && DOM.screenAdmin && !DOM.screenAdmin.classList.contains('hidden')) {
+    const active = document.querySelector('.admin-bottom-nav .bottom-nav-item.active');
+    return { role: 'admin', page: active?.dataset.adminTab || 'dashboard' };
+  }
+  if (DOM.screenParticipant && !DOM.screenParticipant.classList.contains('hidden')) {
+    const view = document.querySelector('#screen-participant .app-view.active');
+    let viewName = view?.dataset.view || 'home';
+    if (viewName === 'trophy-submitted') viewName = 'trophy';
+    if (viewName === 'staff') {
+      const section = document.querySelector('.staff-module-nav .bottom-nav-item.active')?.dataset.staffSection || 'dashboard';
+      return { role: 'participant', page: 'staff:' + section };
+    }
+    return { role: 'participant', page: viewName };
+  }
+  return null;
+}
+
+function stepMatchesOnboardingPage(step, page) {
+  if (!step || !page) return false;
+  if (page.startsWith('staff:')) {
+    return step.prepare === 'staff' && step.staffSection === page.slice(6);
+  }
+  return step.prepare === page;
+}
+
+function getOnboardingStepsForPage(role, page) {
+  return (ONBOARDING_STEPS[role] || []).filter(step => {
+    if (!stepMatchesOnboardingPage(step, page)) return false;
+    if (step.skipIfStaff && isStaffPerson(state.participantId)) return false;
+    return true;
+  });
+}
+
+/** Within a page tour, only switch in-page sub-tabs — never jump to another page. */
 function prepareOnboardingStep(step) {
   if (!step) return;
   if (onboardingState.role === 'admin') {
-    if (step.prepare) switchAdminTab(step.prepare);
     if (step.resultTab) switchResultTab(step.resultTab);
-  } else if (step.prepare) {
-    switchParticipantView(step.prepare);
-    if (step.staffSection) switchStaffSection(step.staffSection);
-    if (step.staffResultTab) switchStaffResultTab(step.staffResultTab);
+  } else if (step.staffResultTab) {
+    switchStaffResultTab(step.staffResultTab);
   }
 }
 
@@ -3161,18 +3218,12 @@ function findOnboardingTarget(step) {
 }
 
 function resolveOnboardingTarget() {
-  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
+  const steps = onboardingState.steps || [];
   const direction = onboardingState.skipDirection >= 0 ? 1 : -1;
   let guard = steps.length + 1;
   while (guard-- > 0) {
     const step = steps[onboardingState.step];
     if (!step) return null;
-    if (step.skipIfStaff && isStaffPerson(state.participantId)) {
-      const next = onboardingState.step + direction;
-      if (next < 0 || next >= steps.length) return null;
-      onboardingState.step = next;
-      continue;
-    }
     prepareOnboardingStep(step);
     const target = findOnboardingTarget(step);
     if (target) return target;
@@ -3227,7 +3278,7 @@ function positionOnboardingAround(target) {
 }
 
 function renderOnboardingStep() {
-  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
+  const steps = onboardingState.steps || [];
   if (!DOM.onboardingCoach || !steps.length) return;
 
   clearOnboardingTarget();
@@ -3261,9 +3312,15 @@ function renderOnboardingStep() {
   });
 }
 
-function showOnboarding(role) {
-  if (!DOM.onboardingCoach || (role !== 'participant' && role !== 'admin')) return;
+function showOnboardingForPage(role, page, { force = false } = {}) {
+  if (!DOM.onboardingCoach || (role !== 'participant' && role !== 'admin') || !page) return;
+  const steps = getOnboardingStepsForPage(role, page);
+  if (!steps.length) return;
+  if (!force && hasSeenPageOnboarding(role, page)) return;
+
   onboardingState.role = role;
+  onboardingState.page = page;
+  onboardingState.steps = steps;
   onboardingState.step = 0;
   onboardingState.skipDirection = 1;
 
@@ -3290,21 +3347,51 @@ function hideOnboarding() {
   clearOnboardingTarget();
   detachOnboardingReposition();
   onboardingState.role = null;
+  onboardingState.page = null;
+  onboardingState.steps = [];
   onboardingState.step = 0;
   onboardingState.skipDirection = 1;
 }
 
 function finishOnboarding() {
+  if (onboardingState.role && onboardingState.page) {
+    markPageOnboardingSeen(onboardingState.role, onboardingState.page);
+  }
   hideOnboarding();
 }
 
-function maybeShowOnboarding(isAdmin) {
-  const role = isAdmin ? 'admin' : 'participant';
-  requestAnimationFrame(() => showOnboarding(role));
+function isOnboardingOpen() {
+  return !!(DOM.onboardingCoach && !DOM.onboardingCoach.classList.contains('hidden'));
+}
+
+function maybeShowPageOnboarding({ force = false } = {}) {
+  const ctx = getCurrentOnboardingContext();
+  if (!ctx) return;
+
+  if (isOnboardingOpen()) {
+    if (onboardingState.role === ctx.role && onboardingState.page === ctx.page) {
+      if (!force) return;
+      hideOnboarding();
+    } else {
+      // Left mid-tour for another page — don't mark the unfinished page as seen.
+      hideOnboarding();
+    }
+  }
+
+  // Wait a frame so the newly shown view/panel has layout for spotlight math.
+  requestAnimationFrame(() => {
+    const latest = getCurrentOnboardingContext();
+    if (!latest || latest.role !== ctx.role || latest.page !== ctx.page) return;
+    showOnboardingForPage(latest.role, latest.page, { force });
+  });
+}
+
+function handlePageHelpClick() {
+  maybeShowPageOnboarding({ force: true });
 }
 
 function handleOnboardingNext() {
-  const steps = ONBOARDING_STEPS[onboardingState.role] || [];
+  const steps = onboardingState.steps || [];
   if (onboardingState.step >= steps.length - 1) {
     finishOnboarding();
     return;
@@ -4746,6 +4833,7 @@ function switchStaffSection(sectionName) {
     panel.classList.toggle('active', on);
     panel.classList.toggle('hidden', !on);
   });
+  maybeShowPageOnboarding();
 }
 
 function switchStaffResultTab(tabName) {
@@ -5275,6 +5363,7 @@ function switchParticipantView(viewName) {
     renderStaffFacilitatorPanel();
     renderStaffGroupMessages();
   }
+  maybeShowPageOnboarding();
 }
 
 function switchAdminTab(tabName) {
@@ -5314,6 +5403,7 @@ function switchAdminTab(tabName) {
     renderAdminDashboard();
     renderAdminLiveLoad();
   }
+  maybeShowPageOnboarding();
 }
 
 function switchResultTab(tabName) {
@@ -5387,6 +5477,9 @@ function bindEvents() {
   if (DOM.onboardingDim) {
     DOM.onboardingDim.addEventListener('click', finishOnboarding);
   }
+  document.querySelectorAll('.page-help-btn').forEach(btn => {
+    btn.addEventListener('click', handlePageHelpClick);
+  });
 
   if (DOM.voteMatrixModalClose) {
     DOM.voteMatrixModalClose.addEventListener('click', closeVoteMatrixModal);

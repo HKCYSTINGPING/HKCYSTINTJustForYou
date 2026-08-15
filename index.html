@@ -120,6 +120,13 @@
         <h1 id="participant-greeting" class="greeting-text">你好 <span class="app-icon app-icon-wave inline-icon" aria-hidden="true"></span></h1>
         <p id="participant-subgreeting" class="greeting-sub">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
       </div>
+      <button type="button" class="btn btn-ghost btn-icon page-help-btn" aria-label="本頁說明" title="本頁說明">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </button>
     </header>
 
     <main class="app-main">
@@ -566,11 +573,20 @@
         </span>
         <span id="admin-queue-pill" class="badge badge-queue hidden" role="status" aria-live="polite">排隊 0</span>
       </div>
-      <button type="button" id="admin-logout" class="btn btn-ghost btn-icon" aria-label="登出" data-tour="admin-logout">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-      </button>
+      <div class="app-header-actions">
+        <button type="button" class="btn btn-ghost btn-icon page-help-btn" aria-label="本頁說明" title="本頁說明">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </button>
+        <button type="button" id="admin-logout" class="btn btn-ghost btn-icon" aria-label="登出" data-tour="admin-logout">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+      </div>
     </header>
 
     <main class="app-main">
