@@ -1,0 +1,15 @@
+---
+description: Auto commit, push, and deploy without asking
+alwaysApply: true
+---
+
+# Auto commit & deploy
+
+After finishing app changes that should go live, **do not ask** whether to commit or deploy.
+
+Default workflow:
+1. Commit relevant files (never `simulate_mass_messages.py` or secrets)
+2. Push `main` to **both** remotes: `origin` and `hkcys`
+3. Confirm GitHub Pages deploy succeeded on both repos when practical
+
+Only skip commit/push if the user explicitly says not to deploy, or the change is clearly local-only scratch work.
