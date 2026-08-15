@@ -2865,8 +2865,6 @@ button.group-voter-header:hover {
 .view-enter .audit-cards > .audit-card,
 .view-enter .form-group,
 .view-enter .card,
-.view-enter .trophy-actions .btn,
-.view-enter .admin-trophy-controls .btn,
 .page-enter .login-form > .form-group,
 .page-enter .login-form > .btn,
 .page-enter .login-header > * {
@@ -2929,8 +2927,25 @@ button.group-voter-header:hover {
 .view-enter #trophy-teammates > .trophy-card:nth-child(n+6),
 .view-enter .group-voter-grid > .group-voter-card:nth-child(n+6) { animation-delay: 0.28s; }
 
+.view-enter .trophy-actions .btn {
+  animation: listItemIn 0.4s var(--ease-out) both;
+}
 .view-enter .trophy-actions .btn:nth-child(1) { animation-delay: 0.12s; }
 .view-enter .trophy-actions .btn:nth-child(2) { animation-delay: 0.18s; }
+
+/* Staff / admin voting controls: animate only when their section is shown */
+.staff-section.active .admin-trophy-controls .btn,
+.admin-panel.active .admin-trophy-controls .btn {
+  animation: listItemIn 0.36s var(--ease-out) both;
+}
+.staff-section.active .admin-trophy-controls .btn:nth-child(1),
+.admin-panel.active .admin-trophy-controls .btn:nth-child(1) { animation-delay: 0.04s; }
+.staff-section.active .admin-trophy-controls .btn:nth-child(2),
+.admin-panel.active .admin-trophy-controls .btn:nth-child(2) { animation-delay: 0.1s; }
+.staff-section.active .admin-trophy-controls .btn:nth-child(3),
+.admin-panel.active .admin-trophy-controls .btn:nth-child(3) { animation-delay: 0.16s; }
+.staff-section.active .admin-trophy-controls .btn:nth-child(4),
+.admin-panel.active .admin-trophy-controls .btn:nth-child(4) { animation-delay: 0.22s; }
 
 .home-card:hover {
   transform: translateY(-2px);

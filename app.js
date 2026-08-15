@@ -4676,20 +4676,23 @@ function updateVotingStepper() {
   const status = state.adminTrophy.overview?.voting_status || 'DRAFT';
   const steps = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
   const currentIdx = steps.indexOf(status);
+  const root = document.querySelector('#admin-trophy-panel .voting-stepper');
 
   if (DOM.adminVotingStatusBadge) {
     DOM.adminVotingStatusBadge.textContent = VOTING_STATUS_LABELS[status] || status;
     DOM.adminVotingStatusBadge.className = 'voting-status-badge ' + votingStatusToneClass(status);
   }
 
-  document.querySelectorAll('.stepper-step').forEach(el => {
+  if (!root) return;
+
+  root.querySelectorAll('.stepper-step').forEach(el => {
     const step = el.dataset.step;
     const idx = steps.indexOf(step);
     el.classList.toggle('active', step === status);
     el.classList.toggle('done', idx >= 0 && idx < currentIdx);
   });
 
-  document.querySelectorAll('.stepper-line').forEach((line, i) => {
+  root.querySelectorAll('.stepper-line').forEach((line, i) => {
     line.classList.toggle('done', i < currentIdx);
   });
 }
@@ -4808,18 +4811,42 @@ function renderStaffFacilitatorPanel() {
     DOM.staffVotingBadge.textContent = VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status;
     DOM.staffVotingBadge.className = 'voting-status-badge ' + votingStatusToneClass(voting.voting_status);
   }
-  const steps = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
-  const idx = steps.indexOf(voting.voting_status);
-  document.querySelectorAll('#staff-voting-stepper .stepper-step').forEach(step => {
-    const stepIdx = steps.indexOf(step.dataset.step);
-    step.classList.toggle('active', stepIdx === idx);
-    step.classList.toggle('done', stepIdx >= 0 && stepIdx < idx);
-  });
+  updateStaffVotingStepper(voting.voting_status);
+  updateStaffVotingButtons(voting.voting_status);
   renderStaffLoginStatus();
   renderStaffLiveLoad();
   renderStaffTrophyStats();
   renderStaffPendingVoters();
   renderStaffResults();
+}
+
+function updateStaffVotingStepper(status) {
+  const steps = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
+  const idx = steps.indexOf(status);
+  const root = document.getElementById('staff-voting-stepper');
+  if (!root) return;
+  root.querySelectorAll('.stepper-step').forEach(step => {
+    const stepIdx = steps.indexOf(step.dataset.step);
+    step.classList.toggle('active', stepIdx === idx);
+    step.classList.toggle('done', stepIdx >= 0 && stepIdx < idx);
+  });
+  root.querySelectorAll('.stepper-line').forEach((line, i) => {
+    line.classList.toggle('done', i < idx);
+  });
+}
+
+function updateStaffVotingButtons(status) {
+  const buttons = [
+    { el: DOM.staffOpenVoting, active: status === 'VOTING_OPEN' },
+    { el: DOM.staffCloseVoting, active: status === 'VOTING_CLOSED' },
+    { el: DOM.staffCalculate, active: status === 'CALCULATED' },
+    { el: DOM.staffPublish, active: status === 'PUBLISHED' }
+  ];
+  buttons.forEach(({ el, active }) => {
+    if (!el) return;
+    el.classList.toggle('btn-active-state', active);
+    el.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
 }
 
 function renderStaffTrophyStats() {
@@ -4963,6 +4990,7 @@ function switchStaffSection(sectionName) {
     const on = panel.dataset.staffSection === name;
     panel.classList.toggle('active', on);
     panel.classList.toggle('hidden', !on);
+    if (on) replayEnterAnimation(panel, 'view-enter');
   });
   maybeShowPageOnboarding();
 }
