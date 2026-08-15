@@ -342,6 +342,23 @@ html.keyboard-open .bottom-nav {
 
 .admin-header { align-items: center; }
 
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.page-help-btn {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.page-help-btn:hover,
+.page-help-btn:focus-visible {
+  color: var(--secondary);
+}
+
 .greeting-text {
   font-size: var(--fs-section);
   font-weight: 700;
