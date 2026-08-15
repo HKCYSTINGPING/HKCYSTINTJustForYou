@@ -130,9 +130,11 @@ let adminParticipantCombobox = null;
 // Every open Firestore listener, so signing out can close all of them.
 let subscriptions = [];
 let resultUnsubscribe = null;
-// Skip the first snapshot so login itself does not look like a status change.
-let votingStatusPrimed = false;
-let messagingStatusPrimed = false;
+// Status toasts only after login listeners settle — first snapshots are baseline,
+// not "open/close just happened".
+let statusChangeNoticesReady = false;
+let lastNotifiedVotingStatus = null;
+let lastNotifiedMessagingOpen = null;
 let presenceHeartbeatTimer = null;
 let adminLoginStatusRefreshTimer = null;
 
@@ -1135,8 +1137,38 @@ function stopAllSubscriptions() {
   });
   subscriptions = [];
   resultUnsubscribe = null;
-  votingStatusPrimed = false;
-  messagingStatusPrimed = false;
+  statusChangeNoticesReady = false;
+  lastNotifiedVotingStatus = null;
+  lastNotifiedMessagingOpen = null;
+}
+
+function syncStatusChangeBaselines() {
+  lastNotifiedVotingStatus = effectiveVotingConfigForMe().voting_status;
+  lastNotifiedMessagingOpen = isMessagingOpenForMe();
+}
+
+function enableStatusChangeNotices() {
+  syncStatusChangeBaselines();
+  statusChangeNoticesReady = true;
+}
+
+function maybeNotifyVotingStatusChange() {
+  const next = state.trophy.votingStatus;
+  if (!statusChangeNoticesReady) return;
+  if (lastNotifiedVotingStatus === next) return;
+  lastNotifiedVotingStatus = next;
+  notifyVotingStatusChange(next);
+}
+
+function maybeNotifyMessagingOpenChange() {
+  const nowOpen = isMessagingOpenForMe();
+  if (!statusChangeNoticesReady) return;
+  if (lastNotifiedMessagingOpen === nowOpen) return;
+  lastNotifiedMessagingOpen = nowOpen;
+  showToast(
+    nowOpen ? '留言功能已重新開放' : '留言功能已關閉',
+    nowOpen ? 'success' : 'info'
+  );
 }
 
 async function startPresenceHeartbeat() {
@@ -1993,7 +2025,6 @@ function subscribeAndWait(subscribe, handle, label) {
 
 function applyEffectiveVotingToTrophyState() {
   const config = effectiveVotingConfigForMe();
-  const prevStatus = state.trophy.votingStatus;
   state.trophy.votingStatus = config.voting_status;
   state.trophy.trophyRevision = config.published_at || config.calculated_at || config.voting_status;
   recalcTrophyPermissions();
@@ -2003,10 +2034,7 @@ function applyEffectiveVotingToTrophyState() {
   renderTrophyTeammates();
   renderProfile();
   renderStaffFacilitatorPanel();
-  if (votingStatusPrimed && prevStatus !== config.voting_status) {
-    notifyVotingStatusChange(config.voting_status);
-  }
-  votingStatusPrimed = true;
+  maybeNotifyVotingStatusChange();
 }
 
 async function startParticipantSubscriptions() {
@@ -2033,18 +2061,10 @@ async function startParticipantSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeMessagingStatus(cb, err),
       status => {
-        const wasOpen = isMessagingOpenForMe();
         state.messagingOpen = status === 'OPEN';
         updateSendFormState();
         updateCharCounter();
-        const nowOpen = isMessagingOpenForMe();
-        if (messagingStatusPrimed && wasOpen !== nowOpen) {
-          showToast(
-            nowOpen ? '留言功能已重新開放' : '留言功能已關閉',
-            nowOpen ? 'success' : 'info'
-          );
-        }
-        messagingStatusPrimed = true;
+        maybeNotifyMessagingOpenChange();
         renderStaffFacilitatorPanel();
       },
       '留言開關'
@@ -2093,22 +2113,37 @@ async function startParticipantSubscriptions() {
     )
   ]);
 
-  // Groups overrides are additive. If rules lag behind the client, login must
-  // still succeed and fall back to global messaging / voting config.
-  track(data.subscribeGroups(
-    map => {
-      state.groupMeta = map || {};
-      updateSendFormState();
-      updateCharCounter();
-      applyEffectiveVotingToTrophyState();
-      renderStaffFacilitatorPanel();
-      renderProfile();
-    },
-    err => {
-      console.warn('組別設定 listener error:', err && err.message);
-      state.groupMeta = {};
-    }
-  ));
+  // Groups overrides are additive. Wait for the first snapshot (or a short
+  // timeout) before enabling open/close toasts so login baselines do not look
+  // like live status changes.
+  await new Promise(resolve => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    track(data.subscribeGroups(
+      map => {
+        state.groupMeta = map || {};
+        updateSendFormState();
+        updateCharCounter();
+        applyEffectiveVotingToTrophyState();
+        maybeNotifyMessagingOpenChange();
+        renderStaffFacilitatorPanel();
+        renderProfile();
+        finish();
+      },
+      err => {
+        console.warn('組別設定 listener error:', err && err.message);
+        state.groupMeta = {};
+        finish();
+      }
+    ));
+    setTimeout(finish, 3000);
+  });
+
+  enableStatusChangeNotices();
 
   const facilitateGroup = getFacilitatorGroupId(pid);
   if (facilitateGroup) {

@@ -1750,12 +1750,14 @@ textarea.input-field {
 
 .toast-container {
   position: fixed;
-  top: calc(var(--safe-top) + var(--space-md));
+  top: auto;
+  bottom: calc(var(--safe-bottom) + max(var(--bottom-nav-h), var(--keyboard-inset)) + var(--space-md));
   left: 50%;
   transform: translateX(-50%);
   z-index: 400;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: var(--space-sm);
   width: calc(100% - 32px);
   max-width: var(--max-width);
@@ -1773,7 +1775,7 @@ textarea.input-field {
 }
 
 @keyframes toastSlide {
-  from { opacity: 0; transform: translateY(-12px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
