@@ -268,7 +268,7 @@ const ONBOARDING_STEPS = {
       prepare: 'trophy',
       skipIfStaff: true,
       title: '儲存／提交',
-      body: '「儲存草稿」可稍後再改；「提交投票」就正式交卷。'
+      body: '「儲存草稿」可稍後再改；「提交投票」就正式交卷；「清除所有投票」會清空已揀嘅配對。'
     },
     {
       target: '[data-tour="profile-header"]',
@@ -661,6 +661,7 @@ function cacheDOM() {
   DOM.trophyActions = document.getElementById('trophy-actions');
   DOM.trophySaveDraft = document.getElementById('trophy-save-draft');
   DOM.trophySubmitAll = document.getElementById('trophy-submit-all');
+  DOM.trophyClearAll = document.getElementById('trophy-clear-all');
   DOM.trophySubmittedHome = document.getElementById('trophy-submitted-home');
 
   DOM.profileAvatar = document.getElementById('profile-avatar');
@@ -3663,6 +3664,38 @@ async function handleTrophySaveDraft() {
   })());
 }
 
+async function handleTrophyClearAll() {
+  if (isStaffPerson(state.participantId)) {
+    showToast('Staff 不參與投票', 'info');
+    return;
+  }
+  if (!state.trophy.editable) {
+    showToast('目前不能修改投票', 'info');
+    return;
+  }
+  const hasVotes = Object.values(state.trophy.assignments || {}).some(ids => (ids || []).length > 0);
+  if (!hasVotes) {
+    showToast('目前沒有投票可清除', 'info');
+    return;
+  }
+  if (!window.confirm('確定要清除所有已選投票嗎？清除後會同步清空已儲存草稿。')) return;
+
+  await runProgressButton(DOM.trophyClearAll, (async () => {
+    try {
+      state.trophy.assignments = {};
+      await data.saveSubmission(state.participantId, [], false);
+      state.trophy.submissionStatus = 'draft';
+      recalcTrophyPermissions();
+      recalcTrophyProgress();
+      renderTrophyTeammates();
+      updateTrophyStatusBanner();
+      showToast('已清除所有投票', 'success');
+    } catch (err) {
+      showToast('清除失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
+    }
+  })());
+}
+
 async function handleTrophySubmitAll() {
   if (isStaffPerson(state.participantId)) {
     showToast('Staff 不參與投票', 'info');
@@ -5484,6 +5517,9 @@ function bindEvents() {
 
   DOM.trophySaveDraft.addEventListener('click', handleTrophySaveDraft);
   DOM.trophySubmitAll.addEventListener('click', handleTrophySubmitAll);
+  if (DOM.trophyClearAll) {
+    DOM.trophyClearAll.addEventListener('click', handleTrophyClearAll);
+  }
   DOM.trophyResultsModalClose.addEventListener('click', hideTrophyResultsModal);
   DOM.trophyResultsModal.addEventListener('click', (e) => {
     if (e.target === DOM.trophyResultsModal) hideTrophyResultsModal();

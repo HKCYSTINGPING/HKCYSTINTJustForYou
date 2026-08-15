@@ -1436,6 +1436,7 @@ textarea.input-field {
 
 .trophy-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-md);
   position: sticky;
   bottom: 0;
@@ -1443,7 +1444,8 @@ textarea.input-field {
   background: linear-gradient(transparent, var(--bg) 30%);
 }
 
-.trophy-actions .btn { flex: 1; }
+.trophy-actions .btn { flex: 1 1 calc(50% - var(--space-md) / 2); }
+.trophy-actions .trophy-clear-all { flex: 1 1 100%; }
 
 .trophy-results-panel { margin-bottom: var(--space-md); }
 
