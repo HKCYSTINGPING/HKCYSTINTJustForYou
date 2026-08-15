@@ -13,7 +13,7 @@
 <body>
 
   <!-- ═══ SPLASH SCREEN ═══ -->
-  <section id="screen-splash" class="screen screen-splash" aria-label="啟動畫面">
+  <section id="screen-splash" class="screen screen-splash" aria-label="啟動畫面" aria-busy="true">
     <div class="splash-content">
       <div class="splash-logo" aria-hidden="true">
         <div class="splash-heart app-icon app-icon-heart" aria-hidden="true"></div>
@@ -21,6 +21,7 @@
       <h1 class="splash-title">HKCYS TINT</h1>
       <p class="splash-subtitle">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
       <p class="splash-loading-text">載入中… <span id="splash-percent" class="loading-percent">0%</span></p>
+      <p id="splash-status" class="splash-status" role="status" aria-live="polite">準備啟動…</p>
       <div class="loading-bar splash-loading-bar" aria-hidden="true">
         <div id="splash-bar-fill" class="loading-bar-fill"></div>
       </div>

@@ -156,6 +156,10 @@ html.keyboard-open .bottom-nav {
   transition: opacity var(--duration-slow) var(--ease-out), visibility var(--duration-slow);
 }
 
+.screen-splash.splash-font-ready {
+  font-family: var(--font);
+}
+
 .screen-splash.splash-exit {
   opacity: 0;
   visibility: hidden;
@@ -177,6 +181,7 @@ html.keyboard-open .bottom-nav {
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-lg);
+  animation: splashLogoPulse 2.2s var(--ease-out) infinite;
 }
 
 .splash-heart { font-size: 2.5rem; }
@@ -197,10 +202,21 @@ html.keyboard-open .bottom-nav {
   font-weight: 500;
 }
 
+.splash-status {
+  min-height: 1.4em;
+  margin: 0 0 var(--space-md);
+  padding: 0 var(--space-md);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+  transition: opacity var(--duration-fast);
+}
+
 .splash-loader {
   display: flex;
   gap: var(--space-sm);
   justify-content: center;
+  margin-top: var(--space-md);
 }
 
 .splash-loader-dot {
@@ -219,6 +235,11 @@ html.keyboard-open .bottom-nav {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes splashLogoPulse {
+  0%, 100% { transform: scale(1); box-shadow: var(--shadow-lg); }
+  50% { transform: scale(1.04); box-shadow: 0 10px 36px rgba(74, 64, 58, 0.16); }
+}
+
 @keyframes splashDot {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1.2); }
@@ -235,12 +256,14 @@ html.keyboard-open .bottom-nav {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.app-view {
+.app-view.active,
+.admin-panel.active,
+.view-enter {
   animation: viewSlideUp var(--duration-normal) var(--ease-out);
 }
 
 @keyframes viewSlideUp {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -2782,4 +2805,165 @@ button.group-voter-header:hover {
   padding: 6px 10px;
   font-size: 0.75rem;
   border-radius: 999px;
+}
+
+/* ─── Motion pack (layout-preserving) ───────────────────────────────────── */
+
+@keyframes listItemIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes softPop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+@keyframes navIconBounce {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-3px); }
+  70% { transform: translateY(1px); }
+}
+
+@keyframes chipSelectPop {
+  0% { transform: scale(0.94); }
+  55% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes screenEnter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.screen-enter {
+  animation: screenEnter var(--duration-slow) var(--ease-out);
+}
+
+.home-cards .home-card {
+  animation: listItemIn 0.38s var(--ease-out) both;
+}
+.home-cards .home-card:nth-child(1) { animation-delay: 0.02s; }
+.home-cards .home-card:nth-child(2) { animation-delay: 0.08s; }
+.home-cards .home-card:nth-child(3) { animation-delay: 0.14s; }
+.home-cards .home-card:nth-child(4) { animation-delay: 0.2s; }
+.home-cards .home-card:nth-child(5) { animation-delay: 0.26s; }
+
+.home-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.message-list > .message-card,
+.admin-message-list > .admin-msg-card,
+.admin-message-list > .message-card,
+#trophy-teammates > .trophy-card,
+.group-voter-grid > .group-voter-card,
+.stat-grid > .stat-card,
+.profile-stats > .profile-stat,
+.summary-list > .summary-item,
+.audit-cards > .audit-card {
+  animation: listItemIn 0.32s var(--ease-out) both;
+}
+
+.message-list > .message-card:nth-child(1),
+.admin-message-list > *:nth-child(1),
+#trophy-teammates > .trophy-card:nth-child(1),
+.group-voter-grid > .group-voter-card:nth-child(1) { animation-delay: 0.02s; }
+.message-list > .message-card:nth-child(2),
+.admin-message-list > *:nth-child(2),
+#trophy-teammates > .trophy-card:nth-child(2),
+.group-voter-grid > .group-voter-card:nth-child(2) { animation-delay: 0.06s; }
+.message-list > .message-card:nth-child(3),
+.admin-message-list > *:nth-child(3),
+#trophy-teammates > .trophy-card:nth-child(3),
+.group-voter-grid > .group-voter-card:nth-child(3) { animation-delay: 0.1s; }
+.message-list > .message-card:nth-child(4),
+.admin-message-list > *:nth-child(4),
+#trophy-teammates > .trophy-card:nth-child(4),
+.group-voter-grid > .group-voter-card:nth-child(4) { animation-delay: 0.14s; }
+.message-list > .message-card:nth-child(5),
+.admin-message-list > *:nth-child(5),
+#trophy-teammates > .trophy-card:nth-child(5),
+.group-voter-grid > .group-voter-card:nth-child(5) { animation-delay: 0.18s; }
+.message-list > .message-card:nth-child(n+6),
+.admin-message-list > *:nth-child(n+6),
+#trophy-teammates > .trophy-card:nth-child(n+6),
+.group-voter-grid > .group-voter-card:nth-child(n+6) { animation-delay: 0.22s; }
+
+.message-card:active {
+  transform: scale(0.99);
+}
+
+.trophy-chip:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.trophy-chip.selected {
+  animation: chipSelectPop 0.28s var(--ease-spring);
+}
+
+.bottom-nav-item {
+  transition: color var(--duration-fast), transform var(--duration-fast);
+}
+
+.bottom-nav-item:active {
+  transform: scale(0.94);
+}
+
+.bottom-nav-item.active .bottom-nav-icon,
+.bottom-nav-item.active .app-icon {
+  animation: navIconBounce 0.42s var(--ease-spring);
+}
+
+.chip,
+.badge {
+  transition: transform var(--duration-fast), background var(--duration-fast), color var(--duration-fast);
+}
+
+.chip:active,
+.badge:active {
+  transform: scale(0.96);
+}
+
+.stat-card,
+.profile-stat,
+.status-banner,
+.empty-state,
+.success-state,
+.card {
+  transition: transform var(--duration-fast), box-shadow var(--duration-fast), opacity var(--duration-fast);
+}
+
+.voter-switch {
+  transition: background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.stepper-step.active .stepper-dot,
+.stepper-step.done .stepper-dot {
+  animation: softPop 0.35s var(--ease-spring);
+}
+
+.combobox-dropdown:not(.hidden) {
+  animation: listItemIn 0.2s var(--ease-out);
+}
+
+.page-help-btn:active {
+  transform: scale(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .splash-logo {
+    animation: none;
+  }
 }

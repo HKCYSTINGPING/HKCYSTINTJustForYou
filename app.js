@@ -576,6 +576,7 @@ function cacheDOM() {
   DOM.loadingBarFill = document.getElementById('loading-bar-fill');
   DOM.splashPercent = document.getElementById('splash-percent');
   DOM.splashBarFill = document.getElementById('splash-bar-fill');
+  DOM.splashStatus = document.getElementById('splash-status');
   DOM.toastContainer = document.getElementById('toast-container');
   DOM.confettiCanvas = document.getElementById('confetti-canvas');
 
@@ -773,6 +774,13 @@ function showScreen(name) {
   document.body.classList.toggle('participant-active', name === 'participant');
   document.body.classList.toggle('admin-active', name === 'admin');
   if (name !== 'login') setLoginNativeNumpad(false);
+  if (name === 'login') {
+    replayEnterAnimation(document.querySelector('#screen-login .login-inner'), 'page-enter');
+  } else if (name === 'participant') {
+    replayEnterAnimation(DOM.screenParticipant, 'screen-enter');
+  } else if (name === 'admin') {
+    replayEnterAnimation(DOM.screenAdmin, 'screen-enter');
+  }
 }
 
 let loadingTickTimer = null;
@@ -792,6 +800,82 @@ function setSplashPercent(percent) {
   if (DOM.splashPercent) DOM.splashPercent.textContent = value + '%';
   if (DOM.splashBarFill) DOM.splashBarFill.style.width = value + '%';
   return value;
+}
+
+function setSplashStatus(message) {
+  if (DOM.splashStatus) DOM.splashStatus.textContent = message;
+}
+
+function beginSplash() {
+  if (!DOM.screenSplash) return;
+  splashActive = true;
+  DOM.screenSplash.classList.remove('hidden', 'splash-exit', 'splash-font-ready');
+  DOM.screenSplash.setAttribute('aria-busy', 'true');
+  DOM.screenLogin.classList.add('hidden');
+  if (DOM.screenParticipant) DOM.screenParticipant.classList.add('hidden');
+  if (DOM.screenAdmin) DOM.screenAdmin.classList.add('hidden');
+  setSplashPercent(0);
+  setSplashStatus('準備啟動…');
+  if (splashTickTimer) clearInterval(splashTickTimer);
+  splashTickTimer = setInterval(() => {
+    const current = parseInt(DOM.splashPercent?.textContent || '0', 10) || 0;
+    if (current < 88) setSplashPercent(current + 1);
+  }, 70);
+}
+
+function endSplash() {
+  return new Promise(resolve => {
+    if (!DOM.screenSplash) {
+      splashActive = false;
+      resolve();
+      return;
+    }
+    if (splashTickTimer) {
+      clearInterval(splashTickTimer);
+      splashTickTimer = null;
+    }
+    setSplashPercent(100);
+    setSplashStatus('準備進入…');
+    splashActive = false;
+    DOM.screenSplash.setAttribute('aria-busy', 'false');
+    DOM.screenSplash.classList.add('splash-exit');
+    setTimeout(() => {
+      DOM.screenSplash.classList.add('hidden');
+      resolve();
+    }, 420);
+  });
+}
+
+const APP_FONT_FAMILY = '"Canva Handwriting Style TC"';
+const APP_FONT_TIMEOUT_MS = 10000;
+
+function waitForAppFont() {
+  if (!document.fonts || typeof document.fonts.load !== 'function') {
+    return Promise.resolve(false);
+  }
+  const loads = [
+    document.fonts.load('400 16px ' + APP_FONT_FAMILY),
+    document.fonts.load('700 16px ' + APP_FONT_FAMILY),
+    document.fonts.load('400 28px ' + APP_FONT_FAMILY)
+  ];
+  return Promise.race([
+    Promise.all(loads).then(() => document.fonts.ready).then(() => {
+      try {
+        return document.fonts.check('16px ' + APP_FONT_FAMILY);
+      } catch (_) {
+        return true;
+      }
+    }),
+    new Promise(resolve => setTimeout(() => resolve(false), APP_FONT_TIMEOUT_MS))
+  ]).catch(() => false);
+}
+
+function replayEnterAnimation(el, className = 'view-enter') {
+  if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  el.classList.remove(className);
+  // Force reflow so the enter animation can replay on every navigation.
+  void el.offsetWidth;
+  el.classList.add(className);
 }
 
 function stopLoadingTick() {
@@ -848,57 +932,6 @@ function finishLoading() {
   clearLoadingSafetyTimer();
   setLoadingPercent(100);
   setTimeout(() => showLoading(false), 120);
-}
-
-const APP_FONT_FAMILY = '"Canva Handwriting Style TC"';
-const APP_FONT_TIMEOUT_MS = 6000;
-
-function waitForAppFont() {
-  if (!document.fonts || typeof document.fonts.load !== 'function') {
-    return Promise.resolve();
-  }
-  return Promise.race([
-    document.fonts.load('16px ' + APP_FONT_FAMILY).then(() => document.fonts.ready),
-    new Promise(resolve => setTimeout(resolve, APP_FONT_TIMEOUT_MS))
-  ]).catch(() => {});
-}
-
-/** Plays the splash animation and resolves when the font is ready and splash has exited. */
-function runSplashAnimation() {
-  return new Promise(resolve => {
-    if (!DOM.screenSplash) {
-      splashActive = false;
-      resolve();
-      return;
-    }
-    splashActive = true;
-    DOM.screenSplash.classList.remove('hidden', 'splash-exit');
-    DOM.screenLogin.classList.add('hidden');
-    if (DOM.screenParticipant) DOM.screenParticipant.classList.add('hidden');
-    if (DOM.screenAdmin) DOM.screenAdmin.classList.add('hidden');
-    setSplashPercent(0);
-
-    if (splashTickTimer) clearInterval(splashTickTimer);
-    splashTickTimer = setInterval(() => {
-      const current = parseInt(DOM.splashPercent?.textContent || '0', 10) || 0;
-      if (current < 90) setSplashPercent(current + 2);
-    }, 40);
-
-    const minDelay = new Promise(r => setTimeout(r, 800));
-    Promise.all([waitForAppFont(), minDelay]).then(() => {
-      if (splashTickTimer) {
-        clearInterval(splashTickTimer);
-        splashTickTimer = null;
-      }
-      setSplashPercent(100);
-      splashActive = false;
-      DOM.screenSplash.classList.add('splash-exit');
-      setTimeout(() => {
-        DOM.screenSplash.classList.add('hidden');
-        resolve();
-      }, 400);
-    });
-  });
 }
 
 function showToast(message, type = 'info') {
@@ -5404,6 +5437,7 @@ function switchParticipantView(viewName) {
     const isActive = view.dataset.view === viewName;
     view.classList.toggle('active', isActive);
     view.classList.toggle('hidden', !isActive);
+    if (isActive) replayEnterAnimation(view, 'view-enter');
   });
 
   const isBottomTab = BOTTOM_NAV_TABS.includes(viewName);
@@ -5444,8 +5478,10 @@ function switchAdminTab(tabName) {
   };
   Object.entries(panels).forEach(([key, panel]) => {
     if (!panel) return;
-    panel.classList.toggle('active', key === tabName);
-    panel.classList.toggle('hidden', key !== tabName);
+    const on = key === tabName;
+    panel.classList.toggle('active', on);
+    panel.classList.toggle('hidden', !on);
+    if (on) replayEnterAnimation(panel, 'view-enter');
   });
 
   // Every panel is fed by listeners that stay open for the whole session, so
@@ -5724,23 +5760,50 @@ function init() {
 }
 
 async function startApp() {
-  const splashDone = runSplashAnimation();
+  beginSplash();
+
+  setSplashStatus('載入手寫字體…');
+  setSplashPercent(12);
+  const fontOk = await waitForAppFont();
+  if (fontOk && DOM.screenSplash) {
+    DOM.screenSplash.classList.add('splash-font-ready');
+    setSplashStatus('手寫字體已就緒');
+  } else {
+    setSplashStatus('字體逾時，改用系統字體繼續');
+  }
+  setSplashPercent(40);
+
   try {
+    setSplashStatus('載入活動設定同參加者名單…');
     await bootstrapApp();
-  } catch (_) { /* bootstrapApp already toasts hard failures */ }
+    setSplashPercent(72);
+  } catch (_) {
+    setSplashStatus('活動資料載入失敗，稍後可重試');
+  }
 
   let restored = false;
   try {
+    setSplashStatus('檢查登入狀態…');
     restored = await tryRestoreSession();
+    setSplashPercent(92);
   } catch (err) {
     clearSession();
     console.warn('無法恢復登入狀態:', err && err.message);
+    setSplashStatus('登入狀態檢查完成');
   }
 
-  await splashDone;
+  if (restored) {
+    setSplashStatus('歡迎回來，正在進入…');
+  } else {
+    setSplashStatus('進入登入頁…');
+  }
+
+  await endSplash();
   if (!restored) {
     showScreen('login');
     updateLoginStatusBanner();
+    const loginInner = document.querySelector('#screen-login .login-inner');
+    replayEnterAnimation(loginInner, 'page-enter');
   }
 }
 
