@@ -3644,6 +3644,15 @@ function renderAdminTrophyStats() {
  * When voteMatrix is true (voting panel), heading / member taps open a popup
  * matrix card instead of embedding the table in the group card.
  */
+function loginStatusLegendHtml() {
+  return `
+    <div class="status-legend" role="note" aria-label="登入狀態圖例">
+      <span class="status-legend-item">${appIcon('dot-green')} 已登入</span>
+      <span class="status-legend-item">${appIcon('dot-red')} 未登入</span>
+    </div>
+  `;
+}
+
 function renderGroupStatusCards(options) {
   const {
     container,
@@ -3652,10 +3661,13 @@ function renderGroupStatusCards(options) {
     doneKey,
     doneLabel,
     pendingLabel,
+    doneStatusText = '',
+    pendingStatusText = '',
     emptyAllDone,
     emptyPendingTitle,
     voteMatrix = false,
     titleActionHtml = '',
+    statusLegendHtml = '',
     onMemberClick = null,
     canMemberClick = null,
     afterRender = null
@@ -3689,10 +3701,14 @@ function renderGroupStatusCards(options) {
     const membersHtml = group.members.map(m => {
       const classes = `voter-member ${m[doneKey] ? 'voter-done' : 'voter-pending'}${focusId === m.participant_id ? ' is-focus' : ''}`;
       const memberClickable = voteMatrix || (!!onMemberClick && m[doneKey] && (!canMemberClick || canMemberClick(m)));
+      const statusText = m[doneKey]
+        ? (doneStatusText || doneLabel)
+        : (pendingStatusText || pendingLabel);
+      const statusAttr = escapeHtml(String(statusText).replace(/<[^>]*>/g, ''));
       const inner = `
         <span class="voter-check ${m[doneKey] ? 'app-icon app-icon-check' : 'voter-check-empty'}" aria-hidden="true">${m[doneKey] ? '' : '○'}</span>
         <span class="voter-id">${escapeHtml(displayLabelOf(m.participant_id))}</span>
-        <span class="voter-status-label">${m[doneKey] ? doneLabel : pendingLabel}</span>
+        <span class="voter-status-label" title="${statusAttr}" aria-label="${statusAttr}">${m[doneKey] ? doneLabel : pendingLabel}</span>
       `;
       if (!memberClickable) {
         return `<div class="${classes}">${inner}</div>`;
@@ -3726,6 +3742,7 @@ function renderGroupStatusCards(options) {
       <h4 class="admin-pending-title">${title}${pending.length > 0 ? ` · 尚餘 ${pending.length} 人` : ''}</h4>
       ${titleActionHtml}
     </div>
+    ${statusLegendHtml}
     <div class="group-voter-grid">${cards}</div>
   `;
 
@@ -4215,10 +4232,13 @@ function renderAdminLoginStatus() {
     title: '登入狀況（按組別）',
     groups: buildLoginStatusGroups(),
     doneKey: 'logged_in',
-    doneLabel: '已登入',
-    pendingLabel: '未登入',
+    doneLabel: appIcon('dot-green'),
+    pendingLabel: appIcon('dot-red'),
+    doneStatusText: '已登入',
+    pendingStatusText: '未登入',
     emptyAllDone: '所有參加者均已登入',
     emptyPendingTitle: '尚未登入',
+    statusLegendHtml: loginStatusLegendHtml(),
     titleActionHtml: `
       <div class="admin-login-actions">
         <button type="button" id="admin-refresh-login-status" class="btn btn-secondary btn-sm btn-progress">
@@ -4645,10 +4665,13 @@ function renderStaffLoginStatus() {
     title: '登入狀況（按組別）',
     groups,
     doneKey: 'logged_in',
-    doneLabel: '已登入',
-    pendingLabel: '未登入',
+    doneLabel: appIcon('dot-green'),
+    pendingLabel: appIcon('dot-red'),
+    doneStatusText: '已登入',
+    pendingStatusText: '未登入',
     emptyAllDone: '本組參加者均已登入',
     emptyPendingTitle: '尚未登入',
+    statusLegendHtml: loginStatusLegendHtml(),
     titleActionHtml: `
       <div class="admin-login-actions">
         <button type="button" id="staff-refresh-login-status" class="btn btn-secondary btn-sm btn-progress">
@@ -5538,9 +5561,29 @@ function bindEvents() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
+/** Block accidental double-tap / double-click zoom without disabling pinch zoom. */
+function initPreventDoubleTapZoom() {
+  document.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+  }, { capture: true });
+
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 350) {
+      const editable = e.target && e.target.closest
+        ? e.target.closest('input, textarea, select, [contenteditable="true"]')
+        : null;
+      if (!editable) e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false, capture: true });
+}
+
 function init() {
   cacheDOM();
   bindEvents();
+  initPreventDoubleTapZoom();
   initKeyboardAvoidance();
   initAdminMessageScrollPause();
   startApp();

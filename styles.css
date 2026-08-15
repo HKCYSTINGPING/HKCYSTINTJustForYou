@@ -88,6 +88,7 @@
 html {
   font-size: 21.6px; /* 16px × 1.35 */
   -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
 }
 
 body {
@@ -100,12 +101,17 @@ body {
   min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
 }
 
 body.is-loading { overflow: hidden; }
 body.modal-open { overflow: hidden; }
 body.participant-active,
 body.admin-active { background: var(--bg); }
+
+button, a, input, select, textarea, label, summary {
+  touch-action: manipulation;
+}
 
 .hidden { display: none !important; }
 
@@ -506,6 +512,8 @@ html.keyboard-open .bottom-nav {
 .message-anon-badge .app-icon,
 .summary-tie .app-icon,
 .status-item .app-icon,
+.status-legend .app-icon,
+.voter-status-label .app-icon,
 .voter-check.app-icon {
   width: 1.05em;
   height: 1.05em;
@@ -2159,7 +2167,35 @@ button.group-voter-header:hover {
 .voter-done { color: var(--success); }
 .voter-pending { color: var(--danger); }
 .voter-check { font-weight: 700; width: 16px; }
-.voter-status-label { margin-left: auto; font-weight: 600; }
+.voter-status-label {
+  margin-left: auto;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  margin: 0 0 var(--space-sm);
+  padding: 0 2px;
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+
+.status-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  font-weight: 600;
+}
+
+.status-legend-item .app-icon {
+  margin-right: 0;
+}
 
 .group-vote-matrix-empty {
   margin: 0;
