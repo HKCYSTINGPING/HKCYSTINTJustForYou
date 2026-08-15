@@ -93,7 +93,7 @@ const state = {
     assignments: {},
     readonly: false,
     editable: false,
-    submissionStatus: 'draft',
+    submissionStatus: '',
     progress: { assigned: 0, total: 0 },
     myAwards: [],
     showResults: false,
@@ -267,8 +267,8 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="trophy-actions"]',
       prepare: 'trophy',
       skipIfStaff: true,
-      title: '儲存／提交',
-      body: '「儲存草稿」可稍後再改；「提交投票」就正式交卷；「清除所有投票」會清空已揀嘅配對。'
+      title: '提交投票',
+      body: '配對完成後撳「提交投票」正式交卷；「清除全部投票」可以一次清空重揀。'
     },
     {
       target: '[data-tour="profile-header"]',
@@ -659,9 +659,8 @@ function cacheDOM() {
   DOM.trophyTeammates = document.getElementById('trophy-teammates');
   DOM.trophyEmpty = document.getElementById('trophy-empty');
   DOM.trophyActions = document.getElementById('trophy-actions');
-  DOM.trophySaveDraft = document.getElementById('trophy-save-draft');
-  DOM.trophySubmitAll = document.getElementById('trophy-submit-all');
   DOM.trophyClearAll = document.getElementById('trophy-clear-all');
+  DOM.trophySubmitAll = document.getElementById('trophy-submit-all');
   DOM.trophySubmittedHome = document.getElementById('trophy-submitted-home');
 
   DOM.profileAvatar = document.getElementById('profile-avatar');
@@ -1284,7 +1283,7 @@ function buildTrophyOverview(submissions, trophies, participants = state.partici
       .map(s => s.participant_id)
   );
   const totalVotes = submissions
-    .filter(s => rosterIds.has(s.participant_id))
+    .filter(s => s.status === 'submitted' && rosterIds.has(s.participant_id))
     .reduce((sum, s) => sum + s.pairings.length, 0);
 
   const byGroup = new Map();
@@ -1322,6 +1321,7 @@ function buildAuditVotes(submissions, trophies) {
   const names = new Map(trophies.map(t => [t.trophy_id, t.trophy_name]));
   const rows = [];
   submissions.forEach(submission => {
+    if (submission.status !== 'submitted') return;
     if (!isSeatParticipantId(submission.participant_id)) return;
     submission.pairings.forEach(pair => {
       if (!isSeatParticipantId(pair.receiver_id)) return;
@@ -2045,7 +2045,7 @@ async function startParticipantSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeMySubmission(pid, cb, err),
       submission => {
-        state.trophy.submissionStatus = submission ? submission.status : 'draft';
+        state.trophy.submissionStatus = submission ? submission.status : '';
         state.trophy.assignments = enforceUniqueTrophyAssignments(
           submission ? data.pairingsToAssignments(submission.pairings) : {}
         );
@@ -2571,7 +2571,7 @@ async function handleLogout() {
     assignments: {},
     readonly: false,
     editable: false,
-    submissionStatus: 'draft',
+    submissionStatus: '',
     progress: { assigned: 0, total: 0 },
     myAwards: [],
     showResults: false,
@@ -3648,50 +3648,47 @@ function renderTrophyTeammates() {
   });
 }
 
-async function handleTrophySaveDraft() {
-  if (isStaffPerson(state.participantId)) {
-    showToast('Staff 不參與投票', 'info');
-    return;
-  }
-  const pairings = buildPairingsFromAssignments(state.trophy.assignments);
-  await runProgressButton(DOM.trophySaveDraft, (async () => {
-    try {
-      await data.saveSubmission(state.participantId, pairings, false);
-      showToast('草稿已儲存', 'success');
-    } catch (err) {
-      showToast('草稿儲存失敗：' + data.describeFirestoreError(err, '請確認投票已開放後再試'), 'error');
-    }
-  })());
-}
-
 async function handleTrophyClearAll() {
   if (isStaffPerson(state.participantId)) {
     showToast('Staff 不參與投票', 'info');
     return;
   }
   if (!state.trophy.editable) {
-    showToast('目前不能修改投票', 'info');
+    showToast('而家唔可以改投票', 'info');
     return;
   }
-  const hasVotes = Object.values(state.trophy.assignments || {}).some(ids => (ids || []).length > 0);
-  if (!hasVotes) {
-    showToast('目前沒有投票可清除', 'info');
+  const hasLocal = Object.values(state.trophy.assignments || {}).some(ids => (ids || []).length > 0);
+  const hasSubmitted = state.trophy.submissionStatus === 'submitted';
+  if (!hasLocal && !hasSubmitted) {
+    showToast('未有投票可以清除', 'info');
     return;
   }
-  if (!window.confirm('確定要清除所有已選投票嗎？清除後會同步清空已儲存草稿。')) return;
+  if (!window.confirm('確定要清除全部投票嗎？')) return;
 
   await runProgressButton(DOM.trophyClearAll, (async () => {
     try {
+      await data.clearMySubmission(state.participantId);
       state.trophy.assignments = {};
-      await data.saveSubmission(state.participantId, [], false);
-      state.trophy.submissionStatus = 'draft';
+      state.trophy.submissionStatus = '';
       recalcTrophyPermissions();
       recalcTrophyProgress();
       renderTrophyTeammates();
       updateTrophyStatusBanner();
-      showToast('已清除所有投票', 'success');
+      renderProfile();
+      showToast('已清除全部投票', 'success');
     } catch (err) {
-      showToast('清除失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
+      if (String(err && err.code || '').includes('not-found') || /not.?found/i.test(String(err && err.message || ''))) {
+        state.trophy.assignments = {};
+        state.trophy.submissionStatus = '';
+        recalcTrophyPermissions();
+        recalcTrophyProgress();
+        renderTrophyTeammates();
+        updateTrophyStatusBanner();
+        renderProfile();
+        showToast('已清除全部投票', 'success');
+        return;
+      }
+      showToast('清除失敗：' + data.describeFirestoreError(err, '請再試一次'), 'error');
     }
   })());
 }
@@ -3768,8 +3765,8 @@ function renderAdminTrophyStats() {
 function loginStatusLegendHtml() {
   return `
     <div class="status-legend" role="note" aria-label="登入狀態圖例">
-      <span class="status-legend-item">${appIcon('dot-green')} 已登入</span>
-      <span class="status-legend-item">${appIcon('dot-red')} 未登入</span>
+      <span class="status-legend-item"><span class="voter-switch is-on" aria-hidden="true"></span> 已登入</span>
+      <span class="status-legend-item"><span class="voter-switch" aria-hidden="true"></span> 未登入</span>
     </div>
   `;
 }
@@ -3826,8 +3823,11 @@ function renderGroupStatusCards(options) {
         ? (doneStatusText || doneLabel)
         : (pendingStatusText || pendingLabel);
       const statusAttr = escapeHtml(String(statusText).replace(/<[^>]*>/g, ''));
+      const statusMark = voteMatrix
+        ? `<span class="voter-check ${m[doneKey] ? 'app-icon app-icon-check' : 'voter-check-empty'}" aria-hidden="true">${m[doneKey] ? '' : '○'}</span>`
+        : `<span class="voter-switch ${m[doneKey] ? 'is-on' : ''}" aria-hidden="true"></span>`;
       const inner = `
-        <span class="voter-check ${m[doneKey] ? 'app-icon app-icon-check' : 'voter-check-empty'}" aria-hidden="true">${m[doneKey] ? '' : '○'}</span>
+        ${statusMark}
         <span class="voter-id">${escapeHtml(displayLabelOf(m.participant_id))}</span>
         <span class="voter-status-label" title="${statusAttr}" aria-label="${statusAttr}">${m[doneKey] ? doneLabel : pendingLabel}</span>
       `;
@@ -4015,11 +4015,12 @@ function renderVoteMatrixModal() {
   syncBodyModalOpen();
 }
 
-/** How many submitted/draft nominations each member received per trophy. */
+/** How many submitted nominations each member received per trophy. */
 function buildNominationCountMap(memberIds) {
   const members = new Set(memberIds);
   const counts = new Map();
   trophyStore().submissions.forEach(submission => {
+    if (submission.status !== 'submitted') return;
     (submission.pairings || []).forEach(pair => {
       if (!members.has(pair.receiver_id)) return;
       const key = pair.trophy_id + '\0' + pair.receiver_id;
@@ -4034,6 +4035,7 @@ function buildBallotMap(memberIds) {
   const members = new Set(memberIds);
   const map = new Map();
   trophyStore().submissions.forEach(submission => {
+    if (submission.status !== 'submitted') return;
     const sender = submission.participant_id;
     if (!members.has(sender)) return;
     (submission.pairings || []).forEach(pair => {
@@ -4353,8 +4355,8 @@ function renderAdminLoginStatus() {
     title: '登入狀況（按組別）',
     groups: buildLoginStatusGroups(),
     doneKey: 'logged_in',
-    doneLabel: appIcon('dot-green'),
-    pendingLabel: appIcon('dot-red'),
+    doneLabel: '已登入',
+    pendingLabel: '未登入',
     doneStatusText: '已登入',
     pendingStatusText: '未登入',
     emptyAllDone: '所有參加者均已登入',
@@ -4786,8 +4788,8 @@ function renderStaffLoginStatus() {
     title: '登入狀況（按組別）',
     groups,
     doneKey: 'logged_in',
-    doneLabel: appIcon('dot-green'),
-    pendingLabel: appIcon('dot-red'),
+    doneLabel: '已登入',
+    pendingLabel: '未登入',
     doneStatusText: '已登入',
     pendingStatusText: '未登入',
     emptyAllDone: '本組參加者均已登入',
@@ -5140,7 +5142,7 @@ function buildParticipantDetail(participantId, phoneNumber) {
         m => m.receiver_id === participantId && m.status === 'active'
       ).length,
       trophy_votes: submission ? submission.pairings.length : 0,
-      submission_status: submission ? submission.status : 'draft',
+      submission_status: submission && submission.status === 'submitted' ? 'submitted' : 'none',
       trophy_awards: result
         ? (result.awards || []).filter(a => a.award_source !== 'fallback').length
         : 0
@@ -5183,7 +5185,7 @@ function renderAdminParticipantDetail(detail) {
     <div class="stat-card"><div class="stat-value">${stats.sent_deleted || 0}</div><div class="stat-label">已撤回留言</div></div>
     <div class="stat-card"><div class="stat-value">${stats.received_active || 0}</div><div class="stat-label">收件箱留言</div></div>
     <div class="stat-card"><div class="stat-value">${stats.trophy_votes || 0}</div><div class="stat-label">獎項投票數</div></div>
-    <div class="stat-card voting-status-card ${submissionTone}"><div class="stat-value">${stats.submission_status === 'submitted' ? '已提交' : '草稿'}</div><div class="stat-label">投票狀態</div></div>
+    <div class="stat-card voting-status-card ${submissionTone}"><div class="stat-value">${stats.submission_status === 'submitted' ? '已提交' : '未提交'}</div><div class="stat-label">投票狀態</div></div>
     <div class="stat-card"><div class="stat-value">${stats.trophy_awards || 0}</div><div class="stat-label">獲得獎項</div></div>
   `;
 }
@@ -5348,7 +5350,7 @@ async function handleAdminDeleteAllRecords() {
 
 async function handleAdminBulkResetVotes() {
   const count = state.participants.length;
-  if (!window.confirm('確定要重置全部 ' + count + ' 位參加者的獎項投票嗎？\n包括：投票草稿／已提交選票、計算結果。\n留言不會被刪除。\n此操作無法復原！')) return;
+  if (!window.confirm('確定要重置全部 ' + count + ' 位參加者的獎項投票嗎？\n包括：已提交選票、計算結果。\n留言不會被刪除。\n此操作無法復原！')) return;
   if (!window.confirm('再次確認：真的要清除全部參加者的投票嗎？')) return;
 
   await runProgressButton(DOM.adminBulkResetVotes, (async () => {
@@ -5515,11 +5517,10 @@ function bindEvents() {
   DOM.inboxRefresh.addEventListener('click', refreshInbox);
   DOM.sentRefresh.addEventListener('click', refreshSent);
 
-  DOM.trophySaveDraft.addEventListener('click', handleTrophySaveDraft);
-  DOM.trophySubmitAll.addEventListener('click', handleTrophySubmitAll);
   if (DOM.trophyClearAll) {
     DOM.trophyClearAll.addEventListener('click', handleTrophyClearAll);
   }
+  DOM.trophySubmitAll.addEventListener('click', handleTrophySubmitAll);
   DOM.trophyResultsModalClose.addEventListener('click', hideTrophyResultsModal);
   DOM.trophyResultsModal.addEventListener('click', (e) => {
     if (e.target === DOM.trophyResultsModal) hideTrophyResultsModal();

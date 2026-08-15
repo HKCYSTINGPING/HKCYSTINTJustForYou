@@ -33,13 +33,32 @@ jobs:
           cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json .nojekyll _site/
           cp fonts/CanvaHandwritingStyleTC.woff2 _site/fonts/
           cp assets/*.png _site/assets/
-          # Bust CDN / browser caches after each deploy (Pages caches ~10 min).
+          # Bust browser / CDN caches on every Pages deploy (incl. font).
           SHA="$(git rev-parse --short HEAD)"
-          sed -i "s|href=\"styles.css\"|href=\"styles.css?v=${SHA}\"|" _site/index.html
-          sed -i "s|src=\"app.js\"|src=\"app.js?v=${SHA}\"|" _site/index.html
-          sed -i "s|from './firebase-data.js'|from './firebase-data.js?v=${SHA}'|" _site/app.js
-          sed -i "s|from './firebase-config.js'|from './firebase-config.js?v=${SHA}'|" _site/firebase-data.js
-          sed -i "s|</title>|</title>\n  <!-- build ${SHA} -->|" _site/index.html
+          python3 - "$SHA" <<'PY'
+          import pathlib, sys
+          ver = sys.argv[1]
+          root = pathlib.Path('_site')
+          html = (root / 'index.html').read_text(encoding='utf-8')
+          html = html.replace('href="styles.css"', f'href="styles.css?v={ver}"')
+          html = html.replace('href="fonts/CanvaHandwritingStyleTC.woff2"', f'href="fonts/CanvaHandwritingStyleTC.woff2?v={ver}"')
+          html = html.replace('src="app.js"', f'src="app.js?v={ver}"')
+          html = html.replace('</title>', f'</title>\n  <!-- build {ver} -->', 1)
+          (root / 'index.html').write_text(html, encoding='utf-8')
+          app = (root / 'app.js').read_text(encoding='utf-8')
+          app = app.replace("from './firebase-data.js'", f"from './firebase-data.js?v={ver}'")
+          (root / 'app.js').write_text(app, encoding='utf-8')
+          data = (root / 'firebase-data.js').read_text(encoding='utf-8')
+          data = data.replace("from './firebase-config.js'", f"from './firebase-config.js?v={ver}'")
+          (root / 'firebase-data.js').write_text(data, encoding='utf-8')
+          css = (root / 'styles.css').read_text(encoding='utf-8')
+          css = css.replace(
+              'url("fonts/CanvaHandwritingStyleTC.woff2")',
+              f'url("fonts/CanvaHandwritingStyleTC.woff2?v={ver}")'
+          )
+          (root / 'styles.css').write_text(css, encoding='utf-8')
+          print(f'Cache bust version: {ver}')
+          PY
           grep -q "styles.css?v=${SHA}" _site/index.html
           grep -q "app.js?v=${SHA}" _site/index.html
           # A missing module would only surface as a blank page in someone's

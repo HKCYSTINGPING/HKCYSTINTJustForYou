@@ -470,17 +470,25 @@ export function subscribeMySubmission(participantId, onData, onError) {
   }, onError);
 }
 
-export function saveSubmission(participantId, pairings, submitted) {
+export function saveSubmission(participantId, pairings, submitted = true) {
+  // Local picks stay in the browser until submit; we no longer persist drafts.
+  if (!submitted) {
+    return Promise.reject(new Error('草稿功能已移除，請直接提交投票'));
+  }
   const payload = {
     participant_id: participantId,
     pairings: pairings || [],
-    status: submitted ? 'submitted' : 'draft',
-    updated_at: serverTimestamp()
+    status: 'submitted',
+    updated_at: serverTimestamp(),
+    submitted_at: serverTimestamp()
   };
-  if (submitted) payload.submitted_at = serverTimestamp();
   // The whole ballot is one document, so two people voting at the same moment
   // can never overwrite each other the way appending rows to a sheet could.
   return setDoc(doc(db, 'submissions', participantId), payload, { merge: true });
+}
+
+export function clearMySubmission(participantId) {
+  return deleteDoc(doc(db, 'submissions', participantId));
 }
 
 export function subscribeAllSubmissions(onData, onError) {
@@ -641,7 +649,7 @@ export async function fetchSubmissionsForParticipants(participantIds) {
     const snapshot = await getDoc(doc(db, 'submissions', id));
     return snapshot.exists() ? submissionFromDoc(snapshot) : {
       participant_id: id,
-      status: 'draft',
+      status: '',
       pairings: [],
       updated_at: '',
       submitted_at: ''
