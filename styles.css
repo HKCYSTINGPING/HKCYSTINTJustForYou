@@ -1751,17 +1751,26 @@ textarea.input-field {
 .toast-container {
   position: fixed;
   top: auto;
-  bottom: calc(var(--safe-bottom) + max(var(--bottom-nav-h), var(--keyboard-inset)) + var(--space-md));
+  bottom: calc(var(--safe-bottom) + var(--space-lg));
   left: 50%;
   transform: translateX(-50%);
   z-index: 400;
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  flex-direction: column-reverse;
   gap: var(--space-sm);
   width: calc(100% - 32px);
   max-width: var(--max-width);
   pointer-events: none;
+}
+
+body.participant-active .toast-container,
+body.admin-active .toast-container {
+  bottom: calc(var(--safe-bottom) + var(--bottom-nav-h) + var(--space-sm));
+}
+
+html.keyboard-open body.participant-active .toast-container,
+html.keyboard-open body.admin-active .toast-container {
+  bottom: calc(var(--safe-bottom) + var(--space-md));
 }
 
 .toast {
@@ -2812,7 +2821,7 @@ button.group-voter-header:hover {
 /* ─── Motion pack (layout-preserving) ───────────────────────────────────── */
 
 @keyframes listItemIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -2843,56 +2852,101 @@ button.group-voter-header:hover {
   animation: screenEnter var(--duration-slow) var(--ease-out);
 }
 
-.home-cards .home-card {
-  animation: listItemIn 0.38s var(--ease-out) both;
+/* Soft staggered fly-up when a view / login panel enters */
+.view-enter .home-cards .home-card,
+.view-enter .message-list > .message-card,
+.view-enter .admin-message-list > .admin-msg-card,
+.view-enter .admin-message-list > .message-card,
+.view-enter #trophy-teammates > .trophy-card,
+.view-enter .group-voter-grid > .group-voter-card,
+.view-enter .stats-grid > .stat-card,
+.view-enter .profile-stats > .profile-stat,
+.view-enter .summary-list > .summary-item,
+.view-enter .audit-cards > .audit-card,
+.view-enter .form-group,
+.view-enter .card,
+.view-enter .trophy-actions .btn,
+.view-enter .admin-trophy-controls .btn,
+.page-enter .login-form > .form-group,
+.page-enter .login-form > .btn,
+.page-enter .login-header > * {
+  animation: listItemIn 0.4s var(--ease-out) both;
 }
-.home-cards .home-card:nth-child(1) { animation-delay: 0.02s; }
-.home-cards .home-card:nth-child(2) { animation-delay: 0.08s; }
-.home-cards .home-card:nth-child(3) { animation-delay: 0.14s; }
-.home-cards .home-card:nth-child(4) { animation-delay: 0.2s; }
-.home-cards .home-card:nth-child(5) { animation-delay: 0.26s; }
+
+.view-enter .home-cards .home-card:nth-child(1),
+.view-enter .form-group:nth-child(1),
+.view-enter .card:nth-child(1),
+.page-enter .login-header > *:nth-child(1),
+.page-enter .login-form > .form-group:nth-child(1) { animation-delay: 0.04s; }
+.view-enter .home-cards .home-card:nth-child(2),
+.view-enter .form-group:nth-child(2),
+.view-enter .card:nth-child(2),
+.page-enter .login-header > *:nth-child(2),
+.page-enter .login-form > .form-group:nth-child(2) { animation-delay: 0.1s; }
+.view-enter .home-cards .home-card:nth-child(3),
+.view-enter .form-group:nth-child(3),
+.view-enter .card:nth-child(3),
+.page-enter .login-header > *:nth-child(3),
+.page-enter .login-form > .btn { animation-delay: 0.16s; }
+.view-enter .home-cards .home-card:nth-child(4),
+.view-enter .form-group:nth-child(4),
+.view-enter .card:nth-child(4),
+.page-enter .login-header > *:nth-child(4) { animation-delay: 0.22s; }
+.view-enter .home-cards .home-card:nth-child(5),
+.view-enter .card:nth-child(5),
+.page-enter .login-header > *:nth-child(5) { animation-delay: 0.28s; }
+
+.view-enter .message-list > .message-card:nth-child(1),
+.view-enter .admin-message-list > *:nth-child(1),
+.view-enter #trophy-teammates > .trophy-card:nth-child(1),
+.view-enter .group-voter-grid > .group-voter-card:nth-child(1),
+.view-enter .stats-grid > .stat-card:nth-child(1),
+.view-enter .profile-stats > .profile-stat:nth-child(1) { animation-delay: 0.04s; }
+.view-enter .message-list > .message-card:nth-child(2),
+.view-enter .admin-message-list > *:nth-child(2),
+.view-enter #trophy-teammates > .trophy-card:nth-child(2),
+.view-enter .group-voter-grid > .group-voter-card:nth-child(2),
+.view-enter .stats-grid > .stat-card:nth-child(2),
+.view-enter .profile-stats > .profile-stat:nth-child(2) { animation-delay: 0.09s; }
+.view-enter .message-list > .message-card:nth-child(3),
+.view-enter .admin-message-list > *:nth-child(3),
+.view-enter #trophy-teammates > .trophy-card:nth-child(3),
+.view-enter .group-voter-grid > .group-voter-card:nth-child(3),
+.view-enter .stats-grid > .stat-card:nth-child(3),
+.view-enter .profile-stats > .profile-stat:nth-child(3) { animation-delay: 0.14s; }
+.view-enter .message-list > .message-card:nth-child(4),
+.view-enter .admin-message-list > *:nth-child(4),
+.view-enter #trophy-teammates > .trophy-card:nth-child(4),
+.view-enter .group-voter-grid > .group-voter-card:nth-child(4),
+.view-enter .stats-grid > .stat-card:nth-child(4),
+.view-enter .profile-stats > .profile-stat:nth-child(4) { animation-delay: 0.19s; }
+.view-enter .message-list > .message-card:nth-child(5),
+.view-enter .admin-message-list > *:nth-child(5),
+.view-enter #trophy-teammates > .trophy-card:nth-child(5),
+.view-enter .group-voter-grid > .group-voter-card:nth-child(5) { animation-delay: 0.24s; }
+.view-enter .message-list > .message-card:nth-child(n+6),
+.view-enter .admin-message-list > *:nth-child(n+6),
+.view-enter #trophy-teammates > .trophy-card:nth-child(n+6),
+.view-enter .group-voter-grid > .group-voter-card:nth-child(n+6) { animation-delay: 0.28s; }
+
+.view-enter .trophy-actions .btn:nth-child(1) { animation-delay: 0.12s; }
+.view-enter .trophy-actions .btn:nth-child(2) { animation-delay: 0.18s; }
 
 .home-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 
+/* Freshly rendered list items still ease in gently */
 .message-list > .message-card,
 .admin-message-list > .admin-msg-card,
 .admin-message-list > .message-card,
 #trophy-teammates > .trophy-card,
 .group-voter-grid > .group-voter-card,
-.stat-grid > .stat-card,
-.profile-stats > .profile-stat,
 .summary-list > .summary-item,
 .audit-cards > .audit-card {
-  animation: listItemIn 0.32s var(--ease-out) both;
+  animation: listItemIn 0.34s var(--ease-out) both;
 }
-
-.message-list > .message-card:nth-child(1),
-.admin-message-list > *:nth-child(1),
-#trophy-teammates > .trophy-card:nth-child(1),
-.group-voter-grid > .group-voter-card:nth-child(1) { animation-delay: 0.02s; }
-.message-list > .message-card:nth-child(2),
-.admin-message-list > *:nth-child(2),
-#trophy-teammates > .trophy-card:nth-child(2),
-.group-voter-grid > .group-voter-card:nth-child(2) { animation-delay: 0.06s; }
-.message-list > .message-card:nth-child(3),
-.admin-message-list > *:nth-child(3),
-#trophy-teammates > .trophy-card:nth-child(3),
-.group-voter-grid > .group-voter-card:nth-child(3) { animation-delay: 0.1s; }
-.message-list > .message-card:nth-child(4),
-.admin-message-list > *:nth-child(4),
-#trophy-teammates > .trophy-card:nth-child(4),
-.group-voter-grid > .group-voter-card:nth-child(4) { animation-delay: 0.14s; }
-.message-list > .message-card:nth-child(5),
-.admin-message-list > *:nth-child(5),
-#trophy-teammates > .trophy-card:nth-child(5),
-.group-voter-grid > .group-voter-card:nth-child(5) { animation-delay: 0.18s; }
-.message-list > .message-card:nth-child(n+6),
-.admin-message-list > *:nth-child(n+6),
-#trophy-teammates > .trophy-card:nth-child(n+6),
-.group-voter-grid > .group-voter-card:nth-child(n+6) { animation-delay: 0.22s; }
 
 .message-card:active {
   transform: scale(0.99);

@@ -1158,6 +1158,9 @@ function maybeNotifyVotingStatusChange() {
   if (lastNotifiedVotingStatus === next) return;
   lastNotifiedVotingStatus = next;
   notifyVotingStatusChange(next);
+  if (next === 'PUBLISHED') {
+    maybeShowPublishedModal(true);
+  }
 }
 
 function maybeNotifyMessagingOpenChange() {
@@ -2232,7 +2235,7 @@ function ensureResultSubscription() {
         ? (result.awards || []).filter(a => a.award_source !== 'fallback')
         : [];
       renderParticipantTrophyResults();
-      maybeShowPublishedModal(true);
+      // Auto modal only when voting status freshly becomes PUBLISHED.
     },
     reportSubscriptionError('得獎結果')
   ));
@@ -3479,14 +3482,12 @@ function handleOnboardingPrev() {
 }
 
 function maybeShowPublishedModal(isNewPublish) {
+  if (!isNewPublish) return;
   if (isStaffPerson(state.participantId)) return;
   if (state.trophy.votingStatus !== 'PUBLISHED') return;
   if (state.trophy.resultsModalRevision === state.trophy.trophyRevision) return;
   showTrophyResultsModal(state.trophy.myAwards);
-  if (isNewPublish) {
-    showToast('獎項結果已公布！', 'success');
-    updateTrophyTabBadge(true);
-  }
+  updateTrophyTabBadge(true);
 }
 
 function updateTrophyTabBadge(show) {
