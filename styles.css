@@ -1445,7 +1445,7 @@ textarea.input-field {
 }
 
 .trophy-actions .btn { flex: 1 1 calc(50% - var(--space-md) / 2); }
-.trophy-actions .trophy-clear-all { flex: 1 1 100%; }
+.trophy-actions .trophy-submit-all { flex: 1 1 100%; }
 
 .trophy-results-panel { margin-bottom: var(--space-md); }
 
