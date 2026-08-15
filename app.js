@@ -3765,8 +3765,8 @@ function renderAdminTrophyStats() {
 function loginStatusLegendHtml() {
   return `
     <div class="status-legend" role="note" aria-label="登入狀態圖例">
-      <span class="status-legend-item"><span class="voter-switch is-on" aria-hidden="true"></span> 已登入</span>
-      <span class="status-legend-item"><span class="voter-switch" aria-hidden="true"></span> 未登入</span>
+      <span class="status-legend-item"><span class="voter-switch is-on" aria-hidden="true"></span></span>
+      <span class="status-legend-item"><span class="voter-switch" aria-hidden="true"></span></span>
     </div>
   `;
 }
@@ -3826,16 +3826,19 @@ function renderGroupStatusCards(options) {
       const statusMark = voteMatrix
         ? `<span class="voter-check ${m[doneKey] ? 'app-icon app-icon-check' : 'voter-check-empty'}" aria-hidden="true">${m[doneKey] ? '' : '○'}</span>`
         : `<span class="voter-switch ${m[doneKey] ? 'is-on' : ''}" aria-hidden="true"></span>`;
+      const labelHtml = (m[doneKey] ? doneLabel : pendingLabel)
+        ? `<span class="voter-status-label" title="${statusAttr}" aria-label="${statusAttr}">${m[doneKey] ? doneLabel : pendingLabel}</span>`
+        : '';
       const inner = `
         ${statusMark}
         <span class="voter-id">${escapeHtml(displayLabelOf(m.participant_id))}</span>
-        <span class="voter-status-label" title="${statusAttr}" aria-label="${statusAttr}">${m[doneKey] ? doneLabel : pendingLabel}</span>
+        ${labelHtml}
       `;
       if (!memberClickable) {
-        return `<div class="${classes}">${inner}</div>`;
+        return `<div class="${classes}"${statusAttr ? ` aria-label="${statusAttr}"` : ''}>${inner}</div>`;
       }
-      const titleText = voteMatrix ? '睇獨立選票' : '管理登入';
-      return `<button type="button" class="${classes}" data-member-id="${escapeHtml(m.participant_id)}" title="${titleText}">${inner}</button>`;
+      const titleText = voteMatrix ? '睇獨立選票' : (statusAttr || '管理登入');
+      return `<button type="button" class="${classes}" data-member-id="${escapeHtml(m.participant_id)}" title="${titleText}" aria-label="${escapeHtml(displayLabelOf(m.participant_id))}${statusAttr ? '，' + statusAttr : ''}">${inner}</button>`;
     }).join('');
 
     const headerHtml = voteMatrix
@@ -4355,8 +4358,8 @@ function renderAdminLoginStatus() {
     title: '登入狀況（按組別）',
     groups: buildLoginStatusGroups(),
     doneKey: 'logged_in',
-    doneLabel: '已登入',
-    pendingLabel: '未登入',
+    doneLabel: '',
+    pendingLabel: '',
     doneStatusText: '已登入',
     pendingStatusText: '未登入',
     emptyAllDone: '所有參加者均已登入',
@@ -4788,8 +4791,8 @@ function renderStaffLoginStatus() {
     title: '登入狀況（按組別）',
     groups,
     doneKey: 'logged_in',
-    doneLabel: '已登入',
-    pendingLabel: '未登入',
+    doneLabel: '',
+    pendingLabel: '',
     doneStatusText: '已登入',
     pendingStatusText: '未登入',
     emptyAllDone: '本組參加者均已登入',
