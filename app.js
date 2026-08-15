@@ -2134,6 +2134,7 @@ async function startParticipantSubscriptions() {
         applyEffectiveVotingToTrophyState();
         maybeNotifyMessagingOpenChange();
         renderStaffFacilitatorPanel();
+        refreshStaffTrophyViews();
         renderProfile();
         finish();
       },
@@ -4852,9 +4853,8 @@ function updateStaffVotingButtons(status) {
 function renderStaffTrophyStats() {
   if (!DOM.staffTrophyStats) return;
   const stats = state.staffTrophy.overview?.stats || {};
-  const votingStatus = state.staffTrophy.overview?.voting_status
-    || effectiveVotingConfigForGroup(getFacilitatorGroupId()).voting_status
-    || 'DRAFT';
+  // Always use live group/global status — overview can lag until the next refresh.
+  const votingStatus = effectiveVotingConfigForGroup(getFacilitatorGroupId()).voting_status || 'DRAFT';
   const statusTone = votingStatusToneClass(votingStatus);
   DOM.staffTrophyStats.innerHTML = `
     <div class="stat-card"><div class="stat-value">${stats.completed_voters || 0}/${stats.total_participants || 0}</div><div class="stat-label">已完成投票</div></div>
@@ -5140,6 +5140,17 @@ async function handleStaffVotingAction(status, btn) {
   await runProgressButton(btn, (async () => {
     try {
       await data.setGroupVotingStatus(groupId, status);
+      if (!state.groupMeta[groupId]) state.groupMeta[groupId] = { group_id: groupId };
+      state.groupMeta[groupId] = {
+        ...state.groupMeta[groupId],
+        voting_status: status,
+        allow_resubmit: status === 'VOTING_OPEN'
+          ? true
+          : !!state.groupMeta[groupId].allow_resubmit
+      };
+      applyEffectiveVotingToTrophyState();
+      renderStaffFacilitatorPanel();
+      refreshStaffTrophyViews();
       showToast('本組投票狀態：' + (VOTING_STATUS_LABELS[status] || status), 'success');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
@@ -5162,7 +5173,14 @@ async function handleStaffCalculate(btn) {
       );
       const outcome = data.computeResults(members, trophies, submissions);
       await data.writeResults(outcome.awarded, { groupId });
+      if (!state.groupMeta[groupId]) state.groupMeta[groupId] = { group_id: groupId };
+      state.groupMeta[groupId] = {
+        ...state.groupMeta[groupId],
+        voting_status: 'CALCULATED'
+      };
       state.staffTrophy.submissions = submissions;
+      applyEffectiveVotingToTrophyState();
+      renderStaffFacilitatorPanel();
       refreshStaffTrophyViews();
       showToast('本組結果計算完成', 'success');
     } catch (err) {
