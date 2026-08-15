@@ -33,6 +33,15 @@ jobs:
           cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json .nojekyll _site/
           cp fonts/CanvaHandwritingStyleTC.woff2 _site/fonts/
           cp assets/*.png _site/assets/
+          # Bust CDN / browser caches after each deploy (Pages caches ~10 min).
+          SHA="$(git rev-parse --short HEAD)"
+          sed -i "s|href=\"styles.css\"|href=\"styles.css?v=${SHA}\"|" _site/index.html
+          sed -i "s|src=\"app.js\"|src=\"app.js?v=${SHA}\"|" _site/index.html
+          sed -i "s|from './firebase-data.js'|from './firebase-data.js?v=${SHA}'|" _site/app.js
+          sed -i "s|from './firebase-config.js'|from './firebase-config.js?v=${SHA}'|" _site/firebase-data.js
+          sed -i "s|</title>|</title>\n  <!-- build ${SHA} -->|" _site/index.html
+          grep -q "styles.css?v=${SHA}" _site/index.html
+          grep -q "app.js?v=${SHA}" _site/index.html
           # A missing module would only surface as a blank page in someone's
           # browser, so fail the deploy here instead.
           for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json fonts/CanvaHandwritingStyleTC.woff2 assets/trophy.png assets/heart.png; do
