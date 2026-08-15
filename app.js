@@ -940,11 +940,40 @@ function finishLoading() {
 
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');
-  toast.className = 'toast toast-' + type;
+  toast.className = 'toast ' + resolveToastClass(type);
   toast.setAttribute('role', 'alert');
   toast.textContent = message;
   DOM.toastContainer.appendChild(toast);
   setTimeout(() => toast.remove(), CONFIG.TOAST_DURATION);
+}
+
+/** Map success/error/info, messaging OPEN/CLOSE, or voting statuses onto status tones. */
+function resolveToastClass(type) {
+  const raw = String(type || 'info').trim();
+  switch (raw) {
+    case 'VOTING_OPEN':
+    case 'OPEN':
+    case 'success':
+    case 'tone-open':
+      return 'toast-tone-open';
+    case 'VOTING_CLOSED':
+    case 'CLOSE':
+    case 'error':
+    case 'tone-closed':
+      return 'toast-tone-closed';
+    case 'CALCULATED':
+    case 'warning':
+    case 'tone-calculated':
+      return 'toast-tone-calculated';
+    case 'PUBLISHED':
+    case 'tone-published':
+      return 'toast-tone-published';
+    case 'DRAFT':
+    case 'info':
+    case 'tone-draft':
+    default:
+      return 'toast-tone-draft';
+  }
 }
 
 function formatDateTime(iso, options = {}) {
@@ -1172,7 +1201,7 @@ function maybeNotifyMessagingOpenChange() {
   lastNotifiedMessagingOpen = nowOpen;
   showToast(
     nowOpen ? '留言功能已重新開放' : '留言功能已關閉',
-    nowOpen ? 'success' : 'info'
+    nowOpen ? 'OPEN' : 'CLOSE'
   );
 }
 
@@ -3195,7 +3224,7 @@ async function handleSetMessagingStatus(status, btn) {
   await runProgressButton(btn, (async () => {
     try {
       await data.setMessagingStatus(status);
-      showToast(status === 'OPEN' ? '留言功能已開啟' : '留言功能已關閉', 'success');
+      showToast(status === 'OPEN' ? '留言功能已開啟' : '留言功能已關閉', status);
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -3617,7 +3646,7 @@ function notifyVotingStatusChange(status) {
   };
   const text = messages[status];
   if (!text) return;
-  showToast(text, status === 'PUBLISHED' || status === 'VOTING_OPEN' ? 'success' : 'info');
+  showToast(text, status);
   if (status === 'PUBLISHED' || status === 'VOTING_CLOSED') {
     updateTrophyTabBadge(status === 'PUBLISHED');
   }
@@ -4797,7 +4826,7 @@ async function handleAdminVotingAction(status, btn) {
   await runProgressButton(btn, (async () => {
     try {
       await data.setVotingStatus(status);
-      showToast('投票狀態已更新：' + (VOTING_STATUS_LABELS[status] || status), 'success');
+      showToast('投票狀態已更新：' + (VOTING_STATUS_LABELS[status] || status), status);
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -4813,7 +4842,7 @@ async function handleAdminCalculate(btn) {
         state.participants, state.adminTrophy.trophies, state.adminTrophy.submissions
       );
       await data.writeResults(outcome.awarded);
-      showToast('結果計算完成', 'success');
+      showToast('結果計算完成', 'CALCULATED');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -5208,7 +5237,7 @@ async function handleStaffMessaging(status, btn) {
   await runProgressButton(btn, (async () => {
     try {
       await data.setGroupMessagingStatus(groupId, status);
-      showToast(status === 'OPEN' ? '本組留言已開啟' : '本組留言已關閉', 'success');
+      showToast(status === 'OPEN' ? '本組留言已開啟' : '本組留言已關閉', status);
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -5231,7 +5260,7 @@ async function handleStaffVotingAction(status, btn) {
       applyEffectiveVotingToTrophyState();
       renderStaffFacilitatorPanel();
       refreshStaffTrophyViews();
-      showToast('本組覆寫：' + (VOTING_STATUS_LABELS[status] || status), 'success');
+      showToast('本組覆寫：' + (VOTING_STATUS_LABELS[status] || status), status);
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -5249,7 +5278,7 @@ async function handleStaffFollowGlobalVoting(btn) {
       applyEffectiveVotingToTrophyState();
       renderStaffFacilitatorPanel();
       refreshStaffTrophyViews();
-      showToast('已恢復跟隨全域投票', 'success');
+      showToast('已恢復跟隨全域投票', state.votingConfig.voting_status || 'DRAFT');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -5276,7 +5305,7 @@ async function handleStaffCalculate(btn) {
       applyEffectiveVotingToTrophyState();
       renderStaffFacilitatorPanel();
       refreshStaffTrophyViews();
-      showToast('本組結果計算完成（本組覆寫）', 'success');
+      showToast('本組結果計算完成（本組覆寫）', 'CALCULATED');
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }

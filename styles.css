@@ -1788,9 +1788,39 @@ html.keyboard-open body.admin-active .toast-container {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.toast-info { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
-.toast-success { background: var(--success); color: white; }
-.toast-error { background: var(--danger); color: white; }
+.toast-info,
+.toast-tone-draft {
+  background: #F1EBE3;
+  color: var(--text-secondary);
+  border: 1.5px solid #E0D4C4;
+}
+
+.toast-success,
+.toast-tone-open {
+  background: var(--success-bg);
+  color: #3F7A3E;
+  border: 1.5px solid color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.toast-error,
+.toast-tone-closed {
+  background: var(--danger-bg);
+  color: #A04545;
+  border: 1.5px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.toast-warning,
+.toast-tone-calculated {
+  background: var(--warning-bg);
+  color: #8A6A2A;
+  border: 1.5px solid color-mix(in srgb, var(--primary) 55%, var(--border));
+}
+
+.toast-tone-published {
+  background: color-mix(in srgb, var(--secondary-light) 70%, var(--success-bg));
+  color: #6B4E32;
+  border: 1.5px solid color-mix(in srgb, var(--secondary) 50%, var(--border));
+}
 
 /* ─── Admin ─────────────────────────────────────────────────────────────── */
 
