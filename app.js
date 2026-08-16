@@ -36,16 +36,19 @@ const CONFIG = {
 };
 
 const BAD_WORDS = [
-  '撚','柒','屌','閪','仆街','死全家','操你','草你','fuck','shit','bitch','asshole',
-  'damn','cunt','bastard','whore','slut','dick','pussy','cock','nigger','faggot',
-  '冚家剷','死開','去死','白痴','蠢材','廢物','垃圾','人渣','賤人','婊子','雞婆',
-  '老母','老味','鳩','戇鳩','戇居','戇撚','柒頭','粉腸','豬頭','死仔','死女',
-  '撚樣','柒樣','臭閪','臭化','頂你','頂心','頂肺','收皮','仆你','戇鳩',
-  'stupid','idiot','moron','retard','dumbass','motherfucker','mf','wtf',
-  '撚毛','柒毛','死撚','死柒','臭撚','臭柒','閪仔','閪女','鳩仔','鳩女',
-  'on9','on99','on999','撚樣','柒皮','柒精','柒撚','撚精','撚皮','死蠢',
-  'hell','dammit','bullshit','horseshit','dickhead','jackass','twat','wanker',
-  '撚閪','柒閪','死閪','臭閪','閪毛','鳩毛','撚鳩','柒鳩','死鳩','臭鳩'
+  "小你老母", "吊你老母", "小你老味", "你老味", "你老母", "老.母", "老 母", "老母係街市賣鴨蛋",
+  "含能", "臭化西", "臭西", "傻西", "凸你", "屌.你", "屌 你", "屌你", "吊你", "小你", "賓州",
+  "九兩菜", "收皮啦", "收皮", "把撚", "條撚", "賓周", "賓.周", "仆街", "仆.街", "卜街", "POP街",
+  "diu 9", "sub 9", "sub9", "chi lan sin", "撚樣", "能樣", "柒頭", "笨七", "鳩登", "膠登",
+  "契弟", "ass hole", "asshole", "A S S", "on lun 7 7", "臭爛袋", "挑那星", "陷家剷", "陷家",
+  "吊夠", "吊 夠", "戇尻尻", "戇尻", "戇-尻", "戇 尻", "on 99", "ON 九", "on 9", "on.9", "on9",
+  "ｏｎ ９９", "戇鳩", "戇.鳩", "撚屌鳩", "d i u", "DIU", "fxxk", "fuxk", "fxck", "suck", "bitch",
+  "fuck", "f u c k", "dllm", "D l l m", "DLLM", "戇尻膠", "Penis",
+  "onL9", "ass", "shit", "shitting", "C8", "バカ", "8卡", "Vagina",
+  "撚", "屌", "尻", "鳩", "柒", "仆", "𨳒", "𨳊", "𨳍", "冚家剷", "食屎狗", "屎", "蛋散", "On nine dog", "閪",
+  "CNM", "傻逼", "CLS", "7頭皮", "Weed", "Smoke", "D I U", "D iu", "Di u", "尸口巾", "Seven head boy", 
+  "吊梨老尾", "幹你娘", "含L", "碌7啦", "pk", "Nigger", "c 8", "馬鹿やろ", "nigga", "米田共", "乜9",
+  "&#23628;", "&#x5C4C;", "&#x5C3B;", "&#23611;", "&#x649A;", "&#25754;"
 ];
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -212,7 +215,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="send-content"]',
       prepare: 'send',
       title: '留言內容',
-      body: '最多 300 字。有唔恰當字眼會提示你改。'
+      body: '最多 300 字。'
     },
     {
       target: '[data-tour="send-submit"]',
@@ -545,7 +548,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-pick-participant"]',
       prepare: 'settings',
       title: '揀參加者',
-      body: '揀一位之後可以改電話、組別，或刪除其留言／投票紀錄。'
+      body: '揀一位之後可以改密碼、組別，或刪除其留言／投票紀錄。'
     },
     {
       target: '#admin-system-info',
@@ -672,6 +675,8 @@ function cacheDOM() {
   DOM.profileLoginId = document.getElementById('profile-login-id');
   DOM.profileDisplayName = document.getElementById('profile-display-name');
   DOM.profileSaveName = document.getElementById('profile-save-name');
+  DOM.profilePassword = document.getElementById('profile-password');
+  DOM.profileSavePassword = document.getElementById('profile-save-password');
   DOM.profileStats = document.getElementById('profile-stats');
   DOM.homeStaffCard = document.getElementById('home-staff-card');
   DOM.staffFacilitatorPanel = document.getElementById('staff-facilitator-panel');
@@ -4945,6 +4950,29 @@ async function handleSaveDisplayName() {
   })());
 }
 
+async function handleSavePassword() {
+  const pid = state.participantId;
+  if (!pid) return;
+  const newPassword = String(DOM.profilePassword?.value || '').trim();
+  if (!newPassword) {
+    showToast('請輸入新密碼', 'error');
+    return;
+  }
+  if (newPassword.length < 6) {
+    showToast('密碼長度至少需要 6 個字元', 'error');
+    return;
+  }
+  await runProgressButton(DOM.profileSavePassword, (async () => {
+    try {
+      await data.updateMyPassword(newPassword);
+      if (DOM.profilePassword) DOM.profilePassword.value = '';
+      showToast('密碼已成功更新，下次登入請使用新密碼', 'success');
+    } catch (err) {
+      showToast('密碼更新失敗：' + (err && err.message ? err.message : data.describeFirestoreError(err)), 'error');
+    }
+  })());
+}
+
 function renderStaffFacilitatorPanel() {
   const panel = DOM.staffFacilitatorPanel;
   if (!panel) return;
@@ -5399,17 +5427,37 @@ function renderAdminGroupOverrides() {
     const facilitators = state.participants
       .filter(p => p.group_id === groupId && isStaffPerson(p))
       .map(p => displayLabelOf(p));
+    const hasVotingOverride = !!meta.voting_status;
+    const hasMsgOverride = !!meta.messaging_status;
+    const hasOverride = hasVotingOverride || hasMsgOverride;
+
     return `
-      <div class="admin-group-override-card">
+      <div class="admin-group-override-card" data-group-id="${escapeHtml(groupId)}">
         <div class="admin-group-override-head">
-          <strong>${escapeHtml(formatGroupLabel(groupId))}</strong>
-          <span class="form-hint">${escapeHtml(groupId)}</span>
+          <div>
+            <strong>${escapeHtml(formatGroupLabel(groupId))}</strong>
+            <span class="form-hint">${escapeHtml(groupId)}</span>
+          </div>
+          <span class="chip ${hasOverride ? 'chip-warning' : 'chip-secondary'}">${hasOverride ? '組別覆寫中' : '跟隨全域'}</span>
         </div>
         <div class="admin-group-override-meta">
-          <span>留言 ${msgOpen ? '開啟' : '關閉'}${meta.messaging_status ? '（組別覆寫）' : '（跟隨全域）'}</span>
-          <span>投票 ${escapeHtml(VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status)}${meta.voting_status ? '（組別覆寫）' : '（跟隨全域）'}</span>
+          <span>留言：${msgOpen ? '開啟' : '關閉'}${hasMsgOverride ? '（組別覆寫）' : '（跟隨全域）'}</span>
+          <span>投票：${escapeHtml(VOTING_STATUS_LABELS[voting.voting_status] || voting.voting_status)}${hasVotingOverride ? '（組別覆寫）' : '（跟隨全域）'}</span>
         </div>
         <div class="form-hint">負責 Staff：${facilitators.length ? escapeHtml(facilitators.join('、')) : '未指派'}</div>
+        <div class="admin-group-actions" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary btn-sm admin-toggle-group-msg" data-group="${escapeHtml(groupId)}" data-action="${msgOpen ? 'CLOSE' : 'OPEN'}">
+            ${msgOpen ? '關閉本組留言' : '開啟本組留言'}
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm admin-toggle-group-voting" data-group="${escapeHtml(groupId)}" data-action="${voting.voting_status === 'VOTING_OPEN' ? 'VOTING_CLOSED' : 'VOTING_OPEN'}">
+            ${voting.voting_status === 'VOTING_OPEN' ? '關閉本組投票' : '開放本組投票'}
+          </button>
+          ${hasOverride ? `
+            <button type="button" class="btn btn-ghost btn-sm admin-clear-group-override" data-group="${escapeHtml(groupId)}">
+              恢復跟隨全域
+            </button>
+          ` : ''}
+        </div>
       </div>
     `;
   }).join('');
@@ -5485,10 +5533,8 @@ function renderAdminParticipantDetail(detail) {
   const stats = detail.stats || {};
 
   DOM.adminEditPhone.value = p.phone_number || '';
-  // The phone number is this person's Firebase password, and a browser cannot
-  // change someone else's password. set_participant_phone.py does that.
-  DOM.adminEditPhone.readOnly = true;
-  DOM.adminEditPhone.title = '電話號碼即登入密碼，需在電腦執行 set_participant_phone.py 更改';
+  DOM.adminEditPhone.readOnly = false;
+  DOM.adminEditPhone.title = '登入密碼';
   populateAdminEditGroupSelect(p.group_id || '');
 
   const submissionTone = stats.submission_status === 'submitted' ? 'tone-published' : 'tone-draft';
@@ -5543,15 +5589,26 @@ async function handleAdminSaveParticipant() {
 
   const groupId = DOM.adminEditGroup.value.trim();
   if (!groupId) { showToast('分組不能為空', 'error'); return; }
+  const newPassword = (DOM.adminEditPhone?.value || '').trim();
 
   await runProgressButton(DOM.adminSaveParticipant, (async () => {
     try {
       await data.updateParticipantGroup(pid, groupId);
       const person = state.participants.find(p => p.participant_id === pid);
       if (person) person.group_id = groupId;
+
+      if (newPassword) {
+        await data.updateParticipantContact(pid, newPassword);
+        if (state.adminParticipant.detail?.participant) {
+          state.adminParticipant.detail.participant.phone_number = newPassword;
+        }
+      }
+
       setParticipantsCache(state.participants);
-      showToast('分組已更新', 'success');
+      showToast('參加者資料已更新', 'success');
       await refreshAdminParticipantDetail();
+      refreshAdminTrophyViews();
+      renderAdminGroupOverrides();
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -5925,6 +5982,9 @@ function bindEvents() {
   if (DOM.profileSaveName) {
     DOM.profileSaveName.addEventListener('click', handleSaveDisplayName);
   }
+  if (DOM.profileSavePassword) {
+    DOM.profileSavePassword.addEventListener('click', handleSavePassword);
+  }
   document.querySelectorAll('.staff-result-tab').forEach(btn => {
     btn.addEventListener('click', () => switchStaffResultTab(btn.dataset.staffResultTab));
   });
@@ -6006,6 +6066,60 @@ function bindEvents() {
 
   DOM.auditSearch.addEventListener('input', renderAuditTable);
   DOM.auditTrophyFilter.addEventListener('change', renderAuditTable);
+
+  if (DOM.adminGroupOverrides) {
+    DOM.adminGroupOverrides.addEventListener('click', async (e) => {
+      const clearBtn = e.target.closest('.admin-clear-group-override');
+      if (clearBtn) {
+        const groupId = clearBtn.dataset.group;
+        if (!groupId) return;
+        await runProgressButton(clearBtn, (async () => {
+          try {
+            await data.clearGroupAllOverrides(groupId);
+            renderAdminGroupOverrides();
+            showToast(`${formatGroupLabel(groupId)} 已清除覆寫，恢復跟隨全域`, 'info');
+          } catch (err) {
+            showToast(data.describeFirestoreError(err), 'error');
+          }
+        })());
+        return;
+      }
+
+      const msgBtn = e.target.closest('.admin-toggle-group-msg');
+      if (msgBtn) {
+        const groupId = msgBtn.dataset.group;
+        const newStatus = msgBtn.dataset.action;
+        if (!groupId || !newStatus) return;
+        await runProgressButton(msgBtn, (async () => {
+          try {
+            await data.setGroupMessagingStatus(groupId, newStatus);
+            renderAdminGroupOverrides();
+            showToast(`${formatGroupLabel(groupId)} 留言已${newStatus === 'OPEN' ? '開啟' : '關閉'}（組別覆寫）`, 'success');
+          } catch (err) {
+            showToast(data.describeFirestoreError(err), 'error');
+          }
+        })());
+        return;
+      }
+
+      const votingBtn = e.target.closest('.admin-toggle-group-voting');
+      if (votingBtn) {
+        const groupId = votingBtn.dataset.group;
+        const newStatus = votingBtn.dataset.action;
+        if (!groupId || !newStatus) return;
+        await runProgressButton(votingBtn, (async () => {
+          try {
+            await data.setGroupVotingStatus(groupId, newStatus);
+            renderAdminGroupOverrides();
+            showToast(`${formatGroupLabel(groupId)} 投票已${newStatus === 'VOTING_OPEN' ? '開放' : '關閉'}（組別覆寫）`, newStatus);
+          } catch (err) {
+            showToast(data.describeFirestoreError(err), 'error');
+          }
+        })());
+        return;
+      }
+    });
+  }
 
 }
 

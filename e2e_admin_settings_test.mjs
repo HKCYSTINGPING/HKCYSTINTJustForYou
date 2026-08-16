@@ -96,12 +96,12 @@ async function run() {
     check('選中參加者後顯示詳情', true);
 
     const phoneValue = await page.inputValue('#admin-edit-phone');
-    check('管理員可以讀到電話號碼', phoneValue === phones[TARGET], phoneValue || '(空)');
+    check('管理員可以讀到密碼', phoneValue === phones[TARGET], phoneValue || '(空)');
 
     const phoneReadonly = await page.evaluate(
       () => document.getElementById('admin-edit-phone').readOnly
     );
-    check('電話欄位為唯讀', phoneReadonly === true);
+    check('密碼欄位可編輯', phoneReadonly === false);
 
     originalGroup = await page.inputValue('#admin-edit-group');
     check('讀到現有分組', !!originalGroup, originalGroup);
@@ -136,7 +136,7 @@ async function run() {
     await page.waitForSelector('#loading-overlay.hidden', { timeout: 10000 }).catch(() => {});
     await page.selectOption('#admin-edit-group', originalGroup);
     await page.click('#admin-save-participant');
-    await page.waitForSelector('.toast:has-text("分組已更新")', { timeout: 15000 });
+    await page.waitForSelector('.toast:has-text("已更新")', { timeout: 15000 });
     await page.waitForFunction(
       (expected) => {
         const overlayHidden = document.getElementById('loading-overlay')?.classList.contains('hidden');

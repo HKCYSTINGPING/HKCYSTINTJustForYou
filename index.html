@@ -318,6 +318,18 @@
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
         </div>
+        <div class="card profile-password-card">
+          <h3 class="section-title">修改密碼</h3>
+          <p class="form-hint">修改後下次登入請使用新密碼（至少 6 位字元）。</p>
+          <div class="form-group">
+            <label for="profile-password">新密碼</label>
+            <input type="password" id="profile-password" class="input-field" maxlength="40" autocomplete="new-password" placeholder="請輸入新密碼">
+          </div>
+          <button type="button" id="profile-save-password" class="btn btn-secondary btn-sm btn-progress">
+            <span class="btn-label">更新密碼</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+        </div>
         <div id="profile-stats" class="profile-stats" data-tour="profile-stats"></div>
         <button type="button" id="participant-logout" class="btn btn-danger btn-lg" data-tour="profile-logout">登出</button>
       </div>
@@ -777,8 +789,8 @@
               <h4>修改資料</h4>
               <div class="form-row">
                 <div class="form-group">
-                  <label for="admin-edit-phone">電話號碼</label>
-                  <input type="text" id="admin-edit-phone" class="input-field" maxlength="20" autocomplete="off">
+                  <label for="admin-edit-phone">密碼</label>
+                  <input type="text" id="admin-edit-phone" class="input-field" maxlength="30" autocomplete="off" placeholder="密碼">
                 </div>
                 <div class="form-group">
                   <label for="admin-edit-group">分組 (group_id)</label>

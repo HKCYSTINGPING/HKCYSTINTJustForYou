@@ -18,7 +18,8 @@ import {
   setPersistence,
   browserSessionPersistence,
   signInWithEmailAndPassword,
-  signOut
+  signOut,
+  updatePassword
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
 import {
   collection,
@@ -441,6 +442,18 @@ export async function clearGroupVotingStatus(groupId) {
   }, { merge: true });
 }
 
+/** Clear both voting and messaging overrides for a group. */
+export async function clearGroupAllOverrides(groupId) {
+  await setDoc(doc(db, 'groups', groupId), {
+    group_id: groupId,
+    voting_status: deleteField(),
+    messaging_status: deleteField(),
+    allow_resubmit: deleteField(),
+    calculated_at: deleteField(),
+    published_at: deleteField()
+  }, { merge: true });
+}
+
 // ─── Trophies ───────────────────────────────────────────────────────────────
 
 export async function fetchTrophies() {
@@ -769,6 +782,43 @@ export async function fetchContact(participantId) {
     // updated to grant it yet, the rest of the panel should still work.
     if (err && err.code === 'permission-denied') return '';
     throw err;
+  }
+}
+
+export async function updateParticipantContact(participantId, newPassword) {
+  const pid = String(participantId || '').trim().toUpperCase();
+  if (!pid) return;
+  const clean = String(newPassword || '').trim();
+  await setDoc(doc(db, 'contacts', pid), {
+    participant_id: pid,
+    phone_number: clean
+  }, { merge: true });
+
+  const identity = identityFromUser(auth.currentUser);
+  if (identity && identity.participantId === pid && clean.length >= 6) {
+    try {
+      await updatePassword(auth.currentUser, resolveAuthPassword(pid, clean));
+    } catch (_) {}
+  }
+}
+
+export async function updateMyPassword(newPassword) {
+  if (!auth.currentUser) throw new Error('未登入');
+  const clean = String(newPassword || '').trim();
+  if (clean.length < 6) {
+    throw new Error('密碼長度至少需要 6 個字元');
+  }
+  const identity = identityFromUser(auth.currentUser);
+  const pid = identity ? identity.participantId : '';
+  const authPwd = resolveAuthPassword(pid, clean);
+  await updatePassword(auth.currentUser, authPwd);
+  if (pid) {
+    try {
+      await setDoc(doc(db, 'contacts', pid), {
+        participant_id: pid,
+        phone_number: clean
+      }, { merge: true });
+    } catch (_) {}
   }
 }
 

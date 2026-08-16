@@ -30,7 +30,7 @@ App
 ## 2. User Flow
 
 ### 參加者
-1. Splash → Login → 輸入編號 + 電話
+1. Splash → Login → 輸入編號 + 密碼
 2. Home 卡片進入各功能
 3. Bottom Nav：首頁 / Inbox / Trophy / 我的
 4. 發送留言 → 自動跳轉已發送
