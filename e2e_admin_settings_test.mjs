@@ -41,7 +41,19 @@ async function run() {
   let originalGroup = '';
 
   try {
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    await context.addInitScript(() => {
+      const keys = [
+        'participant:home', 'participant:send', 'participant:inbox', 'participant:sent',
+        'participant:trophy', 'participant:profile',
+        'participant:staff:dashboard', 'participant:staff:messages', 'participant:staff:voting', 'participant:staff:results',
+        'admin:dashboard', 'admin:messages', 'admin:voting', 'admin:results', 'admin:settings'
+      ];
+      const seen = {};
+      keys.forEach(k => { seen[k] = true; });
+      localStorage.setItem('tnit_onboarding_seen_v2', JSON.stringify(seen));
+    });
+    const page = await context.newPage();
     page.on('pageerror', e => errors.push(String(e)));
 
     console.log('管理員參加者管理：');

@@ -45,6 +45,17 @@ async function run() {
 
   try {
     const context = await browser.newContext();
+    await context.addInitScript(() => {
+      const keys = [
+        'participant:home', 'participant:send', 'participant:inbox', 'participant:sent',
+        'participant:trophy', 'participant:profile',
+        'participant:staff:dashboard', 'participant:staff:messages', 'participant:staff:voting', 'participant:staff:results',
+        'admin:dashboard', 'admin:messages', 'admin:voting', 'admin:results', 'admin:settings'
+      ];
+      const seen = {};
+      keys.forEach(k => { seen[k] = true; });
+      localStorage.setItem('tnit_onboarding_seen_v2', JSON.stringify(seen));
+    });
     context.on('response', res => {
       if (res.status() === 404) missing.push(res.url());
     });
@@ -55,7 +66,7 @@ async function run() {
     });
 
     console.log('參加者流程：');
-    await login(page, '1A', '98765432');
+    await login(page, '1A', await phoneFor('1A'));
     await page.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
     check('用 1A 登入後進入參加者版面', true);
 

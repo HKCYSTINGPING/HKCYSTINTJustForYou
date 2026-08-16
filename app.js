@@ -2173,6 +2173,9 @@ function applyEffectiveVotingToTrophyState() {
   const config = effectiveVotingConfigForMe();
   state.trophy.votingStatus = config.voting_status;
   state.trophy.trophyRevision = config.published_at || config.calculated_at || config.voting_status;
+  if (config.voting_status !== 'PUBLISHED') {
+    hideTrophyResultsModal();
+  }
   recalcTrophyPermissions();
   ensureResultSubscription();
   updateTrophyStatusBanner();
