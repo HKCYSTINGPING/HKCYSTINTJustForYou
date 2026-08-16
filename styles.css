@@ -822,6 +822,10 @@ textarea.input-field {
 
 .combobox-wrapper { position: relative; }
 
+.combobox-wrapper.is-open {
+  z-index: 400;
+}
+
 .combobox-input { padding-right: 44px !important; }
 
 .combobox-toggle {
@@ -2892,13 +2896,22 @@ button.group-voter-header:hover {
 .view-enter .stats-grid > .stat-card,
 .view-enter .profile-stats > .profile-stat,
 .view-enter .summary-list > .summary-item,
-.view-enter .audit-cards > .audit-card,
+.view-enter .audit-cards > .audit-card {
+  animation: listItemIn 0.4s var(--ease-out) both;
+}
+
+/* Opacity-only for containers that may host dropdowns — transform creates a
+   stacking context that traps .combobox-dropdown under later siblings. */
+@keyframes fadeInSoft {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .view-enter .form-group,
 .view-enter .card,
 .page-enter .login-form > .form-group,
 .page-enter .login-form > .btn,
 .page-enter .login-header > * {
-  animation: listItemIn 0.4s var(--ease-out) both;
+  animation: fadeInSoft 0.4s var(--ease-out) both;
 }
 
 .view-enter .home-cards .home-card:nth-child(1),

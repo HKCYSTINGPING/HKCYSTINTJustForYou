@@ -880,6 +880,13 @@ function replayEnterAnimation(el, className = 'view-enter') {
   // Force reflow so the enter animation can replay on every navigation.
   void el.offsetWidth;
   el.classList.add(className);
+  // Drop the class after the stagger finishes — fill-mode:both + leftover
+  // transform would trap combobox dropdowns under later siblings.
+  clearTimeout(el._enterAnimTimer);
+  el._enterAnimTimer = setTimeout(() => {
+    el.classList.remove(className);
+    el._enterAnimTimer = null;
+  }, 700);
 }
 
 function stopLoadingTick() {
@@ -1539,15 +1546,19 @@ function createCombobox(config) {
     items: config.items || [],
     excludeIds: config.excludeIds || []
   };
+  const wrapper = input.closest('.combobox-wrapper');
 
   let highlightedIndex = -1;
   let isOpen = false;
 
   function getFilteredItems(query) {
     const q = (query || '').trim().toUpperCase();
+    const excluded = new Set(
+      (comboState.excludeIds || []).map(id => normalizeId(id)).filter(Boolean)
+    );
     return comboState.items.filter(item => {
       const id = typeof item === 'string' ? item : item.participant_id;
-      if (comboState.excludeIds.includes(id)) return false;
+      if (excluded.has(normalizeId(id))) return false;
       if (!q) return true;
       const label = getLabel(item).toUpperCase();
       const name = typeof item === 'string' ? '' : String(item.display_name || '').toUpperCase();
@@ -1585,6 +1596,7 @@ function createCombobox(config) {
   function openDropdown() {
     isOpen = true;
     input.setAttribute('aria-expanded', 'true');
+    if (wrapper) wrapper.classList.add('is-open');
     dropdown.classList.remove('hidden');
     renderDropdown(input.value);
   }
@@ -1592,6 +1604,7 @@ function createCombobox(config) {
   function closeDropdown() {
     isOpen = false;
     input.setAttribute('aria-expanded', 'false');
+    if (wrapper) wrapper.classList.remove('is-open');
     dropdown.classList.add('hidden');
     highlightedIndex = -1;
   }
@@ -1621,18 +1634,20 @@ function createCombobox(config) {
   input.addEventListener('focus', () => openDropdown());
 
   input.addEventListener('keydown', (e) => {
-    const lis = dropdown.querySelectorAll('li[data-index]');
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) openDropdown();
-      highlightedIndex = Math.min(highlightedIndex + 1, lis.length - 1);
+      const lis = dropdown.querySelectorAll('li[data-index]');
+      highlightedIndex = Math.min(highlightedIndex + 1, Math.max(lis.length - 1, 0));
       highlightItem(highlightedIndex);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      const lis = dropdown.querySelectorAll('li[data-index]');
       highlightedIndex = Math.max(highlightedIndex - 1, 0);
       highlightItem(highlightedIndex);
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      const lis = dropdown.querySelectorAll('li[data-index]');
       if (highlightedIndex >= 0 && lis[highlightedIndex]) {
         const filtered = getFilteredItems(input.value);
         selectItem(filtered[highlightedIndex]);
@@ -1650,7 +1665,7 @@ function createCombobox(config) {
   }
 
   document.addEventListener('click', (e) => {
-    if (!input.closest('.combobox-wrapper').contains(e.target)) {
+    if (!wrapper || !wrapper.contains(e.target)) {
       closeDropdown();
     }
   });
@@ -1740,6 +1755,11 @@ function initLoginCombobox() {
 
 function initSendCombobox() {
   const exclude = [state.participantId, CONFIG.ADMIN_ID];
+  if (sendCombobox) {
+    sendCombobox.setItems(state.participants);
+    sendCombobox.setExcludeIds(exclude);
+    return;
+  }
   sendCombobox = createCombobox({
     input: DOM.sendReceiver,
     dropdown: DOM.sendDropdown,
@@ -2175,7 +2195,6 @@ async function startParticipantSubscriptions() {
         setParticipantsCache(rows);
         state.trophy.teammates = data.getTeammates(pid, state.participants);
         refreshComboboxItems();
-        if (sendCombobox) initSendCombobox();
         updateParticipantGreeting();
         renderProfile();
         renderStaffFacilitatorPanel();
