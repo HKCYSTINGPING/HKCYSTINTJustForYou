@@ -15,7 +15,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 
 const ORIGIN = 'http://127.0.0.1:8123';
-const VOTER = '1A';
+const VOTER = '1B';
 const results = [];
 let phones = {};
 

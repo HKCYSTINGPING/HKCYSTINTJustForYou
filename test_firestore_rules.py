@@ -78,20 +78,26 @@ def query(collection, field=None, value=None):
 
 
 def main():
-    print("以參加者 1A 登入…")
-    p = sign_in("1a@tnit.local", "1A1A1A")
     print("以管理員登入…")
     a = sign_in("admin@tnit.local", "23082026")
 
+    # Reset voting config to CLOSED so unpublish checks work accurately
+    call(a, "/config/voting?updateMask.fieldPaths=voting_status", "PATCH", {
+        "fields": {"voting_status": {"stringValue": "VOTING_CLOSED"}}
+    })
+
+    print("以參加者 1B 登入…")
+    p = sign_in("1b@tnit.local", "1B1B1B")
+
     print("\n參加者應該做得到嘅嘢：")
-    check("讀取自己嘅名冊資料", True, *call(p, "/participants/1A"))
+    check("讀取自己嘅名冊資料", True, *call(p, "/participants/1B"))
     check("讀取留言開關設定", True, *call(p, "/config/messaging"))
     check("讀取獎項清單", True, *call(p, "/trophies/T01"))
-    ok, detail = call(p, ":runQuery", "POST", query("messages", "receiver_id", "1A"))
+    ok, detail = call(p, ":runQuery", "POST", query("messages", "receiver_id", "1B"))
     check("查詢寄畀自己嘅留言", True, ok, detail)
-    ok, detail = call(p, ":runQuery", "POST", query("messages", "sender_id", "1A"))
+    ok, detail = call(p, ":runQuery", "POST", query("messages", "sender_id", "1B"))
     check("查詢自己寄出嘅留言", True, ok, detail)
-    check("讀取自己嘅投票紀錄", True, *call(p, "/submissions/1A"))
+    check("讀取自己嘅投票紀錄", True, *call(p, "/submissions/1B"))
 
     print("\n參加者應該被擋嘅嘢：")
     ok, detail = call(p, ":runQuery", "POST", query("messages"))
@@ -99,9 +105,9 @@ def main():
     ok, detail = call(p, ":runQuery", "POST", query("messages", "receiver_id", "2B"))
     check("偷睇 2B 收到嘅留言", False, ok, detail)
     check("偷睇 2B 嘅投票紀錄", False, *call(p, "/submissions/2B"))
-    check("未公布就睇成績", False, *call(p, "/results/1A"))
+    check("未公布就睇成績", False, *call(p, "/results/1B"))
     check("改名冊（改自己組別）", False, *call(
-        p, "/participants/1A", "PATCH",
+        p, "/participants/1B", "PATCH",
         {"fields": {"group_id": {"stringValue": "HACKED"}}},
     ))
     check("擅自改留言開關", False, *call(
@@ -123,7 +129,7 @@ def main():
     ok, detail = call(a, ":runQuery", "POST", query("messages"))
     check("讀取全部留言", True, ok, detail)
     check("讀取任何人嘅投票紀錄", True, *call(a, "/submissions/2B"))
-    check("讀取電話號碼", True, *call(a, "/contacts/1A"))
+    check("讀取電話號碼", True, *call(a, "/contacts/1B"))
     check("修改留言開關", True, *call(
         a, "/config/messaging?updateMask.fieldPaths=status", "PATCH",
         {"fields": {"status": {"stringValue": "OPEN"}}},
@@ -134,7 +140,7 @@ def main():
     # deleting something that is already gone would pass no matter what.
     for probe in ("cleanup-a", "cleanup-b"):
         call(a, f"/messages?documentId={probe}", "POST", {"fields": {
-            "sender_id": {"stringValue": "1A"},
+            "sender_id": {"stringValue": "1B"},
             "receiver_id": {"stringValue": "2B"},
             "content": {"stringValue": "清理測試"},
             "status": {"stringValue": "active"},
@@ -143,7 +149,7 @@ def main():
 
     print("\n參加者仍然唔可以：")
     check("刪走留言", False, *call(p, "/messages/cleanup-b", "DELETE"))
-    check("讀取電話號碼", False, *call(p, "/contacts/1A"))
+    check("讀取電話號碼", False, *call(p, "/contacts/1B"))
     call(a, "/messages/cleanup-b", "DELETE")
 
     passed = sum(results)

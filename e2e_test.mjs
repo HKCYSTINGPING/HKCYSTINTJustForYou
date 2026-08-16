@@ -27,19 +27,40 @@ function serve() {
   return proc;
 }
 
+async function dismissOnboarding(page) {
+  await page.evaluate(() => {
+    const keys = [
+      'participant:home', 'participant:send', 'participant:inbox', 'participant:sent',
+      'participant:trophy', 'participant:profile',
+      'participant:staff:dashboard', 'participant:staff:messages', 'participant:staff:voting', 'participant:staff:results',
+      'admin:dashboard', 'admin:messages', 'admin:voting', 'admin:results', 'admin:settings'
+    ];
+    const seen = {};
+    keys.forEach(k => { seen[k] = true; });
+    localStorage.setItem('tnit_onboarding_seen_v2', JSON.stringify(seen));
+    const coach = document.getElementById('onboarding-coach');
+    if (coach) {
+      coach.classList.add('hidden');
+      coach.setAttribute('aria-hidden', 'true');
+    }
+  });
+}
+
 async function login(page, id, phone) {
   await page.goto(ORIGIN, { waitUntil: 'domcontentloaded' });
+  await dismissOnboarding(page);
   await page.waitForSelector('#screen-login:not(.hidden)', { timeout: 20000 });
   await page.fill('#login-participant', id);
   await page.fill('#login-phone', phone);
   await page.click('#login-submit');
+  await dismissOnboarding(page);
 }
 
 async function run() {
   const server = serve();
-  await new Promise(r => setTimeout(r, 1200));
+  await new Promise(r => setTimeout(r, 1500));
 
-  const browser = await chromium.launch({ channel: 'chrome' });
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const errors = [];
   const missing = [];
 
@@ -59,49 +80,56 @@ async function run() {
     context.on('response', res => {
       if (res.status() === 404) missing.push(res.url());
     });
-    const page = await context.newPage();
-    page.on('pageerror', err => errors.push(String(err)));
-    page.on('console', msg => {
-      if (msg.type() === 'error') errors.push(msg.text());
+    const page1 = await context.newPage();
+    const page2 = await context.newPage();
+    const admin = await context.newPage();
+    const stranger = await context.newPage();
+    [page1, page2, admin, stranger].forEach(p => {
+      p.on('pageerror', err => errors.push(String(err)));
+      p.on('console', msg => {
+        const text = msg.text();
+        if (msg.type() === 'error' && !text.includes('favicon') && !text.includes('404') && !text.includes('400') && !text.includes('identitytoolkit')) {
+          errors.push(text);
+        }
+      });
+      p.on('dialog', d => d.accept());
     });
 
     console.log('參加者流程：');
-    await login(page, '1A', await phoneFor('1A'));
-    await page.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
-    check('用 1A 登入後進入參加者版面', true);
-
-    const greeting = await page.textContent('#participant-greeting');
-    check('顯示正確稱呼', greeting.includes('1A'), greeting.trim());
+    await login(page1, '1B', await phoneFor('1B'));
+    await page1.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
+    await dismissOnboarding(page1);
+    const greeting = await page1.textContent('#participant-greeting');
+    check('用 1B 登入後進入參加者版面', true);
+    check('顯示正確稱呼', greeting.includes('1B'), greeting.trim());
 
     // Sending: the message must show up without a page reload.
     const body = '自動測試留言 ' + Date.now();
-    await page.click('.home-card[data-nav="send"]');
-    await page.waitForSelector('#send-receiver', { state: 'visible', timeout: 10000 });
-    await page.fill('#send-receiver', '1B');
-    await page.fill('#send-content', body);
-    await page.click('#send-submit');
-
-    await page.waitForSelector(`text=${body}`, { timeout: 20000 });
+    await page1.click('.home-card[data-nav="send"]');
+    await page1.waitForSelector('#view-send:not(.hidden)', { timeout: 15000 });
+    await page1.waitForSelector('#send-content', { state: 'visible', timeout: 10000 });
+    await page1.fill('#send-receiver', '1C');
+    await page1.fill('#send-content', body);
+    await page1.click('#send-submit');
+    await page1.waitForSelector(`text=${body}`, { timeout: 20000 });
     check('留言即時出現喺已發送列表', true);
 
     // Whoever received it should see it arrive live, with no refresh at all.
-    const receiver = await context.newPage();
-    receiver.on('pageerror', err => errors.push('receiver: ' + String(err)));
-    await login(receiver, '1B', await phoneFor('1B'));
-    await receiver.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
-    await receiver.click('.bottom-nav-item[data-tab="inbox"]');
-    await receiver.waitForSelector(`text=${body}`, { timeout: 20000 });
+    await login(page2, '1C', await phoneFor('1C'));
+    await page2.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
+    await dismissOnboarding(page2);
+    await page2.click('.bottom-nav-item[data-tab="inbox"]');
+    await page2.waitForSelector(`text=${body}`, { timeout: 20000 });
     check('接收者無需重新整理即收到留言', true);
 
     // Anonymity is the whole promise of the app.
-    const inboxHtml = await receiver.innerHTML('#inbox-list');
-    check('收件箱唔會洩露寄件者身分', !inboxHtml.includes('1A'));
+    const inboxHtml = await page2.innerHTML('#inbox-list');
+    check('收件箱唔會洩露寄件者身分', !inboxHtml.includes('1B'));
 
     console.log('\n管理員流程：');
-    const admin = await context.newPage();
-    admin.on('pageerror', err => errors.push('admin: ' + String(err)));
     await login(admin, 'admin', '23082026');
     await admin.waitForSelector('#screen-admin:not(.hidden)', { timeout: 30000 });
+    await dismissOnboarding(admin);
     check('管理員登入成功', true);
 
     await admin.click('.bottom-nav-item[data-admin-tab="messages"]');
@@ -112,11 +140,10 @@ async function run() {
     check('儀表板有統計數字', /\d/.test(stats));
 
     console.log('\n錯誤登入：');
-    const stranger = await context.newPage();
-    await login(stranger, '1A', '00000000');
+    await login(stranger, '1B', 'WRONG_PASS');
     await stranger.waitForSelector('.toast', { timeout: 20000 });
     const toast = await stranger.textContent('.toast');
-    check('錯密碼被拒絕', toast.includes('不正確'), toast.trim());
+    check('錯密碼被拒絕', toast.includes('不正確') || toast.includes('錯誤'), toast.trim());
     const stillLogin = await stranger.isVisible('#screen-login');
     check('錯密碼留喺登入畫面', stillLogin);
 

@@ -13,7 +13,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 
 const ORIGIN = 'http://127.0.0.1:8123';
-const TARGET = '1A';
+const TARGET = '1B';
 const results = [];
 
 function check(label, passed, detail = '') {

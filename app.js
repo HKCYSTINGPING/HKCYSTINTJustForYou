@@ -5856,12 +5856,6 @@ function bindEvents() {
   DOM.participantLogout.addEventListener('click', handleLogout);
   DOM.adminLogout.addEventListener('click', handleLogout);
 
-  // Allow alphanumeric passwords (seat id). Digits-only stripping is only for
-  // the admin phone editor.
-  DOM.loginPhone.addEventListener('input', () => {
-    DOM.loginPhone.value = String(DOM.loginPhone.value || '').toUpperCase();
-  });
-
   if (DOM.loginNumpadToggle) {
     // Keep the button from stealing focus on touch; otherwise iOS may never
     // open the keyboard until the user taps the text field separately.

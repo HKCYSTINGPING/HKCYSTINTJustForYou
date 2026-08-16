@@ -86,17 +86,17 @@ async function run() {
     console.log('========================================');
 
     // Test 1.1: Invalid login
-    await login(page1, '1A', 'WRONG_PASSWORD');
+    await login(page1, '1B', 'WRONG_PASSWORD');
     await page1.waitForSelector('.toast', { timeout: 10000 });
     const errToast = (await page1.textContent('.toast')).trim();
     check('錯誤密碼被拒絕並彈出提示', errToast.includes('不正確') || errToast.includes('錯誤'), errToast);
 
-    // Test 1.2: Participant 1A Login
-    await login(page1, '1A', '1A');
+    // Test 1.2: Participant 1B Login (with lowercase password '1b' to verify case-insensitivity)
+    await login(page1, '1B', '1b');
     await page1.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
     await dismissOnboarding(page1);
-    const greeting1A = (await page1.textContent('#participant-greeting')).trim();
-    check('參加者 1A 成功登入並顯示正確問候語', greeting1A.includes('1A'), greeting1A);
+    const greeting1B = (await page1.textContent('#participant-greeting')).trim();
+    check('參加者 1B 成功使用小寫密碼登入並顯示正確問候語', greeting1B.includes('1B'), greeting1B);
 
     // Test 1.3: Staff WILL Login
     await login(staffPage, 'WILL', '23082026');
@@ -115,23 +115,24 @@ async function run() {
     console.log('2. 匿名留言功能完整性測試');
     console.log('========================================');
 
-    // Participant 1B Login
-    await login(page2, '1B', '1B');
+    // Participant 1C Login (with uppercase password '1C')
+    await login(page2, '1C', '1C');
     await page2.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
     await dismissOnboarding(page2);
 
-    // 1A navigates to Send View
+    // 1B navigates to Send View
     await page1.click('.home-card[data-nav="send"]');
-    await page1.waitForSelector('#send-receiver', { state: 'visible', timeout: 10000 });
+    await page1.waitForSelector('#view-send:not(.hidden)', { timeout: 15000 });
+    await page1.waitForSelector('#send-content', { state: 'visible', timeout: 10000 });
 
     // Test 2.1: Character counter
     await page1.fill('#send-content', '測試留言內容 12345');
     const charCounter = (await page1.textContent('#char-counter')).trim();
     check('字數計數器即時反應輸入長度', charCounter.includes('12/300'), charCounter);
 
-    // Test 2.2: Combobox selection & Sending message to 1B
+    // Test 2.2: Combobox selection & Sending message to 1C
     const uniqueMsg = `測試匿名祝福_${Date.now()}`;
-    await page1.fill('#send-receiver', '1B');
+    await page1.fill('#send-receiver', '1C');
     await page1.fill('#send-content', uniqueMsg);
     await page1.click('#send-submit');
 
@@ -139,19 +140,19 @@ async function run() {
     await page1.waitForSelector(`text=${uniqueMsg}`, { timeout: 15000 });
     check('留言送出後即時出現在發送者「已發送」列表', true);
 
-    // Test 2.4: Realtime reception in 1B Inbox
+    // Test 2.4: Realtime reception in 1C Inbox
     await page2.click('.bottom-nav-item[data-tab="inbox"]');
     await page2.waitForSelector(`text=${uniqueMsg}`, { timeout: 15000 });
-    check('接收者 1B 在收件箱即時收到留言（無需重新整理）', true);
+    check('接收者 1C 在收件箱即時收到留言（無需重新整理）', true);
 
     // Test 2.5: Absolute anonymity verification
     const inboxListHtml = await page2.innerHTML('#inbox-list');
-    check('接收者收件箱絕對不洩露發送者編號 1A', !inboxListHtml.includes('1A'));
+    check('接收者收件箱絕對不洩露發送者編號 1B', !inboxListHtml.includes('1B'));
 
     // Test 2.6: Admin monitor view
     await adminPage.click('.bottom-nav-item[data-admin-tab="messages"]');
     await adminPage.waitForSelector(`text=${uniqueMsg}`, { timeout: 15000 });
-    check('管理員可在即時留言監控查閱完整發送紀錄（1A -> 1B）', true);
+    check('管理員可在即時留言監控查閱完整發送紀錄（1B -> 1C）', true);
 
     console.log('\n========================================');
     console.log('3. Staff 本組管理與監控測試');
@@ -217,12 +218,12 @@ async function run() {
     );
     check('管理員全域開啟投票，並覆蓋所有組別狀態', true);
 
-    // 1A performs Trophy Voting
+    // 1B performs Trophy Voting
     await page1.click('.bottom-nav-item[data-tab="trophy"]');
     await page1.waitForSelector('#trophy-teammates .trophy-card', { timeout: 15000 });
     await page1.waitForSelector('#trophy-teammates .trophy-chip:not([disabled])', { timeout: 15000 });
     const cards = await page1.$$('#trophy-teammates .trophy-card');
-    check('參加者 1A 看到本組隊友配對卡片', cards.length > 0, `${cards.length} 位隊友`);
+    check('參加者 1B 看到本組隊友配對卡片', cards.length > 0, `${cards.length} 位隊友`);
 
     // Assign chips to each teammate
     for (let i = 0; i < cards.length; i++) {
@@ -274,20 +275,20 @@ async function run() {
     );
     check('管理員成功公布得獎結果', true);
 
-    // Participant 1A verifies results popup & confetti
+    // Participant 1B verifies results popup & confetti
     await page1.waitForSelector('#trophy-results-modal:not(.hidden)', { timeout: 25000 });
-    check('參加者 1A 即時收到得獎結果視窗（自動公布彈窗）', true);
+    check('參加者 1B 即時收到得獎結果視窗（自動公布彈窗）', true);
 
     console.log('\n========================================');
     console.log('5. 使用者個人檔案與登出流程測試');
     console.log('========================================');
 
-    // 1A updates display name
+    // 1B updates display name
     await page1.click('#trophy-results-modal-close');
     await page1.waitForSelector('#trophy-results-modal', { state: 'hidden', timeout: 10000 });
     await page1.click('.bottom-nav-item[data-tab="profile"]');
     await page1.waitForSelector('#profile-display-name', { timeout: 10000 });
-    await page1.fill('#profile-display-name', '測試隊長1A');
+    await page1.fill('#profile-display-name', '測試隊長1B');
     await page1.click('#profile-save-name');
     await page1.waitForFunction(() => {
       const toast = document.querySelector('.toast');
@@ -303,10 +304,10 @@ async function run() {
       return toast && toast.textContent.includes('已清除顯示名稱');
     }, { timeout: 15000 });
 
-    // 1A logout
+    // 1B logout
     await page1.click('#participant-logout');
     await page1.waitForSelector('#screen-login:not(.hidden)', { timeout: 15000 });
-    check('參加者 1A 登出後正常返回登入畫面', true);
+    check('參加者 1B 登出後正常返回登入畫面', true);
 
     // Admin logout
     await adminPage.click('#admin-logout');

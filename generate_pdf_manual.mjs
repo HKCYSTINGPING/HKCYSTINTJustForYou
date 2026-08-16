@@ -421,7 +421,7 @@ const htmlContent = `<!DOCTYPE html>
       </li>
       <li class="step-item">
         <div class="step-num">2</div>
-        <strong>輸入登入密碼</strong>：在「密碼」欄位輸入由大會發給你的專屬密碼。
+        <strong>輸入登入密碼</strong>：在「密碼」欄位輸入由大會發給你的專屬密碼（系統支援大階及細階英文字母，大小寫均可正常登入）。
       </li>
       <li class="step-item">
         <div class="step-num">3</div>

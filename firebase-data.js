@@ -58,9 +58,28 @@ export async function signIn(participantId, phone) {
   // in, closing the tab (or signing out) clears it.
   await setPersistence(auth, browserSessionPersistence);
   const email = isAdminId(participantId) ? ADMIN_EMAIL : participantEmail(participantId);
-  const password = resolveAuthPassword(participantId, phone);
-  const credential = await signInWithEmailAndPassword(auth, email, password);
-  return credential.user;
+  const candidates = getAuthPasswordCandidates(participantId, phone);
+  let lastErr = null;
+
+  for (const password of candidates) {
+    try {
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      return credential.user;
+    } catch (err) {
+      lastErr = err;
+      const code = err && err.code;
+      const isWrongPassword = code === 'auth/invalid-credential'
+        || code === 'auth/invalid-login-credentials'
+        || code === 'auth/wrong-password';
+      if (!isWrongPassword) {
+        throw err;
+      }
+    }
+  }
+
+  if (lastErr) {
+    throw lastErr;
+  }
 }
 
 /**
@@ -68,8 +87,9 @@ export async function signIn(participantId, phone) {
  * like "1A" are shorter, so we repeat the id until it meets the minimum.
  * The participant still types just their id; this expansion is internal.
  */
-export function authPasswordForParticipantId(participantId) {
-  const id = String(participantId || '').trim().toUpperCase();
+export function authPasswordForParticipantId(participantId, toUpper = true) {
+  let id = String(participantId || '').trim();
+  if (toUpper) id = id.toUpperCase();
   if (!id) return '';
   if (id.length >= 6) return id;
   let password = id;
@@ -80,11 +100,44 @@ export function authPasswordForParticipantId(participantId) {
 /** Map what the user typed into the Auth password we actually stored. */
 export function resolveAuthPassword(participantId, entered) {
   const raw = String(entered || '').trim();
-  const id = String(participantId || '').trim().toUpperCase();
-  if (raw && id && raw.toUpperCase() === id) {
-    return authPasswordForParticipantId(id);
+  const id = String(participantId || '').trim();
+  if (raw && id && raw.toUpperCase() === id.toUpperCase()) {
+    return authPasswordForParticipantId(id.toUpperCase());
   }
   return raw;
+}
+
+/**
+ * Returns candidate password variants (as typed, uppercase, lowercase, resolved)
+ * so users can log in regardless of upper/lower case typing.
+ */
+export function getAuthPasswordCandidates(participantId, entered) {
+  const raw = String(entered || '').trim();
+  const id = String(participantId || '').trim();
+  if (!raw) return [];
+
+  const candidates = [];
+  const resolved = resolveAuthPassword(id, raw);
+  candidates.push(resolved);
+
+  if (raw !== resolved) {
+    candidates.push(raw);
+  }
+
+  const upper = raw.toUpperCase();
+  const resolvedUpper = resolveAuthPassword(id, upper);
+  if (resolvedUpper !== resolved && !candidates.includes(resolvedUpper)) {
+    candidates.push(resolvedUpper);
+  } else if (upper !== resolved && !candidates.includes(upper)) {
+    candidates.push(upper);
+  }
+
+  const lower = raw.toLowerCase();
+  if (!candidates.includes(lower)) {
+    candidates.push(lower);
+  }
+
+  return candidates;
 }
 
 export function signOutUser() {
