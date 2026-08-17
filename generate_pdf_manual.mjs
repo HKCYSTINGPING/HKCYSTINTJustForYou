@@ -508,7 +508,7 @@ const htmlContent = `<!DOCTYPE html>
           <strong>自訂顯示名稱</strong>：輸入你希望在系統內顯示的暱稱（例如「小明」），點擊「儲存名稱」。更新後全系統的留言、獎項及隊友名單均會同步顯示該名稱（登入依然使用原編號）。
         </li>
         <li style="margin-bottom: 8px;">
-          <strong>自主修改密碼</strong>：在「修改密碼」卡片輸入新密碼（至少 6 位字元），點擊「更新密碼」。修改後下次登入請使用新密碼。
+          <strong>自主修改密碼</strong>：在「修改密碼」卡片輸入新密碼，點擊「更新密碼」。修改後下次登入請使用新密碼。
         </li>
         <li style="margin-bottom: 8px;">
           <strong>互動統計數據</strong>：即時查看個人發送留言數、收件數、投票狀態等統計卡片。

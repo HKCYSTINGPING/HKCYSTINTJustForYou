@@ -41,7 +41,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v8';
+import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v9';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -65,32 +65,36 @@ export function isAdminId(participantId) {
   return String(participantId || '').trim().toUpperCase() === 'ADMIN';
 }
 
+function hideAuthCooldown(err) {
+  const code = err && err.code;
+  const msg = String((err && err.message) || '');
+  if (
+    code === 'auth/too-many-requests' ||
+    /too[-_ ]many[-_ ]requests|TOO_MANY_ATTEMPTS|嘗試次數過多|稍等一陣/i.test(msg)
+  ) {
+    const wrapped = new Error('參加者編號或密碼不正確');
+    wrapped.code = 'auth/invalid-credential';
+    return wrapped;
+  }
+  return err;
+}
+
 export async function signIn(participantId, phone) {
   // Keep the Firebase session in this browser tab only: reload stays signed
   // in, closing the tab (or signing out) clears it.
   await setPersistence(auth, browserSessionPersistence);
   const email = isAdminId(participantId) ? ADMIN_EMAIL : participantEmail(participantId);
-  const candidates = getAuthPasswordCandidates(participantId, phone);
-  let lastErr = null;
-
-  for (const password of candidates) {
-    try {
-      const credential = await signInWithEmailAndPassword(auth, email, password);
-      return credential.user;
-    } catch (err) {
-      lastErr = err;
-      const code = err && err.code;
-      const isWrongPassword = code === 'auth/invalid-credential'
-        || code === 'auth/invalid-login-credentials'
-        || code === 'auth/wrong-password';
-      if (!isWrongPassword) {
-        throw err;
-      }
-    }
+  const password = resolveAuthPassword(participantId, phone);
+  if (!password) {
+    const err = new Error('請輸入密碼');
+    err.code = 'auth/invalid-credential';
+    throw err;
   }
-
-  if (lastErr) {
-    throw lastErr;
+  try {
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    return credential.user;
+  } catch (err) {
+    throw hideAuthCooldown(err);
   }
 }
 
@@ -126,33 +130,6 @@ export function resolveAuthPassword(participantId, entered) {
   return raw;
 }
 
-/**
- * Returns clean candidate password(s) ensuring all candidates are valid (>= 6 chars)
- * and avoiding redundant calls to Firebase Auth.
- */
-export function getAuthPasswordCandidates(participantId, entered) {
-  const raw = String(entered || '').trim();
-  const id = String(participantId || '').trim();
-  if (!raw) return [];
-
-  const candidates = [];
-  const primary = resolveAuthPassword(id, raw);
-  if (primary && primary.length >= 6) {
-    candidates.push(primary);
-  }
-
-  // If user entered raw string with mixed/lower case >= 6 chars different from primary
-  if (raw.length >= 6 && raw !== primary && !candidates.includes(raw)) {
-    candidates.push(raw);
-  }
-
-  if (candidates.length === 0) {
-    candidates.push(primary || raw);
-  }
-
-  return candidates;
-}
-
 export function signOutUser() {
   return signOut(auth);
 }
@@ -180,7 +157,15 @@ export function waitForAuth() {
 }
 
 export function describeAuthError(err) {
-  switch (err && err.code) {
+  const code = err && err.code;
+  const msg = String((err && err.message) || '');
+  if (
+    code === 'auth/too-many-requests' ||
+    /too[-_ ]many[-_ ]requests|TOO_MANY_ATTEMPTS|嘗試次數過多|稍等一陣/i.test(msg)
+  ) {
+    return '參加者編號或密碼不正確';
+  }
+  switch (code) {
     case 'auth/invalid-credential':
     case 'auth/invalid-login-credentials':
     case 'auth/wrong-password':
@@ -190,12 +175,12 @@ export function describeAuthError(err) {
       return '參加者編號格式不正確';
     case 'auth/user-disabled':
       return '此帳戶已被停用，請聯絡工作人員';
-    case 'auth/too-many-requests':
-      return '嘗試次數過多，請稍等一陣再試';
+    case 'auth/weak-password':
+      return '密碼更新失敗，請再試一次';
     case 'auth/network-request-failed':
       return '網絡連線失敗，請檢查你的網絡';
     default:
-      return (err && err.message) || '登入失敗，請再試一次';
+      return msg || '登入失敗，請再試一次';
   }
 }
 
@@ -395,22 +380,6 @@ export function subscribeMessagingStatus(onData, onError) {
 export function setMessagingStatus(status) {
   return setDoc(doc(db, 'config', 'messaging'), {
     status: status === 'CLOSE' ? 'CLOSE' : 'OPEN'
-  }, { merge: true });
-}
-
-export async function fetchLoginLockout() {
-  const snapshot = await getDoc(doc(db, 'config', 'login_lockout'));
-  const data = snapshot.exists() ? (snapshot.data() || {}) : {};
-  return {
-    locked_until: toIso(data.locked_until),
-    updated_at: toIso(data.updated_at)
-  };
-}
-
-export function setLoginLockout(lockedUntil) {
-  return setDoc(doc(db, 'config', 'login_lockout'), {
-    locked_until: lockedUntil || '',
-    updated_at: serverTimestamp()
   }, { merge: true });
 }
 
@@ -891,9 +860,7 @@ export async function fetchContact(participantId) {
 export async function updateMyPassword(newPassword) {
   if (!auth.currentUser) throw new Error('未登入');
   const clean = String(newPassword || '').trim();
-  if (clean.length < 6) {
-    throw new Error('密碼長度至少需要 6 個字元');
-  }
+  if (!clean) throw new Error('請輸入密碼');
   const identity = identityFromUser(auth.currentUser);
   const pid = identity ? identity.participantId : '';
   const authPwd = resolveAuthPassword(pid, clean);
@@ -925,52 +892,31 @@ async function withSecondaryAuth(fn) {
   }
 }
 
-async function signInSecondaryWithHints(participantId, hints) {
+async function signInSecondaryOnce(participantId, hint) {
   const email = participantEmail(participantId);
-  const tried = new Set();
-  let lastErr = null;
-  for (const hint of hints) {
-    for (const candidate of getAuthPasswordCandidates(participantId, hint)) {
-      if (!candidate || tried.has(candidate)) continue;
-      tried.add(candidate);
-      try {
-        return await signInWithEmailAndPassword(secondaryAuth, email, candidate);
-      } catch (err) {
-        lastErr = err;
-        const code = err && err.code;
-        const retryable = code === 'auth/invalid-credential'
-          || code === 'auth/invalid-login-credentials'
-          || code === 'auth/wrong-password'
-          || code === 'auth/user-not-found';
-        if (!retryable) throw err;
-      }
-    }
+  const password = resolveAuthPassword(participantId, hint);
+  if (!password) {
+    const err = new Error('無法驗證現有登入帳戶');
+    err.code = 'auth-password-sync-failed';
+    throw err;
   }
-  if (lastErr) throw lastErr;
-  const missing = new Error('無法驗證現有登入帳戶');
-  missing.code = 'auth-password-sync-failed';
-  throw missing;
+  return signInWithEmailAndPassword(secondaryAuth, email, password);
 }
 
 async function syncAuthPassword(participantId, newPassword, oldPassword) {
   const pid = String(participantId || '').trim().toUpperCase();
   const nextPwd = resolveAuthPassword(pid, newPassword);
-  if (!nextPwd || nextPwd.length < 6) {
-    throw new Error('密碼長度至少需要 6 個字元（短編號會自動展開）');
-  }
+  if (!nextPwd) throw new Error('請輸入密碼');
   const email = participantEmail(pid);
-  const hints = [oldPassword, pid, authPasswordForParticipantId(pid)];
 
   await withSecondaryAuth(async () => {
     try {
-      const cred = await signInSecondaryWithHints(pid, hints);
+      const cred = await signInSecondaryOnce(pid, oldPassword || pid);
       if (cred && cred.user) {
         await updatePassword(cred.user, nextPwd);
         return;
       }
     } catch (err) {
-      const code = err && err.code;
-      if (code === 'auth/too-many-requests') throw err;
       try {
         await createUserWithEmailAndPassword(secondaryAuth, email, nextPwd);
         return;
@@ -991,19 +937,13 @@ async function ensureAuthAccount(participantId, password) {
 }
 
 async function deleteAuthAccount(participantId, passwordHint) {
-  const email = participantEmail(participantId);
-  const candidates = getAuthPasswordCandidates(participantId, passwordHint);
-  await withSecondaryAuth(async (secondary) => {
-    let signedIn = false;
-    for (const candidate of candidates) {
-      try {
-        await signInWithEmailAndPassword(secondary, email, candidate);
-        signedIn = true;
-        break;
-      } catch (_) { /* try next */ }
+  await withSecondaryAuth(async () => {
+    try {
+      await signInSecondaryOnce(participantId, passwordHint);
+    } catch (_) {
+      return;
     }
-    if (!signedIn || !secondary.currentUser) return;
-    await deleteUser(secondary.currentUser);
+    if (secondaryAuth.currentUser) await deleteUser(secondaryAuth.currentUser);
   });
 }
 

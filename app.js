@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v8';
+import * as data from './firebase-data.js?v=20260817v9';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -120,7 +120,6 @@ const state = {
     detail: null
   },
   adminForceLogoutTarget: null,
-  adminLoginLockoutUntil: '',
   presence: [],
   staffGroup: {
     submissions: [],
@@ -657,7 +656,6 @@ function cacheDOM() {
   DOM.forceLogoutCancel = document.getElementById('force-logout-cancel');
   DOM.forceLogoutConfirm = document.getElementById('force-logout-confirm');
   DOM.forceLogoutAllModal = document.getElementById('force-logout-all-modal');
-  DOM.forceLogoutAllTime = document.getElementById('force-logout-all-time');
   DOM.forceLogoutAllCancel = document.getElementById('force-logout-all-cancel');
   DOM.forceLogoutAllConfirm = document.getElementById('force-logout-all-confirm');
   DOM.trophyProgressText = document.getElementById('trophy-progress-text');
@@ -1722,24 +1720,6 @@ function isStaffParticipant(p) {
   return !!(p && (isStaffPerson(p) || isStaffGroup(p.group_id)));
 }
 
-function buildLockoutUntilIso(timeValue) {
-  const raw = String(timeValue || '').trim();
-  if (!/^\d{2}:\d{2}$/.test(raw)) return '';
-  const [hh, mm] = raw.split(':').map(Number);
-  const now = new Date();
-  const until = new Date(now);
-  until.setHours(hh, mm, 0, 0);
-  if (until.getTime() <= now.getTime()) return '';
-  return until.toISOString();
-}
-
-function formatClockTime(iso) {
-  if (!iso) return '';
-  const dt = new Date(iso);
-  if (!Number.isFinite(dt.getTime())) return '';
-  return dt.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
 /** Login dropdown: seat roster only. Staff type their own id. */
 function getLoginMenuParticipants() {
   return state.participants.filter(p => !isStaffParticipant(p));
@@ -2046,16 +2026,9 @@ async function handleLogin(e) {
 
   await runProgressButton(DOM.loginSubmit, (async () => {
     try {
-      // Firebase checks the password. Numbered seats type their own id; Staff
-      // still use their phone. Short ids are expanded inside signIn to meet
-      // Auth's 6-character minimum.
       await data.signIn(participantId, password);
     } catch (err) {
       showToast(data.describeAuthError(err), 'error');
-      return;
-    }
-
-    if (!(await verifyLoginAllowedAfterAuth(participantId, isAdmin))) {
       return;
     }
 
@@ -2136,42 +2109,12 @@ async function tryRestoreSession() {
     saveSession(state.participantId, state.isAdmin);
   }
 
-  if (!(await verifyLoginAllowedAfterAuth(state.participantId, state.isAdmin, true))) {
-    return false;
-  }
-
   if (state.isAdmin) {
     await enterAdminDashboard();
   } else {
     await enterParticipantDashboard();
   }
   return true;
-}
-
-async function verifyLoginAllowedAfterAuth(participantId, isAdmin, silent = false) {
-  if (isAdmin || !isSeatParticipantId(participantId)) return true;
-  try {
-    const lockout = await data.fetchLoginLockout();
-    state.adminLoginLockoutUntil = lockout.locked_until || '';
-    const until = lockout.locked_until ? new Date(lockout.locked_until).getTime() : 0;
-    if (until && Number.isFinite(until) && until > Date.now()) {
-      await data.signOutUser().catch(() => {});
-      clearSession();
-      state.participantId = null;
-      state.sessionStartedAt = 0;
-      state.isAdmin = false;
-      if (!silent) {
-        showToast('請於 ' + formatClockTime(lockout.locked_until) + ' 後再登入', 'info');
-      }
-      return false;
-    }
-    return true;
-  } catch (err) {
-    if (!silent) showToast(data.describeFirestoreError(err), 'error');
-    await data.signOutUser().catch(() => {});
-    clearSession();
-    return false;
-  }
 }
 
 /**
@@ -4261,14 +4204,8 @@ function closeForceLogoutModal() {
 
 function openForceLogoutAllModal() {
   if (!DOM.forceLogoutAllModal) return;
-  const now = new Date();
-  now.setMinutes(now.getMinutes() + 5, 0, 0);
-  if (DOM.forceLogoutAllTime) {
-    DOM.forceLogoutAllTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  }
   DOM.forceLogoutAllModal.classList.remove('hidden');
   syncBodyModalOpen();
-  DOM.forceLogoutAllTime?.focus();
 }
 
 function closeForceLogoutAllModal() {
@@ -5029,17 +4966,13 @@ async function handleSavePassword() {
     showToast('請輸入新密碼', 'error');
     return;
   }
-  if (newPassword.length < 6) {
-    showToast('密碼長度至少需要 6 個字元', 'error');
-    return;
-  }
   await runProgressButton(DOM.profileSavePassword, (async () => {
     try {
       await data.updateMyPassword(newPassword);
       if (DOM.profilePassword) DOM.profilePassword.value = '';
       showToast('密碼已成功更新，下次登入請使用新密碼', 'success');
     } catch (err) {
-      showToast('密碼更新失敗：' + (err && err.message ? err.message : data.describeFirestoreError(err)), 'error');
+      showToast('密碼更新失敗，請再試一次', 'error');
     }
   })());
 }
@@ -6012,16 +5945,10 @@ async function handleAdminForceLogoutAll() {
     return;
   }
   try {
-    const untilIso = buildLockoutUntilIso(DOM.forceLogoutAllTime?.value || '');
-    if (!untilIso) {
-      showToast('請選擇稍後的重新登入時間', 'error');
-      return;
-    }
-    await data.setLoginLockout(untilIso);
-    state.adminLoginLockoutUntil = untilIso;
     await data.forceLogoutParticipants(ids);
     removeLocalPresence(ids);
     closeForceLogoutAllModal();
+    showToast('已強制登出全部參加者', 'success');
   } catch (err) {
     showToast(data.describeFirestoreError(err), 'error');
   }

@@ -11,7 +11,7 @@
   <meta http-equiv="Expires" content="0">
   <title>HKCYS TINT — Just For You</title>
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260817v8">
+  <link rel="stylesheet" href="styles.css?v=20260817v9">
 </head>
 <body>
 
@@ -331,7 +331,7 @@
         </div>
         <div class="card profile-password-card">
           <h3 class="section-title">修改密碼</h3>
-          <p class="form-hint">修改後下次登入請使用新密碼（至少 6 位字元）。</p>
+          <p class="form-hint">修改後下次登入請使用新密碼。</p>
           <div class="form-group">
             <label for="profile-password">新密碼</label>
             <input type="password" id="profile-password" class="input-field" maxlength="40" autocomplete="new-password" placeholder="請輸入新密碼">
@@ -576,11 +576,7 @@
   <div id="force-logout-all-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="force-logout-all-title">
     <div class="modal-card glass-card force-logout-modal-card">
       <h2 id="force-logout-all-title">全部強制登出</h2>
-      <p class="trophy-modal-subtitle">Staff / Admin 不受限制。請設定參加者幾點先可以重新登入。</p>
-      <div class="form-group">
-        <label for="force-logout-all-time">重新登入時間</label>
-        <input type="time" id="force-logout-all-time" class="input-field" step="60">
-      </div>
+      <p class="trophy-modal-subtitle">Staff / Admin 不受限制。參加者可即時重新登入。</p>
       <div class="onboarding-actions">
         <button type="button" id="force-logout-all-cancel" class="btn btn-secondary btn-sm">取消</button>
         <button type="button" id="force-logout-all-confirm" class="btn btn-danger btn-sm btn-progress">
@@ -643,7 +639,7 @@
       </div>
       <div class="form-group">
         <label for="roster-add-password">密碼</label>
-        <input type="text" id="roster-add-password" class="input-field" maxlength="40" autocomplete="off" placeholder="至少 6 位（短編號會自動展開）">
+        <input type="text" id="roster-add-password" class="input-field" maxlength="40" autocomplete="off" placeholder="密碼">
       </div>
       <div class="form-group">
         <label for="roster-add-group">分組</label>
@@ -953,6 +949,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260817v8"></script>
+  <script type="module" src="app.js?v=20260817v9"></script>
 </body>
 </html>
