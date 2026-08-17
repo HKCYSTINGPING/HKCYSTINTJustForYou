@@ -41,7 +41,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v9';
+import { ADMIN_EMAIL, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260817v10';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -79,23 +79,41 @@ function hideAuthCooldown(err) {
   return err;
 }
 
-export async function signIn(participantId, phone) {
-  // Keep the Firebase session in this browser tab only: reload stays signed
-  // in, closing the tab (or signing out) clears it.
-  await setPersistence(auth, browserSessionPersistence);
-  const email = isAdminId(participantId) ? ADMIN_EMAIL : participantEmail(participantId);
-  const password = resolveAuthPassword(participantId, phone);
+function isRetryableAuthLookup(err) {
+  const code = err && err.code;
+  return code === 'auth/invalid-credential'
+    || code === 'auth/invalid-login-credentials'
+    || code === 'auth/wrong-password'
+    || code === 'auth/user-not-found'
+    || code === 'auth/too-many-requests';
+}
+
+async function signInWithResolvedPassword(authInstance, participantId, entered) {
+  const password = resolveAuthPassword(participantId, entered);
   if (!password) {
     const err = new Error('請輸入密碼');
     err.code = 'auth/invalid-credential';
     throw err;
   }
-  try {
-    const credential = await signInWithEmailAndPassword(auth, email, password);
-    return credential.user;
-  } catch (err) {
-    throw hideAuthCooldown(err);
+  const emails = isAdminId(participantId) ? [ADMIN_EMAIL] : participantEmails(participantId);
+  let lastErr = null;
+  for (const email of emails) {
+    try {
+      return await signInWithEmailAndPassword(authInstance, email, password);
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryableAuthLookup(err)) throw hideAuthCooldown(err);
+    }
   }
+  throw hideAuthCooldown(lastErr || new Error('參加者編號或密碼不正確'));
+}
+
+export async function signIn(participantId, phone) {
+  // Keep the Firebase session in this browser tab only: reload stays signed
+  // in, closing the tab (or signing out) clears it.
+  await setPersistence(auth, browserSessionPersistence);
+  const credential = await signInWithResolvedPassword(auth, participantId, phone);
+  return credential.user;
 }
 
 /**
@@ -893,14 +911,7 @@ async function withSecondaryAuth(fn) {
 }
 
 async function signInSecondaryOnce(participantId, hint) {
-  const email = participantEmail(participantId);
-  const password = resolveAuthPassword(participantId, hint);
-  if (!password) {
-    const err = new Error('無法驗證現有登入帳戶');
-    err.code = 'auth-password-sync-failed';
-    throw err;
-  }
-  return signInWithEmailAndPassword(secondaryAuth, email, password);
+  return signInWithResolvedPassword(secondaryAuth, participantId, hint);
 }
 
 async function syncAuthPassword(participantId, newPassword, oldPassword) {

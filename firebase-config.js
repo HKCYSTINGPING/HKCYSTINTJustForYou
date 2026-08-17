@@ -13,12 +13,22 @@ export const firebaseConfig = {
   appId: '1:649245917670:web:dce565a213bade09fc1627',
 };
 
-// Participants log in as 1A / 98765432, which maps to 1a@tnit.local with the
-// phone number as the password. Keeping the mapping in one place means the
-// login form, the migration script and the security rules stay in agreement.
+// Participants log in as 1A / 1A, which maps to 1a@tnit.org (and still
+// 1a@tnit.local for accounts created before the domain switch).
 export const EMAIL_DOMAIN = 'tnit.org';
+export const LEGACY_EMAIL_DOMAIN = 'tnit.local';
 export const ADMIN_EMAIL = 'admin@tnit.local';
 
-export function participantEmail(participantId) {
-  return `${String(participantId || '').trim().toLowerCase()}@${EMAIL_DOMAIN}`;
+export function participantEmail(participantId, domain = EMAIL_DOMAIN) {
+  return `${String(participantId || '').trim().toLowerCase()}@${domain}`;
+}
+
+export function participantEmails(participantId) {
+  const local = String(participantId || '').trim().toLowerCase();
+  if (!local) return [];
+  const emails = [participantEmail(local, EMAIL_DOMAIN)];
+  if (LEGACY_EMAIL_DOMAIN && LEGACY_EMAIL_DOMAIN !== EMAIL_DOMAIN) {
+    emails.push(participantEmail(local, LEGACY_EMAIL_DOMAIN));
+  }
+  return emails;
 }
