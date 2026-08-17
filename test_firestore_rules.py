@@ -86,18 +86,18 @@ def main():
         "fields": {"voting_status": {"stringValue": "VOTING_CLOSED"}}
     })
 
-    print("以參加者 1B 登入…")
-    p = sign_in("1b@tnit.local", "1B1B1B")
+    print("以參加者 1A 登入…")
+    p = sign_in("1a@tnit.org", "1A1A1A")
 
     print("\n參加者應該做得到嘅嘢：")
-    check("讀取自己嘅名冊資料", True, *call(p, "/participants/1B"))
+    check("讀取自己嘅名冊資料", True, *call(p, "/participants/1A"))
     check("讀取留言開關設定", True, *call(p, "/config/messaging"))
     check("讀取獎項清單", True, *call(p, "/trophies/T01"))
-    ok, detail = call(p, ":runQuery", "POST", query("messages", "receiver_id", "1B"))
+    ok, detail = call(p, ":runQuery", "POST", query("messages", "receiver_id", "1A"))
     check("查詢寄畀自己嘅留言", True, ok, detail)
-    ok, detail = call(p, ":runQuery", "POST", query("messages", "sender_id", "1B"))
+    ok, detail = call(p, ":runQuery", "POST", query("messages", "sender_id", "1A"))
     check("查詢自己寄出嘅留言", True, ok, detail)
-    check("讀取自己嘅投票紀錄", True, *call(p, "/submissions/1B"))
+    check("讀取自己嘅投票紀錄", True, *call(p, "/submissions/1A"))
 
     print("\n參加者應該被擋嘅嘢：")
     ok, detail = call(p, ":runQuery", "POST", query("messages"))
@@ -105,9 +105,9 @@ def main():
     ok, detail = call(p, ":runQuery", "POST", query("messages", "receiver_id", "2B"))
     check("偷睇 2B 收到嘅留言", False, ok, detail)
     check("偷睇 2B 嘅投票紀錄", False, *call(p, "/submissions/2B"))
-    check("未公布就睇成績", False, *call(p, "/results/1B"))
+    check("未公布就睇成績", False, *call(p, "/results/1A"))
     check("改名冊（改自己組別）", False, *call(
-        p, "/participants/1B", "PATCH",
+        p, "/participants/1A", "PATCH",
         {"fields": {"group_id": {"stringValue": "HACKED"}}},
     ))
     check("擅自改留言開關", False, *call(

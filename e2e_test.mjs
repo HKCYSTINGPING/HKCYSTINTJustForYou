@@ -96,12 +96,12 @@ async function run() {
     });
 
     console.log('參加者流程：');
-    await login(page1, '1B', await phoneFor('1B'));
+    await login(page1, '1A', '1a');
     await page1.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
     await dismissOnboarding(page1);
     const greeting = await page1.textContent('#participant-greeting');
-    check('用 1B 登入後進入參加者版面', true);
-    check('顯示正確稱呼', greeting.includes('1B'), greeting.trim());
+    check('用 1A 登入後進入參加者版面', true);
+    check('顯示正確稱呼', greeting.includes('1A'), greeting.trim());
 
     // Sending: the message must show up without a page reload.
     const body = '自動測試留言 ' + Date.now();
@@ -124,7 +124,7 @@ async function run() {
 
     // Anonymity is the whole promise of the app.
     const inboxHtml = await page2.innerHTML('#inbox-list');
-    check('收件箱唔會洩露寄件者身分', !inboxHtml.includes('1B'));
+    check('收件箱唔會洩露寄件者身分', !inboxHtml.includes('1A'));
 
     console.log('\n管理員流程：');
     await login(admin, 'admin', '23082026');

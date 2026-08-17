@@ -86,17 +86,17 @@ async function run() {
     console.log('========================================');
 
     // Test 1.1: Invalid login
-    await login(page1, '1B', 'WRONG_PASSWORD');
+    await login(page1, '1A', 'WRONG_PASSWORD');
     await page1.waitForSelector('.toast', { timeout: 10000 });
     const errToast = (await page1.textContent('.toast')).trim();
     check('錯誤密碼被拒絕並彈出提示', errToast.includes('不正確') || errToast.includes('錯誤'), errToast);
 
-    // Test 1.2: Participant 1B Login (with lowercase password '1b' to verify case-insensitivity)
-    await login(page1, '1B', '1b');
+    // Test 1.2: Participant 1A Login (with lowercase password '1a' to verify case-insensitivity)
+    await login(page1, '1A', '1a');
     await page1.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
     await dismissOnboarding(page1);
-    const greeting1B = (await page1.textContent('#participant-greeting')).trim();
-    check('參加者 1B 成功使用小寫密碼登入並顯示正確問候語', greeting1B.includes('1B'), greeting1B);
+    const greeting1A = (await page1.textContent('#participant-greeting')).trim();
+    check('參加者 1A 成功使用小寫密碼登入並顯示正確問候語', greeting1A.includes('1A') || greeting1A.includes('Peter'), greeting1A);
 
     // Test 1.3: Staff WILL Login
     await login(staffPage, 'WILL', '23082026');

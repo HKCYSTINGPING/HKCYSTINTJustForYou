@@ -16,8 +16,8 @@ export const firebaseConfig = {
 // Participants log in as 1A / 98765432, which maps to 1a@tnit.local with the
 // phone number as the password. Keeping the mapping in one place means the
 // login form, the migration script and the security rules stay in agreement.
-export const EMAIL_DOMAIN = 'tnit.local';
-export const ADMIN_EMAIL = `admin@${EMAIL_DOMAIN}`;
+export const EMAIL_DOMAIN = 'tnit.org';
+export const ADMIN_EMAIL = 'admin@tnit.local';
 
 export function participantEmail(participantId) {
   return `${String(participantId || '').trim().toLowerCase()}@${EMAIL_DOMAIN}`;
