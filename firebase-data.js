@@ -40,7 +40,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v5';
+import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v6';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -275,7 +275,18 @@ export function isSeatParticipantId(participantId) {
 
 export function isUnassignedGroup(groupId) {
   const g = String(groupId || '').trim();
-  return !g || g === GROUP_UNASSIGNED || g === '未分組';
+  if (!g) return true;
+  const compact = g.toUpperCase().replace(/[\s_-]+/g, '');
+  return compact === 'GROUPUNASSIGNED'
+    || compact === 'UNASSIGNED'
+    || g === '未分組'
+    || g === '未分配';
+}
+
+export function normalizeGroupId(groupId) {
+  const g = String(groupId || '').trim();
+  if (isUnassignedGroup(g)) return GROUP_UNASSIGNED;
+  return g;
 }
 
 export function isNumberedGroupId(groupId) {
@@ -699,7 +710,7 @@ export function computeResults(participants, trophies, submissions) {
 
   const byGroup = new Map();
   roster.forEach(p => {
-    const group = p.group_id || '未分組';
+    const group = isUnassignedGroup(p.group_id) ? GROUP_UNASSIGNED : (p.group_id || GROUP_UNASSIGNED);
     if (!byGroup.has(group)) byGroup.set(group, []);
     byGroup.get(group).push(p);
   });

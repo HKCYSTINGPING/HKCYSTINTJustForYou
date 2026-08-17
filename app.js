@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v5';
+import * as data from './firebase-data.js?v=20260817v6';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1518,7 +1518,7 @@ function buildTrophyOverview(submissions, trophies, participants = state.partici
 
   const byGroup = new Map();
   roster.forEach(p => {
-    const group = p.group_id || '未分組';
+    const group = data.normalizeGroupId(p.group_id);
     if (!byGroup.has(group)) byGroup.set(group, []);
     byGroup.get(group).push({
       participant_id: p.participant_id,
@@ -4608,7 +4608,7 @@ function buildLoginStatusGroups() {
 
   const byGroup = new Map();
   state.participants.forEach(p => {
-    const group = p.group_id || '未分組';
+    const group = data.normalizeGroupId(p.group_id);
     if (!byGroup.has(group)) byGroup.set(group, []);
     const presence = presenceById.get(p.participant_id);
     const loggedIn = isPresenceCurrentlyLoggedIn(presence);
@@ -5633,9 +5633,7 @@ function rosterBoardColumns() {
 }
 
 function normalizeRosterGroupId(groupId) {
-  const g = String(groupId || '').trim();
-  if (!g || data.isUnassignedGroup(g)) return data.GROUP_UNASSIGNED;
-  return g;
+  return data.normalizeGroupId(groupId);
 }
 
 function renderAdminRosterBoard() {
@@ -5918,7 +5916,7 @@ function listEditableGroupIds(selectedId) {
     'GROUP_1', 'GROUP_2', 'GROUP_3', 'GROUP_4', 'GROUP_5', 'GROUP_6', data.GROUP_STAFF
   ]);
   state.participants.forEach(p => {
-    if (p.group_id) groups.add(p.group_id);
+    if (p.group_id) groups.add(normalizeRosterGroupId(p.group_id));
   });
   if (selectedId) groups.add(selectedId);
   return [...groups].sort(compareGroupLabels);
