@@ -84,8 +84,32 @@ service cloud.firestore {
     }
 
     // Admin global CLOSE is a master kill-switch; group CLOSE is an override.
+    // Unassigned / empty / staff-pool groups cannot send messages.
+    function isParticipatingGroup(groupId) {
+      return groupId is string && groupId.matches('^GROUP_[1-9][0-9]*$');
+    }
+
     function messagingOpenFor(groupId) {
-      return messagingOpenGlobal() && groupMessagingOpen(groupId);
+      return isParticipatingGroup(groupId)
+        && messagingOpenGlobal()
+        && groupMessagingOpen(groupId);
+    }
+
+    function globalAllowResubmit() {
+      return exists(/databases/$(database)/documents/config/voting)
+        && get(/databases/$(database)/documents/config/voting).data.allow_resubmit == true;
+    }
+
+    function groupAllowResubmit(groupId) {
+      return exists(groupPath(groupId))
+        && ('allow_resubmit' in groupDoc(groupId).data)
+        && groupDoc(groupId).data.allow_resubmit == true;
+    }
+
+    function votingAllowsResubmit(groupId) {
+      return groupVotingOverride(groupId) == ''
+        ? globalAllowResubmit()
+        : groupAllowResubmit(groupId);
     }
 
     function globalVotingStatus() {
@@ -230,11 +254,23 @@ service cloud.firestore {
         || (
           isFacilitatorOf(participantDoc(participantId).data.group_id)
         );
-      allow write: if isAdmin() || (isParticipant()
+      allow create: if isAdmin() || (isParticipant()
         && isSeatId(pid())
         && isSeatId(participantId)
         && participantId == pid()
+        && isParticipatingGroup(myGroupId())
         && myVotingStatus() == 'VOTING_OPEN');
+      allow update: if isAdmin() || (isParticipant()
+        && isSeatId(pid())
+        && isSeatId(participantId)
+        && participantId == pid()
+        && isParticipatingGroup(myGroupId())
+        && myVotingStatus() == 'VOTING_OPEN'
+        && (resource.data.status != 'submitted' || votingAllowsResubmit(myGroupId())));
+      allow delete: if isAdmin() || (isParticipant()
+        && participantId == pid()
+        && myVotingStatus() == 'VOTING_OPEN'
+        && votingAllowsResubmit(myGroupId()));
     }
 
     match /results/{participantId} {

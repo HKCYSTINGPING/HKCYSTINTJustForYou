@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v3';
+import * as data from './firebase-data.js?v=20260817v4';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -710,6 +710,29 @@ function cacheDOM() {
   DOM.adminDashboardPanel = document.getElementById('admin-dashboard-panel');
   DOM.adminDashboardStats = document.getElementById('admin-dashboard-stats');
   DOM.adminDashboardStatus = document.getElementById('admin-dashboard-status');
+  DOM.adminRosterBoard = document.getElementById('admin-roster-board');
+  DOM.adminRosterAdd = document.getElementById('admin-roster-add');
+  DOM.rosterEditModal = document.getElementById('roster-edit-modal');
+  DOM.rosterEditTitle = document.getElementById('roster-edit-title');
+  DOM.rosterEditSubtitle = document.getElementById('roster-edit-subtitle');
+  DOM.rosterEditId = document.getElementById('roster-edit-id');
+  DOM.rosterEditName = document.getElementById('roster-edit-name');
+  DOM.rosterEditPassword = document.getElementById('roster-edit-password');
+  DOM.rosterEditGroup = document.getElementById('roster-edit-group');
+  DOM.rosterEditSave = document.getElementById('roster-edit-save');
+  DOM.rosterEditCancel = document.getElementById('roster-edit-cancel');
+  DOM.rosterEditDelete = document.getElementById('roster-edit-delete');
+  DOM.rosterAddModal = document.getElementById('roster-add-modal');
+  DOM.rosterAddKind = document.getElementById('roster-add-kind');
+  DOM.rosterAddIdWrap = document.getElementById('roster-add-id-wrap');
+  DOM.rosterAddId = document.getElementById('roster-add-id');
+  DOM.rosterAddName = document.getElementById('roster-add-name');
+  DOM.rosterAddPassword = document.getElementById('roster-add-password');
+  DOM.rosterAddGroup = document.getElementById('roster-add-group');
+  DOM.rosterAddSave = document.getElementById('roster-add-save');
+  DOM.rosterAddCancel = document.getElementById('roster-add-cancel');
+  DOM.homeUnassignedBanner = document.getElementById('home-unassigned-banner');
+  DOM.trophySubmittedBanner = document.getElementById('trophy-submitted-banner');
   DOM.adminLoginStatus = document.getElementById('admin-login-status');
   DOM.adminRecentActivity = document.getElementById('admin-recent-activity');
   DOM.adminQueuePill = document.getElementById('admin-queue-pill');
@@ -1258,9 +1281,10 @@ async function loadStaticParticipants() {
 
 // ─── Derived trophy views ───────────────────────────────────────────────────
 
-/** GROUP_1 before GROUP_2 … then GROUP_STAFF / everything else. */
+/** GROUP_UNASSIGNED first, then GROUP_1… then GROUP_STAFF / everything else. */
 function compareGroupLabels(a, b) {
   const rank = label => {
+    if (data.isUnassignedGroup(label) || label === data.GROUP_UNASSIGNED) return -1;
     const m = String(label).match(/^GROUP_(\d+)$/i);
     if (m) return Number(m[1]);
     if (/STAFF/i.test(label)) return 1000;
@@ -1273,12 +1297,13 @@ function compareGroupLabels(a, b) {
 }
 
 function formatGroupLabel(label) {
+  if (data.isUnassignedGroup(label) || label === data.GROUP_UNASSIGNED) return '未分配';
   const meta = state.groupMeta[label];
   if (meta && meta.display_name) return meta.display_name;
   const m = String(label || '').match(/^GROUP_(\d+)$/i);
   if (m) return 'Group ' + m[1];
   if (/STAFF/i.test(label)) return 'Staff';
-  return label || '未分組';
+  return label || '未分配';
 }
 
 function getFacilitatorGroupMembers(groupId = getFacilitatorGroupId()) {
@@ -1356,7 +1381,9 @@ function isMessagingOpenForGroup(groupId) {
 }
 
 function isMessagingOpenForMe() {
-  return isMessagingOpenForGroup(myGroupId());
+  const groupId = myGroupId();
+  if (data.isUnassignedGroup(groupId) || !data.isNumberedGroupId(groupId)) return false;
+  return isMessagingOpenForGroup(groupId);
 }
 
 function effectiveVotingConfigForGroup(groupId) {
@@ -1401,7 +1428,7 @@ function applyGroupsSnapshot(map) {
         display_name: '',
         messaging_status: 'OPEN',
         voting_status: pendingStatus,
-        allow_resubmit: pendingStatus === 'VOTING_OPEN',
+        allow_resubmit: pendingStatus === 'VOTING_OPEN' ? false : !!next[groupId]?.allow_resubmit,
         calculated_at: '',
         published_at: ''
       };
@@ -1411,7 +1438,7 @@ function applyGroupsSnapshot(map) {
       ...next[groupId],
       voting_status: pendingStatus,
       allow_resubmit: pendingStatus === 'VOTING_OPEN'
-        ? true
+        ? false
         : (pendingStatus ? !!next[groupId].allow_resubmit : false)
     };
   });
@@ -1436,7 +1463,7 @@ function rememberPendingGroupVoting(groupId, status) {
     ...state.groupMeta[groupId],
     voting_status: nextStatus,
     allow_resubmit: nextStatus === 'VOTING_OPEN'
-      ? true
+      ? false
       : (nextStatus ? !!state.groupMeta[groupId].allow_resubmit : false)
   };
 }
@@ -2402,9 +2429,35 @@ function recalcTrophyPermissions() {
   const config = effectiveVotingConfigForMe();
   const open = config.voting_status === 'VOTING_OPEN';
   const submitted = state.trophy.submissionStatus === 'submitted';
-  state.trophy.editable = open && (!submitted || config.allow_resubmit);
+  // Default: once submitted, locked. allow_resubmit is an explicit admin override.
+  state.trophy.editable = open && (!submitted || !!config.allow_resubmit);
   state.trophy.readonly = !state.trophy.editable;
   state.trophy.showResults = config.voting_status === 'PUBLISHED';
+}
+
+function isParticipantUnassigned() {
+  if (state.isAdmin || isStaffPerson(state.participantId)) return false;
+  return data.isUnassignedGroup(myGroupId());
+}
+
+function applyUnassignedChrome() {
+  const blocked = isParticipantUnassigned();
+  if (DOM.homeUnassignedBanner) {
+    DOM.homeUnassignedBanner.classList.toggle('hidden', !blocked);
+  }
+  document.querySelectorAll('#screen-participant .home-cards .home-card').forEach(card => {
+    const nav = card.dataset.nav;
+    if (nav === 'profile' || nav === 'staff') return;
+    card.classList.toggle('is-disabled', blocked);
+    card.toggleAttribute('disabled', blocked);
+    card.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+  });
+  document.querySelectorAll('#screen-participant .bottom-nav-item').forEach(btn => {
+    const tab = btn.dataset.tab;
+    if (tab === 'home' || tab === 'profile') return;
+    btn.classList.toggle('is-disabled', blocked);
+    btn.toggleAttribute('disabled', blocked);
+  });
 }
 
 async function enterParticipantDashboard() {
@@ -2414,6 +2467,7 @@ async function enterParticipantDashboard() {
   updateSendFormState();
   updateCharCounter();
   applyStaffParticipantChrome();
+  applyUnassignedChrome();
   switchParticipantView('home');
 
   try {
@@ -2737,6 +2791,7 @@ function renderAdminDashboard(fetchData) {
       `).join('');
   }
   renderAdminGroupOverrides();
+  renderAdminRosterBoard();
 
   if (DOM.adminVersion) DOM.adminVersion.textContent = 'Firestore';
   if (DOM.adminParticipantCount) DOM.adminParticipantCount.textContent = String(state.participants.length || '—');
@@ -3741,6 +3796,10 @@ function updateTrophyStatusBanner() {
       !state.trophy.editable || state.trophy.teammates.length === 0
     );
   }
+  if (DOM.trophySubmittedBanner) {
+    const showSubmitted = state.trophy.submissionStatus === 'submitted' && showVoting;
+    DOM.trophySubmittedBanner.classList.toggle('hidden', !showSubmitted);
+  }
 
   if (DOM.trophyStatusBanner) {
     DOM.trophyStatusBanner.textContent = label;
@@ -3961,10 +4020,22 @@ async function handleTrophySubmitAll() {
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
   await runProgressButton(DOM.trophySubmitAll, (async () => {
     try {
-      await data.saveSubmission(state.participantId, pairings, true);
+      await data.saveSubmission(state.participantId, pairings, true, {
+        allowResubmit: !!effectiveVotingConfigForMe().allow_resubmit
+      });
+      state.trophy.submissionStatus = 'submitted';
+      recalcTrophyPermissions();
       switchParticipantView('trophy-submitted');
       showToast('投票已提交', 'success');
     } catch (err) {
+      if (err && err.code === 'already-submitted') {
+        showToast('你已經投過票，不能重複提交', 'error');
+        state.trophy.submissionStatus = 'submitted';
+        recalcTrophyPermissions();
+        updateTrophyStatusBanner();
+        renderTrophyTeammates();
+        return;
+      }
       showToast('投票提交失敗：' + data.describeFirestoreError(err, '請再試一次'), 'error');
       switchParticipantView('trophy');
     }
@@ -4876,7 +4947,7 @@ function updateAdminVotingButtons() {
 
 async function handleAdminVotingAction(status, btn) {
   const confirmMessages = {
-    VOTING_OPEN: '確定要開放投票嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。若先前已公布結果，亦會清除公布狀態並允許重新提交。',
+    VOTING_OPEN: '確定要開放投票嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。每人只可提交一次，提交後不能再改。',
     VOTING_CLOSED: '確定要關閉投票嗎？會覆蓋所有組別的投票覆寫；參加者將無法再提交。',
     PUBLISHED: '確定要公布結果嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。'
   };
@@ -4889,7 +4960,7 @@ async function handleAdminVotingAction(status, btn) {
       state.votingConfig = {
         ...state.votingConfig,
         voting_status: status,
-        allow_resubmit: status === 'VOTING_OPEN' ? true : !!state.votingConfig.allow_resubmit
+        allow_resubmit: status === 'VOTING_OPEN' ? false : !!state.votingConfig.allow_resubmit
       };
       applyEffectiveVotingToTrophyState();
       refreshAdminTrophyViews();
@@ -5553,10 +5624,298 @@ async function refreshAdminParticipantDetail() {
   await selectAdminParticipant(state.adminParticipant.selectedId);
 }
 
+function rosterBoardColumns() {
+  return [
+    data.GROUP_UNASSIGNED,
+    'GROUP_1', 'GROUP_2', 'GROUP_3', 'GROUP_4', 'GROUP_5', 'GROUP_6',
+    data.GROUP_STAFF
+  ];
+}
+
+function normalizeRosterGroupId(groupId) {
+  const g = String(groupId || '').trim();
+  if (!g || data.isUnassignedGroup(g)) return data.GROUP_UNASSIGNED;
+  return g;
+}
+
+function renderAdminRosterBoard() {
+  if (!DOM.adminRosterBoard) return;
+  const columns = rosterBoardColumns();
+  const byGroup = new Map(columns.map(g => [g, []]));
+  state.participants.forEach(p => {
+    const g = normalizeRosterGroupId(p.group_id);
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g).push(p);
+  });
+
+  DOM.adminRosterBoard.innerHTML = columns.map(groupId => {
+    const members = (byGroup.get(groupId) || []).slice().sort((a, b) =>
+      a.participant_id.localeCompare(b.participant_id)
+    );
+    const cards = members.map(p => {
+      const id = p.participant_id;
+      const name = (p.display_name || '').trim();
+      const staff = isStaffPerson(id);
+      return `<button type="button" class="roster-chip${staff ? ' is-staff' : ''}"
+        draggable="true" data-participant-id="${escapeHtml(id)}" data-group-id="${escapeHtml(groupId)}">
+        <span class="roster-chip-id">${escapeHtml(id)}</span>
+        ${name ? `<span class="roster-chip-name">${escapeHtml(name)}</span>` : ''}
+      </button>`;
+    }).join('');
+    return `<section class="roster-column" data-drop-group="${escapeHtml(groupId)}">
+      <header class="roster-column-header">
+        <strong>${escapeHtml(formatGroupLabel(groupId))}</strong>
+        <span class="roster-column-count">${members.length}</span>
+      </header>
+      <div class="roster-column-body">${cards || '<p class="roster-empty">尚未有人</p>'}</div>
+    </section>`;
+  }).join('');
+}
+
+let rosterDragPid = '';
+
+function bindAdminRosterBoardEvents() {
+  if (!DOM.adminRosterBoard || DOM.adminRosterBoard.dataset.bound === '1') return;
+  DOM.adminRosterBoard.dataset.bound = '1';
+
+  DOM.adminRosterBoard.addEventListener('dragstart', e => {
+    const chip = e.target.closest('.roster-chip');
+    if (!chip) return;
+    rosterDragPid = chip.dataset.participantId || '';
+    chip.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', rosterDragPid);
+  });
+  DOM.adminRosterBoard.addEventListener('dragend', e => {
+    const chip = e.target.closest('.roster-chip');
+    if (chip) chip.classList.remove('is-dragging');
+    rosterDragPid = '';
+    DOM.adminRosterBoard.querySelectorAll('.roster-column.is-drop-target').forEach(col => {
+      col.classList.remove('is-drop-target');
+    });
+  });
+  DOM.adminRosterBoard.addEventListener('dragover', e => {
+    const col = e.target.closest('.roster-column');
+    if (!col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    DOM.adminRosterBoard.querySelectorAll('.roster-column.is-drop-target').forEach(c => {
+      if (c !== col) c.classList.remove('is-drop-target');
+    });
+    col.classList.add('is-drop-target');
+  });
+  DOM.adminRosterBoard.addEventListener('dragleave', e => {
+    const col = e.target.closest('.roster-column');
+    if (col && !col.contains(e.relatedTarget)) col.classList.remove('is-drop-target');
+  });
+  DOM.adminRosterBoard.addEventListener('drop', async e => {
+    const col = e.target.closest('.roster-column');
+    if (!col) return;
+    e.preventDefault();
+    col.classList.remove('is-drop-target');
+    const pid = rosterDragPid || e.dataTransfer.getData('text/plain');
+    const targetGroup = col.dataset.dropGroup;
+    if (!pid || !targetGroup) return;
+    const person = state.participants.find(p => p.participant_id === pid);
+    if (!person) return;
+    if (normalizeRosterGroupId(person.group_id) === targetGroup) return;
+
+    const voting = state.votingConfig?.voting_status || '';
+    if (voting === 'VOTING_OPEN' || voting === 'CALCULATED' || voting === 'PUBLISHED') {
+      if (!window.confirm('目前投票狀態為「' + (VOTING_STATUS_LABELS[voting] || voting) + '」。改組／重編號可能影響已投票或結果，確定繼續？')) {
+        return;
+      }
+    }
+
+    try {
+      showToast('正在分配…', 'info');
+      const result = await data.assignParticipantToGroup(pid, targetGroup, state.participants);
+      showToast(
+        result.renamed
+          ? `${pid} 已改為 ${result.participantId}（${formatGroupLabel(targetGroup)}）`
+          : `${result.participantId} 已移至 ${formatGroupLabel(targetGroup)}`,
+        'success'
+      );
+    } catch (err) {
+      showToast(data.describeFirestoreError(err, err.message || '分配失敗'), 'error');
+    }
+  });
+
+  DOM.adminRosterBoard.addEventListener('click', e => {
+    const chip = e.target.closest('.roster-chip');
+    if (!chip) return;
+    openRosterEditModal(chip.dataset.participantId);
+  });
+}
+
+function populateRosterGroupSelect(selectEl, selectedId) {
+  populateGroupSelect(selectEl, selectedId || data.GROUP_UNASSIGNED);
+}
+
+async function openRosterEditModal(participantId) {
+  const pid = normalizeId(participantId);
+  const person = state.participants.find(p => p.participant_id === pid);
+  if (!person || !DOM.rosterEditModal) return;
+
+  DOM.rosterEditModal.dataset.editingId = pid;
+  if (DOM.rosterEditTitle) DOM.rosterEditTitle.textContent = '編輯 ' + pid;
+  if (DOM.rosterEditSubtitle) {
+    DOM.rosterEditSubtitle.textContent = isStaffPerson(pid)
+      ? 'Staff 編號改動會同步 Auth 帳戶；改組唔會自動重編號。'
+      : '座位參加者改組會自動重編號；亦可手動改編號。';
+  }
+  if (DOM.rosterEditId) {
+    DOM.rosterEditId.value = pid;
+    // Seat renumber is supported; Staff login ids stay stable (rename Auth email is fragile).
+    DOM.rosterEditId.readOnly = isStaffPerson(pid);
+  }
+  if (DOM.rosterEditName) DOM.rosterEditName.value = person.display_name || '';
+  if (DOM.rosterEditPassword) {
+    DOM.rosterEditPassword.value = await data.fetchContact(pid);
+  }
+  populateRosterGroupSelect(DOM.rosterEditGroup, normalizeRosterGroupId(person.group_id));
+  DOM.rosterEditModal.classList.remove('hidden');
+}
+
+function closeRosterEditModal() {
+  if (DOM.rosterEditModal) DOM.rosterEditModal.classList.add('hidden');
+}
+
+function openRosterAddModal() {
+  if (!DOM.rosterAddModal) return;
+  if (DOM.rosterAddKind) DOM.rosterAddKind.value = 'seat';
+  if (DOM.rosterAddId) DOM.rosterAddId.value = '';
+  if (DOM.rosterAddName) DOM.rosterAddName.value = '';
+  if (DOM.rosterAddPassword) DOM.rosterAddPassword.value = '';
+  populateRosterGroupSelect(DOM.rosterAddGroup, data.GROUP_UNASSIGNED);
+  syncRosterAddKindUi();
+  DOM.rosterAddModal.classList.remove('hidden');
+}
+
+function closeRosterAddModal() {
+  if (DOM.rosterAddModal) DOM.rosterAddModal.classList.add('hidden');
+}
+
+function syncRosterAddKindUi() {
+  const staff = DOM.rosterAddKind && DOM.rosterAddKind.value === 'staff';
+  if (DOM.rosterAddIdWrap) DOM.rosterAddIdWrap.classList.toggle('hidden', !staff);
+}
+
+async function handleRosterEditSave() {
+  const oldId = DOM.rosterEditModal?.dataset.editingId;
+  if (!oldId) return;
+  const newId = normalizeId(DOM.rosterEditId?.value || '');
+  const name = (DOM.rosterEditName?.value || '').trim();
+  const password = (DOM.rosterEditPassword?.value || '').trim();
+  const groupId = (DOM.rosterEditGroup?.value || '').trim() || data.GROUP_UNASSIGNED;
+
+  await runProgressButton(DOM.rosterEditSave, (async () => {
+    try {
+      let finalId = oldId;
+      if (newId && newId !== oldId) {
+        if (!(isSeatParticipantId(oldId) && isSeatParticipantId(newId))) {
+          throw new Error('只支援座位編號重命名（例如 3E → 1F）');
+        }
+        finalId = await data.renameParticipantId(oldId, newId, {
+          groupId,
+          displayName: name,
+          password: password || undefined
+        });
+      } else {
+        const person = state.participants.find(p => p.participant_id === oldId);
+        const currentGroup = normalizeRosterGroupId(person?.group_id);
+        if (groupId !== currentGroup) {
+          const result = await data.assignParticipantToGroup(oldId, groupId, state.participants);
+          finalId = result.participantId;
+        }
+        if (name !== (person?.display_name || '').trim()) {
+          await data.updateParticipantDisplayName(finalId, name);
+        }
+        if (password) {
+          await data.updateParticipantContact(finalId, password);
+        }
+      }
+
+      // If renamed path already set name/password/group; still sync leftovers.
+      if (newId && newId !== oldId) {
+        if (name) await data.updateParticipantDisplayName(finalId, name).catch(() => {});
+        if (password) await data.updateParticipantContact(finalId, password).catch(() => {});
+      }
+
+      closeRosterEditModal();
+      showToast('已更新 ' + finalId, 'success');
+    } catch (err) {
+      showToast(data.describeFirestoreError(err, err.message || '儲存失敗'), 'error');
+    }
+  })());
+}
+
+async function handleRosterEditDelete() {
+  const pid = DOM.rosterEditModal?.dataset.editingId;
+  if (!pid) return;
+  if (!window.confirm(`確定刪除 ${pid}？\n會刪除 Auth 帳戶、留言、投票同結果，無法復原。`)) return;
+  try {
+    await data.deleteParticipantCompletely(pid, state.participants);
+    closeRosterEditModal();
+    showToast('已刪除 ' + pid, 'success');
+  } catch (err) {
+    showToast(data.describeFirestoreError(err, err.message || '刪除失敗'), 'error');
+  }
+}
+
+async function handleRosterAddSave() {
+  const kind = DOM.rosterAddKind?.value || 'seat';
+  const groupId = (DOM.rosterAddGroup?.value || '').trim() || data.GROUP_UNASSIGNED;
+  const password = (DOM.rosterAddPassword?.value || '').trim();
+  const name = (DOM.rosterAddName?.value || '').trim();
+  let pid = '';
+
+  if (kind === 'staff') {
+    pid = normalizeId(DOM.rosterAddId?.value || '');
+    if (!pid || isSeatParticipantId(pid) || isAdminLogin(pid)) {
+      showToast('請輸入有效 Staff 編號（例如 WILL）', 'error');
+      return;
+    }
+  } else if (data.isNumberedGroupId(groupId)) {
+    pid = data.nextSeatIdForGroup(groupId, state.participants);
+    if (!pid) {
+      showToast(formatGroupLabel(groupId) + ' 座位已滿', 'error');
+      return;
+    }
+  } else {
+    pid = data.nextGlobalSeatId(state.participants);
+    if (!pid) {
+      showToast('冇剩餘座位編號可用', 'error');
+      return;
+    }
+  }
+
+  if (!password) {
+    showToast('請輸入密碼', 'error');
+    return;
+  }
+
+  await runProgressButton(DOM.rosterAddSave, (async () => {
+    try {
+      await data.createParticipant({
+        participantId: pid,
+        groupId,
+        password,
+        displayName: name
+      });
+      closeRosterAddModal();
+      showToast('已新增 ' + pid, 'success');
+    } catch (err) {
+      showToast(data.describeFirestoreError(err, err.message || '新增失敗'), 'error');
+    }
+  })());
+}
+
 /** Standard group options for settings dropdowns, plus any live extras. */
 function listEditableGroupIds(selectedId) {
   const groups = new Set([
-    'GROUP_1', 'GROUP_2', 'GROUP_3', 'GROUP_4', 'GROUP_5', 'GROUP_6', 'GROUP_STAFF'
+    data.GROUP_UNASSIGNED,
+    'GROUP_1', 'GROUP_2', 'GROUP_3', 'GROUP_4', 'GROUP_5', 'GROUP_6', data.GROUP_STAFF
   ]);
   state.participants.forEach(p => {
     if (p.group_id) groups.add(p.group_id);
@@ -5763,7 +6122,12 @@ function initAdminParticipantsPanel() {
 const BOTTOM_NAV_TABS = ['home', 'inbox', 'trophy', 'profile'];
 
 function switchParticipantView(viewName) {
+  if (isParticipantUnassigned() && viewName !== 'home' && viewName !== 'profile') {
+    showToast('你尚未分配組別，暫未能使用此功能', 'info');
+    viewName = 'home';
+  }
   if (isStaffPerson(state.participantId) && (viewName === 'trophy' || viewName === 'trophy-submitted')) {
+    showToast('Staff 不參與投票', 'info');
     viewName = isGroupFacilitator() ? 'staff' : 'home';
   }
   document.querySelectorAll('#screen-participant .app-view').forEach(view => {
@@ -5781,7 +6145,9 @@ function switchParticipantView(viewName) {
     btn.setAttribute('aria-selected', isActive);
   });
 
-  if (viewName === 'inbox') {
+  if (viewName === 'home') {
+    applyUnassignedChrome();
+  } else if (viewName === 'inbox') {
     markAllInboxRead();
   } else if (viewName === 'trophy') {
     renderTrophyTeammates();
@@ -6057,6 +6423,25 @@ function bindEvents() {
   DOM.adminDeleteAllRecords.addEventListener('click', handleAdminDeleteAllRecords);
   DOM.adminBulkResetVotes.addEventListener('click', handleAdminBulkResetVotes);
   DOM.adminBulkDeleteAll.addEventListener('click', handleAdminBulkDeleteAll);
+
+  bindAdminRosterBoardEvents();
+  if (DOM.adminRosterAdd) DOM.adminRosterAdd.addEventListener('click', openRosterAddModal);
+  if (DOM.rosterEditCancel) DOM.rosterEditCancel.addEventListener('click', closeRosterEditModal);
+  if (DOM.rosterEditSave) DOM.rosterEditSave.addEventListener('click', handleRosterEditSave);
+  if (DOM.rosterEditDelete) DOM.rosterEditDelete.addEventListener('click', handleRosterEditDelete);
+  if (DOM.rosterAddCancel) DOM.rosterAddCancel.addEventListener('click', closeRosterAddModal);
+  if (DOM.rosterAddSave) DOM.rosterAddSave.addEventListener('click', handleRosterAddSave);
+  if (DOM.rosterAddKind) DOM.rosterAddKind.addEventListener('change', syncRosterAddKindUi);
+  if (DOM.rosterEditModal) {
+    DOM.rosterEditModal.addEventListener('click', e => {
+      if (e.target === DOM.rosterEditModal) closeRosterEditModal();
+    });
+  }
+  if (DOM.rosterAddModal) {
+    DOM.rosterAddModal.addEventListener('click', e => {
+      if (e.target === DOM.rosterAddModal) closeRosterAddModal();
+    });
+  }
 
   DOM.auditSearch.addEventListener('input', renderAuditTable);
   DOM.auditTrophyFilter.addEventListener('change', renderAuditTable);

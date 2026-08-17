@@ -11,7 +11,7 @@
   <meta http-equiv="Expires" content="0">
   <title>HKCYS TINT — Just For You</title>
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260817v3">
+  <link rel="stylesheet" href="styles.css?v=20260817v4">
 </head>
 <body>
 
@@ -136,6 +136,11 @@
     <main class="app-main">
       <!-- Home -->
       <div id="view-home" class="app-view active" data-view="home">
+        <div id="home-unassigned-banner" class="empty-state empty-illustration hidden" data-tour="home-unassigned">
+          <div class="illustration-circle"><span class="app-icon app-icon-profile" aria-hidden="true"></span></div>
+          <h3>你尚未分配組別</h3>
+          <p>請等候工作人員為你分配組別。分配完成前無法使用留言同投票功能。</p>
+        </div>
         <div class="home-cards">
           <button type="button" class="home-card" data-nav="send">
             <span class="home-card-icon app-icon app-icon-loveletter" aria-hidden="true"></span>
@@ -262,7 +267,10 @@
           <div id="trophy-results-list" class="trophy-results-list"></div>
         </div>
 
-        <div id="trophy-voting-section" data-tour="trophy-voting">
+          <div id="trophy-voting-section" data-tour="trophy-voting">
+          <div id="trophy-submitted-banner" class="status-banner status-banner-success hidden" role="status">
+            你已提交投票。以下係你嘅配對（不可再改）。
+          </div>
           <div class="trophy-progress-wrap card" data-tour="trophy-progress">
             <div class="trophy-progress-label">
               <span>配對進度</span>
@@ -583,6 +591,74 @@
     </div>
   </div>
 
+  <div id="roster-edit-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="roster-edit-title">
+    <div class="modal-card glass-card roster-edit-modal-card">
+      <h2 id="roster-edit-title">編輯參加者</h2>
+      <p id="roster-edit-subtitle" class="form-hint"></p>
+      <div class="form-group">
+        <label for="roster-edit-id">登入編號</label>
+        <input type="text" id="roster-edit-id" class="input-field" maxlength="20" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="roster-edit-name">顯示名稱</label>
+        <input type="text" id="roster-edit-name" class="input-field" maxlength="40" autocomplete="off" placeholder="可留空">
+      </div>
+      <div class="form-group">
+        <label for="roster-edit-password">密碼</label>
+        <input type="text" id="roster-edit-password" class="input-field" maxlength="40" autocomplete="off" placeholder="密碼">
+      </div>
+      <div class="form-group">
+        <label for="roster-edit-group">分組</label>
+        <select id="roster-edit-group" class="input-field" aria-label="選擇分組"></select>
+      </div>
+      <div class="onboarding-actions roster-edit-actions">
+        <button type="button" id="roster-edit-delete" class="btn btn-danger btn-sm">刪除</button>
+        <span class="roster-edit-spacer"></span>
+        <button type="button" id="roster-edit-cancel" class="btn btn-secondary btn-sm">取消</button>
+        <button type="button" id="roster-edit-save" class="btn btn-primary btn-sm btn-progress">
+          <span class="btn-label">儲存</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="roster-add-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="roster-add-title">
+    <div class="modal-card glass-card roster-edit-modal-card">
+      <h2 id="roster-add-title">新增參加者</h2>
+      <div class="form-group">
+        <label for="roster-add-kind">類型</label>
+        <select id="roster-add-kind" class="input-field">
+          <option value="seat">座位參加者</option>
+          <option value="staff">Staff</option>
+        </select>
+      </div>
+      <div class="form-group" id="roster-add-id-wrap">
+        <label for="roster-add-id">Staff 編號</label>
+        <input type="text" id="roster-add-id" class="input-field" maxlength="20" autocomplete="off" placeholder="例如 WILL">
+      </div>
+      <div class="form-group">
+        <label for="roster-add-name">顯示名稱</label>
+        <input type="text" id="roster-add-name" class="input-field" maxlength="40" autocomplete="off" placeholder="可留空">
+      </div>
+      <div class="form-group">
+        <label for="roster-add-password">密碼</label>
+        <input type="text" id="roster-add-password" class="input-field" maxlength="40" autocomplete="off" placeholder="至少 6 位（短編號會自動展開）">
+      </div>
+      <div class="form-group">
+        <label for="roster-add-group">分組</label>
+        <select id="roster-add-group" class="input-field"></select>
+      </div>
+      <div class="onboarding-actions">
+        <button type="button" id="roster-add-cancel" class="btn btn-secondary btn-sm">取消</button>
+        <button type="button" id="roster-add-save" class="btn btn-primary btn-sm btn-progress">
+          <span class="btn-label">新增</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ ADMIN APP ═══ -->
   <section id="screen-admin" class="screen screen-app hidden" aria-label="管理員控制台">
     <header class="app-header admin-header" data-tour="admin-header">
@@ -613,6 +689,20 @@
       <!-- Dashboard -->
       <div id="admin-dashboard-panel" class="admin-panel active" data-admin-view="dashboard">
         <div id="admin-dashboard-stats" class="stats-grid" data-tour="admin-stats"></div>
+
+        <div class="card admin-roster-card" data-tour="admin-roster-board">
+          <div class="admin-roster-header">
+            <div>
+              <h3 class="section-title">分組管理</h3>
+              <p class="form-hint">拖曳參加者／Staff 到各組。座位組會自動重編號（例如 3E → Group 1 變成下一席 1x）。未分配組唔參與留言／投票。</p>
+            </div>
+            <div class="admin-roster-actions">
+              <button type="button" id="admin-roster-add" class="btn btn-primary btn-sm">新增</button>
+            </div>
+          </div>
+          <div id="admin-roster-board" class="admin-roster-board" aria-label="分組看板"></div>
+        </div>
+
         <div class="card" data-tour="admin-login-status">
           <div id="admin-login-status" class="admin-pending"></div>
         </div>
@@ -859,6 +949,6 @@
     </nav>
   </section>
 
-  <script type="module" src="app.js?v=20260817v3"></script>
+  <script type="module" src="app.js?v=20260817v4"></script>
 </body>
 </html>

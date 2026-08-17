@@ -3090,3 +3090,95 @@ button.group-voter-header:hover {
     animation: none;
   }
 }
+
+/* ── Admin roster board (drag-drop grouping) ─────────────────────────────── */
+.admin-roster-card { margin-bottom: var(--space-md); }
+.admin-roster-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.admin-roster-actions { flex-shrink: 0; }
+.admin-roster-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+  max-height: min(70vh, 640px);
+  overflow: auto;
+  padding-bottom: 0.25rem;
+}
+.roster-column {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px dashed rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.roster-column.is-drop-target {
+  border-color: var(--color-accent, #2f6fed);
+  background: rgba(47, 111, 237, 0.08);
+}
+.roster-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 0.85rem;
+}
+.roster-column-count {
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+.roster-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.55rem;
+  flex: 1;
+}
+.roster-empty {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.5;
+  text-align: center;
+  padding: 0.75rem 0.25rem;
+}
+.roster-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: #fff;
+  cursor: grab;
+  font: inherit;
+  color: inherit;
+}
+.roster-chip.is-staff {
+  background: rgba(47, 111, 237, 0.06);
+  border-color: rgba(47, 111, 237, 0.18);
+}
+.roster-chip.is-dragging { opacity: 0.45; }
+.roster-chip-id { font-weight: 700; font-size: 0.9rem; }
+.roster-chip-name { font-size: 0.75rem; opacity: 0.7; }
+.roster-edit-modal-card { max-width: 420px; width: min(92vw, 420px); }
+.roster-edit-actions { flex-wrap: wrap; }
+.roster-edit-spacer { flex: 1; }
+.home-card.is-disabled,
+.bottom-nav-item.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+#trophy-submitted-banner {
+  margin-bottom: var(--space-sm);
+}

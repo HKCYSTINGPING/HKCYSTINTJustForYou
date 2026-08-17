@@ -18,6 +18,8 @@ import {
   setPersistence,
   browserSessionPersistence,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  deleteUser,
   signOut,
   updatePassword
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js';
@@ -38,11 +40,19 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v3';
+import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v4';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+/** Secondary Auth app so admin can create / delete other accounts without swapping session. */
+const secondaryApp = initializeApp(firebaseConfig, 'SecondaryAdmin');
+const secondaryAuth = getAuth(secondaryApp);
+
+export const GROUP_UNASSIGNED = 'GROUP_UNASSIGNED';
+export const GROUP_STAFF = 'GROUP_STAFF';
+export const SEAT_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 // Firestore caps a batch at 500 operations.
 const BATCH_LIMIT = 450;
@@ -263,11 +273,25 @@ export function isSeatParticipantId(participantId) {
   return /^[0-9][A-H]$/i.test(String(participantId || '').trim());
 }
 
+export function isUnassignedGroup(groupId) {
+  const g = String(groupId || '').trim();
+  return !g || g === GROUP_UNASSIGNED || g === '未分組';
+}
+
+export function isNumberedGroupId(groupId) {
+  return /^GROUP_[1-9]\d*$/i.test(String(groupId || '').trim());
+}
+
+export function groupNumberFromId(groupId) {
+  const m = String(groupId || '').trim().match(/^GROUP_(\d+)$/i);
+  return m ? Number(m[1]) : 0;
+}
+
 export function getTeammates(participantId, allParticipants) {
   const me = (allParticipants || []).find(p => p.participant_id === participantId);
   if (!me) return [];
   const group = String(me.group_id || '').trim();
-  if (!group) return [];
+  if (!group || isUnassignedGroup(group) || !isNumberedGroupId(group)) return [];
   return allParticipants.filter(
     p => p.participant_id !== participantId
       && String(p.group_id || '').trim() === group
@@ -403,7 +427,8 @@ export async function setVotingStatus(votingStatus, allowResubmit) {
   // would keep seeing last round's results while voting again.
   if (votingStatus === 'VOTING_OPEN') {
     patch.published_at = '';
-    patch.allow_resubmit = true;
+    // Default: one ballot per person. Admin may still pass allowResubmit=true.
+    if (allowResubmit === undefined) patch.allow_resubmit = false;
   }
   if (votingStatus === 'CALCULATED') {
     patch.calculated_at = serverTimestamp();
@@ -479,7 +504,7 @@ export async function setGroupVotingStatus(groupId, votingStatus, allowResubmit)
   if (votingStatus === 'PUBLISHED') patch.published_at = serverTimestamp();
   if (votingStatus === 'VOTING_OPEN') {
     patch.published_at = '';
-    patch.allow_resubmit = true;
+    if (allowResubmit === undefined) patch.allow_resubmit = false;
   }
   if (votingStatus === 'CALCULATED') patch.calculated_at = serverTimestamp();
   await setDoc(doc(db, 'groups', groupId), patch, { merge: true });
@@ -580,10 +605,19 @@ export function subscribeMySubmission(participantId, onData, onError) {
   }, onError);
 }
 
-export function saveSubmission(participantId, pairings, submitted = true) {
+export async function saveSubmission(participantId, pairings, submitted = true, { allowResubmit = false } = {}) {
   // Local picks stay in the browser until submit; we no longer persist drafts.
   if (!submitted) {
     return Promise.reject(new Error('草稿功能已移除，請直接提交投票'));
+  }
+  const ref = doc(db, 'submissions', participantId);
+  if (!allowResubmit) {
+    const existing = await getDoc(ref);
+    if (existing.exists() && (existing.data() || {}).status === 'submitted') {
+      const err = new Error('你已經投過票，不能重複提交');
+      err.code = 'already-submitted';
+      throw err;
+    }
   }
   const payload = {
     participant_id: participantId,
@@ -594,7 +628,7 @@ export function saveSubmission(participantId, pairings, submitted = true) {
   };
   // The whole ballot is one document, so two people voting at the same moment
   // can never overwrite each other the way appending rows to a sheet could.
-  return setDoc(doc(db, 'submissions', participantId), payload, { merge: true });
+  return setDoc(ref, payload, { merge: true });
 }
 
 export function clearMySubmission(participantId) {
@@ -643,7 +677,9 @@ export function subscribeAllResults(onData, onError) {
  * count inside their own group (ties included). No consolation / fallback awards.
  */
 export function computeResults(participants, trophies, submissions) {
-  const roster = (participants || []).filter(p => isSeatParticipantId(p.participant_id));
+  const roster = (participants || []).filter(p =>
+    isSeatParticipantId(p.participant_id) && isNumberedGroupId(p.group_id)
+  );
   const seatIds = new Set(roster.map(p => p.participant_id));
   const voteCounts = new Map();
   const key = (receiver, trophy) => receiver + '|' + trophy;
@@ -839,23 +875,6 @@ export async function fetchContact(participantId) {
   }
 }
 
-export async function updateParticipantContact(participantId, newPassword) {
-  const pid = String(participantId || '').trim().toUpperCase();
-  if (!pid) return;
-  const clean = String(newPassword || '').trim();
-  await setDoc(doc(db, 'contacts', pid), {
-    participant_id: pid,
-    phone_number: clean
-  }, { merge: true });
-
-  const identity = identityFromUser(auth.currentUser);
-  if (identity && identity.participantId === pid && clean.length >= 6) {
-    try {
-      await updatePassword(auth.currentUser, resolveAuthPassword(pid, clean));
-    } catch (_) {}
-  }
-}
-
 export async function updateMyPassword(newPassword) {
   if (!auth.currentUser) throw new Error('未登入');
   const clean = String(newPassword || '').trim();
@@ -881,6 +900,440 @@ export function updateParticipantGroup(participantId, groupId) {
     participant_id: participantId,
     group_id: groupId
   }, { merge: true });
+}
+
+async function withSecondaryAuth(fn) {
+  try {
+    return await fn(secondaryAuth);
+  } finally {
+    try {
+      if (secondaryAuth.currentUser) await signOut(secondaryAuth);
+    } catch (_) { /* ignore */ }
+  }
+}
+
+async function ensureAuthAccount(participantId, password) {
+  const email = participantEmail(participantId);
+  const authPwd = resolveAuthPassword(participantId, password);
+  if (!authPwd || authPwd.length < 6) {
+    throw new Error('密碼長度至少需要 6 個字元（短編號會自動展開）');
+  }
+  await withSecondaryAuth(async (secondary) => {
+    try {
+      await createUserWithEmailAndPassword(secondary, email, authPwd);
+    } catch (err) {
+      if (err && err.code === 'auth/email-already-in-use') {
+        const cred = await signInWithEmailAndPassword(secondary, email, authPwd).catch(async () => {
+          // Password may differ from contacts — try candidates.
+          let last = err;
+          for (const candidate of getAuthPasswordCandidates(participantId, password)) {
+            try {
+              return await signInWithEmailAndPassword(secondary, email, candidate);
+            } catch (e) {
+              last = e;
+            }
+          }
+          throw last;
+        });
+        if (cred && cred.user) {
+          try {
+            await updatePassword(cred.user, authPwd);
+          } catch (_) { /* may require recent login; contacts still updated */ }
+        }
+        return;
+      }
+      throw err;
+    }
+  });
+}
+
+async function deleteAuthAccount(participantId, passwordHint) {
+  const email = participantEmail(participantId);
+  const candidates = getAuthPasswordCandidates(participantId, passwordHint);
+  await withSecondaryAuth(async (secondary) => {
+    let signedIn = false;
+    for (const candidate of candidates) {
+      try {
+        await signInWithEmailAndPassword(secondary, email, candidate);
+        signedIn = true;
+        break;
+      } catch (_) { /* try next */ }
+    }
+    if (!signedIn || !secondary.currentUser) return;
+    await deleteUser(secondary.currentUser);
+  });
+}
+
+/** Next free seat id for a numbered group (e.g. GROUP_1 → 1A…1H). */
+export function nextSeatIdForGroup(groupId, participants) {
+  const n = groupNumberFromId(groupId);
+  if (!n) return '';
+  const taken = new Set(
+    (participants || [])
+      .map(p => String(p.participant_id || '').toUpperCase())
+      .filter(id => id.startsWith(String(n)) && isSeatParticipantId(id))
+  );
+  for (const letter of SEAT_LETTERS) {
+    const id = `${n}${letter}`;
+    if (!taken.has(id)) return id;
+  }
+  return '';
+}
+
+/** Any globally unused seat id (used when creating unassigned people). */
+export function nextGlobalSeatId(participants) {
+  const taken = new Set(
+    (participants || []).map(p => String(p.participant_id || '').toUpperCase())
+  );
+  for (let n = 1; n <= 9; n++) {
+    for (const letter of SEAT_LETTERS) {
+      const id = `${n}${letter}`;
+      if (!taken.has(id)) return id;
+    }
+  }
+  return '';
+}
+
+/**
+ * Rewrite every document that references oldId as a participant id.
+ * Must run while both old and new participant docs can exist.
+ */
+async function rewriteParticipantIdReferences(oldId, newId, newGroupId) {
+  const operations = [];
+
+  const messages = await getDocs(collection(db, 'messages'));
+  messages.docs.forEach(d => {
+    const raw = d.data() || {};
+    const patch = {};
+    if (raw.sender_id === oldId) {
+      patch.sender_id = newId;
+      if (newGroupId) patch.sender_group_id = newGroupId;
+    }
+    if (raw.receiver_id === oldId) patch.receiver_id = newId;
+    if (Object.keys(patch).length) {
+      if (patch.sender_id || patch.receiver_id) {
+        const senderG = patch.sender_group_id || raw.sender_group_id || '';
+        const thread = raw.thread_group_id || '';
+        if (thread && senderG && thread === (raw.sender_group_id || '')) {
+          patch.thread_group_id = senderG;
+        }
+      }
+      operations.push(batch => batch.update(d.ref, patch));
+    }
+  });
+
+  const submissions = await getDocs(collection(db, 'submissions'));
+  submissions.docs.forEach(d => {
+    const raw = d.data() || {};
+    let changed = false;
+    const pairings = (raw.pairings || []).map(pair => {
+      if (!pair || pair.receiver_id !== oldId) return pair;
+      changed = true;
+      return { ...pair, receiver_id: newId };
+    });
+    if (d.id === oldId) {
+      // Copied separately; skip in-place rewrite of the old doc itself.
+      return;
+    }
+    if (changed) {
+      operations.push(batch => batch.update(d.ref, { pairings }));
+    }
+  });
+
+  if (operations.length) await commitAll(operations);
+}
+
+/**
+ * Move a seat id to a new seat id, copying Auth + Firestore and rewriting refs.
+ * Returns the new id.
+ */
+export async function renameParticipantId(oldId, newId, { groupId, displayName, password } = {}) {
+  const from = String(oldId || '').trim().toUpperCase();
+  const to = String(newId || '').trim().toUpperCase();
+  if (!from || !to) throw new Error('編號不能為空');
+  if (from === to) {
+    if (groupId) await updateParticipantGroup(from, groupId);
+    return from;
+  }
+  if (!isSeatParticipantId(to)) throw new Error('新編號格式不正確（例如 1A）');
+
+  const existing = await getDoc(doc(db, 'participants', to));
+  if (existing.exists()) throw new Error(`編號 ${to} 已被使用`);
+
+  const fromSnap = await getDoc(doc(db, 'participants', from));
+  if (!fromSnap.exists()) throw new Error(`搵唔到 ${from}`);
+  const fromData = fromSnap.data() || {};
+  const targetGroup = groupId || fromData.group_id || GROUP_UNASSIGNED;
+  const name = displayName != null ? String(displayName).trim() : String(fromData.display_name || '').trim();
+
+  const contactSnap = await getDoc(doc(db, 'contacts', from));
+  const oldPhone = contactSnap.exists() ? String((contactSnap.data() || {}).phone_number || '') : '';
+  const phone = password != null ? String(password).trim() : oldPhone;
+  if (!phone) throw new Error('請先設定密碼再改編號');
+
+  await ensureAuthAccount(to, phone);
+
+  await setDoc(doc(db, 'participants', to), {
+    participant_id: to,
+    group_id: targetGroup,
+    display_name: name,
+    force_logout_rev: Date.now()
+  });
+  await setDoc(doc(db, 'contacts', to), {
+    participant_id: to,
+    phone_number: phone
+  }, { merge: true });
+
+  const subSnap = await getDoc(doc(db, 'submissions', from));
+  if (subSnap.exists()) {
+    const raw = subSnap.data() || {};
+    await setDoc(doc(db, 'submissions', to), {
+      ...raw,
+      participant_id: to,
+      pairings: (raw.pairings || []).map(pair => (
+        pair && pair.receiver_id === from ? { ...pair, receiver_id: to } : pair
+      ))
+    });
+  }
+
+  const resultSnap = await getDoc(doc(db, 'results', from));
+  if (resultSnap.exists()) {
+    const raw = resultSnap.data() || {};
+    await setDoc(doc(db, 'results', to), { ...raw, participant_id: to });
+  }
+
+  await rewriteParticipantIdReferences(from, to, targetGroup);
+
+  await Promise.all([
+    deleteDoc(doc(db, 'participants', from)),
+    deleteDoc(doc(db, 'contacts', from)).catch(() => {}),
+    deleteDoc(doc(db, 'submissions', from)).catch(() => {}),
+    deleteDoc(doc(db, 'results', from)).catch(() => {}),
+    deleteDoc(doc(db, 'presence', from)).catch(() => {})
+  ]);
+
+  try {
+    await deleteAuthAccount(from, oldPhone || phone);
+  } catch (_) { /* orphan Auth account is acceptable; login id is gone from roster */ }
+
+  return to;
+}
+
+/** Compact seat letters inside a numbered group to consecutive A,B,C… */
+export async function compactGroupSeats(groupId, participants) {
+  if (!isNumberedGroupId(groupId)) return [];
+  const n = groupNumberFromId(groupId);
+  const members = (participants || [])
+    .filter(p => String(p.group_id || '').trim() === groupId && isSeatParticipantId(p.participant_id))
+    .sort((a, b) => a.participant_id.localeCompare(b.participant_id));
+
+  const plan = members.map((p, i) => ({
+    from: String(p.participant_id).toUpperCase(),
+    to: `${n}${SEAT_LETTERS[i]}`
+  })).filter(row => row.from !== row.to);
+
+  if (!plan.length) return [];
+
+  // Two-phase rename via temporary free seats to avoid collisions.
+  const taken = new Set(
+    (participants || []).map(p => String(p.participant_id || '').toUpperCase())
+  );
+  const temps = [];
+  const pickTemp = () => {
+    for (let n = 9; n >= 0; n--) {
+      for (const letter of SEAT_LETTERS) {
+        const id = `${n}${letter}`;
+        if (!taken.has(id) && !temps.some(t => t.temp === id)) return id;
+      }
+    }
+    return '';
+  };
+  for (let i = 0; i < plan.length; i++) {
+    const temp = pickTemp();
+    if (!temp) throw new Error('暫時無法重排座位，請稍後再試');
+    temps.push({ ...plan[i], temp });
+  }
+
+  let roster = participants.slice();
+  for (const row of temps) {
+    await renameParticipantId(row.from, row.temp, { groupId });
+    roster = roster.map(p => (
+      p.participant_id === row.from
+        ? { ...p, participant_id: row.temp, group_id: groupId }
+        : p
+    ));
+  }
+  const renamed = [];
+  for (const row of temps) {
+    await renameParticipantId(row.temp, row.to, { groupId });
+    renamed.push({ from: row.from, to: row.to });
+    roster = roster.map(p => (
+      p.participant_id === row.temp
+        ? { ...p, participant_id: row.to, group_id: groupId }
+        : p
+    ));
+  }
+  return renamed;
+}
+
+/**
+ * Assign a person to a group. Seat members in numbered groups get auto-renumbered
+ * (e.g. 3E → Group 1 becomes next free 1x). Source numbered groups are compacted.
+ */
+export async function assignParticipantToGroup(participantId, targetGroupId, participants) {
+  const pid = String(participantId || '').trim().toUpperCase();
+  const target = String(targetGroupId || '').trim() || GROUP_UNASSIGNED;
+  const roster = participants || [];
+  const person = roster.find(p => String(p.participant_id).toUpperCase() === pid);
+  if (!person) throw new Error('搵唔到呢位參加者');
+
+  const sourceGroup = String(person.group_id || '').trim();
+  const isSeat = isSeatParticipantId(pid);
+
+  // Staff (named ids) only move group membership; login id stays stable.
+  if (!isSeat) {
+    await updateParticipantGroup(pid, target);
+    return { participantId: pid, renamed: false };
+  }
+
+  let finalId = pid;
+  if (isNumberedGroupId(target)) {
+    const desiredPrefix = String(groupNumberFromId(target));
+    const alreadyCorrect = pid.startsWith(desiredPrefix) && sourceGroup === target;
+    if (!alreadyCorrect) {
+      const nextId = nextSeatIdForGroup(target, roster.filter(p => String(p.participant_id).toUpperCase() !== pid));
+      if (!nextId) throw new Error(`${target} 座位已滿（最多 ${SEAT_LETTERS.length} 人）`);
+      if (nextId !== pid) {
+        finalId = await renameParticipantId(pid, nextId, { groupId: target });
+      } else {
+        await updateParticipantGroup(pid, target);
+      }
+    } else {
+      await updateParticipantGroup(pid, target);
+    }
+  } else {
+    await updateParticipantGroup(pid, target);
+  }
+
+  if (isNumberedGroupId(sourceGroup) && sourceGroup !== target) {
+    const afterMove = roster.map(p => {
+      if (String(p.participant_id).toUpperCase() === pid) {
+        return { ...p, participant_id: finalId, group_id: target };
+      }
+      return p;
+    });
+    await compactGroupSeats(sourceGroup, afterMove);
+  }
+
+  return { participantId: finalId, renamed: finalId !== pid };
+}
+
+export async function createParticipant({ participantId, groupId, password, displayName }) {
+  const pid = String(participantId || '').trim().toUpperCase();
+  const group = String(groupId || '').trim() || GROUP_UNASSIGNED;
+  const phone = String(password || '').trim();
+  if (!pid) throw new Error('請輸入參加者編號');
+  if (!phone) throw new Error('請輸入密碼');
+
+  const existing = await getDoc(doc(db, 'participants', pid));
+  if (existing.exists()) throw new Error(`編號 ${pid} 已存在`);
+
+  await ensureAuthAccount(pid, phone);
+  await setDoc(doc(db, 'participants', pid), {
+    participant_id: pid,
+    group_id: group,
+    display_name: String(displayName || '').trim(),
+    force_logout_rev: 0
+  });
+  await setDoc(doc(db, 'contacts', pid), {
+    participant_id: pid,
+    phone_number: phone
+  }, { merge: true });
+  return pid;
+}
+
+export async function deleteParticipantCompletely(participantId, participants) {
+  const pid = String(participantId || '').trim().toUpperCase();
+  if (!pid) return;
+  const person = (participants || []).find(p => String(p.participant_id).toUpperCase() === pid);
+  const groupId = person ? person.group_id : '';
+  const contactSnap = await getDoc(doc(db, 'contacts', pid));
+  const phone = contactSnap.exists() ? String((contactSnap.data() || {}).phone_number || '') : '';
+
+  await clearParticipantRecords(pid, {
+    deleteMessages: true,
+    deleteTrophy: true,
+    deleteResults: true
+  });
+
+  // Also delete messages where they are the receiver.
+  const messages = await getDocs(collection(db, 'messages'));
+  const ops = [];
+  messages.docs.forEach(d => {
+    const raw = d.data() || {};
+    if (raw.receiver_id === pid || raw.sender_id === pid) {
+      ops.push(batch => batch.delete(d.ref));
+    }
+  });
+  if (ops.length) await commitAll(ops);
+
+  await Promise.all([
+    deleteDoc(doc(db, 'participants', pid)),
+    deleteDoc(doc(db, 'contacts', pid)).catch(() => {}),
+    deleteDoc(doc(db, 'presence', pid)).catch(() => {})
+  ]);
+
+  try {
+    await deleteAuthAccount(pid, phone || pid);
+  } catch (_) { /* ignore */ }
+
+  if (isNumberedGroupId(groupId)) {
+    const remaining = (participants || []).filter(p => String(p.participant_id).toUpperCase() !== pid);
+    await compactGroupSeats(groupId, remaining);
+  }
+}
+
+export async function updateParticipantContact(participantId, newPassword) {
+  const pid = String(participantId || '').trim().toUpperCase();
+  if (!pid) return;
+  const clean = String(newPassword || '').trim();
+  const contactSnap = await getDoc(doc(db, 'contacts', pid));
+  const oldPhone = contactSnap.exists() ? String((contactSnap.data() || {}).phone_number || '') : '';
+
+  await setDoc(doc(db, 'contacts', pid), {
+    participant_id: pid,
+    phone_number: clean
+  }, { merge: true });
+
+  const identity = identityFromUser(auth.currentUser);
+  if (identity && identity.participantId === pid && clean.length >= 6) {
+    try {
+      await updatePassword(auth.currentUser, resolveAuthPassword(pid, clean));
+    } catch (_) {}
+    return;
+  }
+
+  // Admin updating someone else: sync Auth via secondary session.
+  if (clean && clean !== oldPhone) {
+    try {
+      await ensureAuthAccount(pid, clean);
+      // If account existed with old password, update it.
+      await withSecondaryAuth(async (secondary) => {
+        const email = participantEmail(pid);
+        let user = null;
+        for (const candidate of getAuthPasswordCandidates(pid, oldPhone || clean)) {
+          try {
+            const cred = await signInWithEmailAndPassword(secondary, email, candidate);
+            user = cred.user;
+            break;
+          } catch (_) { /* next */ }
+        }
+        if (user) {
+          await updatePassword(user, resolveAuthPassword(pid, clean));
+        }
+      });
+    } catch (_) { /* contacts updated; Auth may lag if old password unknown */ }
+  }
 }
 
 export function forceLogoutParticipant(participantId) {
