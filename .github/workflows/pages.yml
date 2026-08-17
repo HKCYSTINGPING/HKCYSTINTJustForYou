@@ -36,25 +36,26 @@ jobs:
           # Bust browser / CDN caches on every Pages deploy (incl. font).
           SHA="$(git rev-parse --short HEAD)"
           python3 - "$SHA" <<'PY'
-          import pathlib, sys
+          import pathlib, re, sys
           ver = sys.argv[1]
           root = pathlib.Path('_site')
           html = (root / 'index.html').read_text(encoding='utf-8')
-          html = html.replace('href="styles.css"', f'href="styles.css?v={ver}"')
-          html = html.replace('href="fonts/CanvaHandwritingStyleTC.woff2"', f'href="fonts/CanvaHandwritingStyleTC.woff2?v={ver}"')
-          html = html.replace('src="app.js"', f'src="app.js?v={ver}"')
+          html = re.sub(r'href="styles\.css(?:\?v=[^"]*)?"', f'href="styles.css?v={ver}"', html)
+          html = re.sub(r'href="fonts/CanvaHandwritingStyleTC\.woff2(?:\?v=[^"]*)?"', f'href="fonts/CanvaHandwritingStyleTC.woff2?v={ver}"', html)
+          html = re.sub(r'src="app\.js(?:\?v=[^"]*)?"', f'src="app.js?v={ver}"', html)
           html = html.replace('</title>', f'</title>\n  <!-- build {ver} -->', 1)
           (root / 'index.html').write_text(html, encoding='utf-8')
           app = (root / 'app.js').read_text(encoding='utf-8')
-          app = app.replace("from './firebase-data.js'", f"from './firebase-data.js?v={ver}'")
+          app = re.sub(r"from '\./firebase-data\.js(?:\?v=[^']*)?'", f"from './firebase-data.js?v={ver}'", app)
           (root / 'app.js').write_text(app, encoding='utf-8')
           data = (root / 'firebase-data.js').read_text(encoding='utf-8')
-          data = data.replace("from './firebase-config.js'", f"from './firebase-config.js?v={ver}'")
+          data = re.sub(r"from '\./firebase-config\.js(?:\?v=[^']*)?'", f"from './firebase-config.js?v={ver}'", data)
           (root / 'firebase-data.js').write_text(data, encoding='utf-8')
           css = (root / 'styles.css').read_text(encoding='utf-8')
-          css = css.replace(
-              'url("fonts/CanvaHandwritingStyleTC.woff2")',
-              f'url("fonts/CanvaHandwritingStyleTC.woff2?v={ver}")'
+          css = re.sub(
+              r'url\("fonts/CanvaHandwritingStyleTC\.woff2(?:\?v=[^"]*)?"\)',
+              f'url("fonts/CanvaHandwritingStyleTC.woff2?v={ver}")',
+              css
           )
           (root / 'styles.css').write_text(css, encoding='utf-8')
           print(f'Cache bust version: {ver}')

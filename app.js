@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js';
+import * as data from './firebase-data.js?v=20260817v3';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
