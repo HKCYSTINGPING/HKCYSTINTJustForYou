@@ -2784,16 +2784,16 @@ button.group-voter-header:hover {
   outline-offset: 2px;
 }
 
-/* Hide desktop-only elements — mobile only app */
+/* Hide desktop-only elements — mobile only app (participant / login frame) */
 @media (min-width: 481px) {
-  body {
+  body:not(.admin-active) {
     display: flex;
     justify-content: center;
     background: #F0E8DC;
   }
 
-  .screen-app,
-  .bottom-nav {
+  body:not(.admin-active) .screen-app,
+  body:not(.admin-active) .bottom-nav {
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
   }
@@ -3181,4 +3181,258 @@ button.group-voter-header:hover {
 }
 #trophy-submitted-banner {
   margin-bottom: var(--space-sm);
+}
+
+.admin-workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-dashboard-side {
+  display: contents;
+}
+
+/* ── Admin desktop console (laptop / wide browser) ───────────────────────── */
+@media (min-width: 900px) {
+  body.admin-active {
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(233, 196, 106, 0.18), transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, rgba(212, 163, 115, 0.12), transparent 50%),
+      #EDE6DC;
+  }
+
+  body.admin-active #screen-admin.screen-app {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-bottom: 0;
+    background: transparent;
+    border: none;
+  }
+
+  body.admin-active #screen-admin .admin-header {
+    flex-shrink: 0;
+    align-items: center;
+    padding: 14px 28px;
+    background: rgba(255, 252, 247, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  body.admin-active #screen-admin .admin-header .greeting-text {
+    font-size: 1.35rem;
+    letter-spacing: -0.03em;
+  }
+
+  body.admin-active #screen-admin .admin-header .greeting-text::after {
+    content: " · Desktop Console";
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0;
+  }
+
+  body.admin-active #screen-admin .admin-workspace {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    min-height: 0;
+    flex: 1;
+  }
+
+  body.admin-active #screen-admin .admin-bottom-nav {
+    position: relative;
+    top: auto;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: auto;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    align-self: stretch;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 18px 14px;
+    padding-bottom: 18px;
+    background: rgba(255, 252, 247, 0.96);
+    border-top: none;
+    border-right: 1px solid var(--border);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.5);
+    z-index: 20;
+    overflow-y: auto;
+  }
+
+  body.admin-active #screen-admin .admin-bottom-nav::before {
+    content: "HKCYS TINT";
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 4px 12px 14px;
+  }
+
+  body.admin-active #screen-admin .admin-bottom-nav .bottom-nav-item {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 46px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  body.admin-active #screen-admin .admin-bottom-nav .bottom-nav-item:hover {
+    background: rgba(233, 196, 106, 0.14);
+    color: var(--text);
+  }
+
+  body.admin-active #screen-admin .admin-bottom-nav .bottom-nav-item.active {
+    background: linear-gradient(135deg, rgba(233, 196, 106, 0.35), rgba(212, 163, 115, 0.22));
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px rgba(212, 163, 115, 0.35);
+  }
+
+  body.admin-active #screen-admin .admin-bottom-nav .bottom-nav-icon {
+    font-size: 1.35rem;
+  }
+
+  body.admin-active #screen-admin .admin-bottom-nav .bottom-nav-label {
+    font-size: 0.92rem;
+  }
+
+  body.admin-active #screen-admin .app-main {
+    padding: 22px 28px 36px;
+    overflow-y: auto;
+    background:
+      linear-gradient(180deg, rgba(255, 249, 242, 0.35), transparent 120px);
+  }
+
+  body.admin-active #admin-dashboard-panel.active {
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.9fr);
+    gap: 18px 20px;
+    align-items: start;
+  }
+
+  body.admin-active #admin-dashboard-panel #admin-dashboard-stats {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 0;
+  }
+
+  body.admin-active #admin-dashboard-panel .admin-roster-card {
+    grid-column: 1;
+    grid-row: 2 / span 4;
+    margin-bottom: 0;
+    min-height: 520px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body.admin-active #admin-dashboard-panel .admin-dashboard-side {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  body.admin-active #admin-dashboard-panel .admin-roster-board {
+    flex: 1;
+    max-height: none;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  }
+
+  body.admin-active #admin-dashboard-panel .stat-card {
+    text-align: left;
+    padding: 18px 20px;
+  }
+
+  body.admin-active #admin-dashboard-panel .stat-value {
+    font-size: 1.5rem;
+  }
+
+  body.admin-active .admin-panel.active {
+    max-width: 1400px;
+  }
+
+  body.admin-active #admin-messages-panel.active,
+  body.admin-active #admin-trophy-panel.active,
+  body.admin-active #admin-results-panel.active,
+  body.admin-active #admin-participants-panel.active {
+    display: block;
+  }
+
+  body.admin-active #admin-messages-panel .admin-msg-filters,
+  body.admin-active #admin-messages-panel .admin-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+
+  body.admin-active #admin-message-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 12px;
+  }
+
+  body.admin-active .admin-trophy-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  body.admin-active .admin-trophy-controls .btn {
+    min-width: 140px;
+  }
+
+  body.admin-active .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  body.admin-active #admin-participants-panel .admin-participant-form .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  body.admin-active .card {
+    box-shadow: 0 8px 28px rgba(74, 64, 58, 0.06);
+  }
+
+  body.admin-active .roster-column {
+    min-height: 180px;
+  }
+}
+
+@media (min-width: 1280px) {
+  body.admin-active #screen-admin .admin-workspace {
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  body.admin-active #screen-admin .app-main {
+    padding: 28px 36px 40px;
+  }
+
+  body.admin-active #admin-dashboard-panel.active {
+    grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.85fr);
+  }
+
+  body.admin-active #admin-dashboard-panel .admin-roster-board {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }

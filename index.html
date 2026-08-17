@@ -11,7 +11,7 @@
   <meta http-equiv="Expires" content="0">
   <title>HKCYS TINT — Just For You</title>
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260817v4">
+  <link rel="stylesheet" href="styles.css?v=20260817v5">
 </head>
 <body>
 
@@ -685,6 +685,30 @@
       </div>
     </header>
 
+    <div class="admin-workspace">
+    <nav class="bottom-nav admin-bottom-nav" role="tablist" aria-label="管理員導航">
+      <button type="button" class="bottom-nav-item active" data-admin-tab="dashboard" role="tab" aria-selected="true">
+        <span class="bottom-nav-icon app-icon app-icon-chart" aria-hidden="true"></span>
+        <span class="bottom-nav-label">Dashboard</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-admin-tab="messages" role="tab" aria-selected="false">
+        <span class="bottom-nav-icon app-icon app-icon-chat" aria-hidden="true"></span>
+        <span class="bottom-nav-label">Messages</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-admin-tab="voting" role="tab" aria-selected="false">
+        <span class="bottom-nav-icon app-icon app-icon-trophy" aria-hidden="true"></span>
+        <span class="bottom-nav-label">Voting</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-admin-tab="results" role="tab" aria-selected="false">
+        <span class="bottom-nav-icon app-icon app-icon-clipboard" aria-hidden="true"></span>
+        <span class="bottom-nav-label">Results</span>
+      </button>
+      <button type="button" class="bottom-nav-item" data-admin-tab="settings" role="tab" aria-selected="false">
+        <span class="bottom-nav-icon app-icon app-icon-settings" aria-hidden="true"></span>
+        <span class="bottom-nav-label">Settings</span>
+      </button>
+    </nav>
+
     <main class="app-main">
       <!-- Dashboard -->
       <div id="admin-dashboard-panel" class="admin-panel active" data-admin-view="dashboard">
@@ -703,6 +727,7 @@
           <div id="admin-roster-board" class="admin-roster-board" aria-label="分組看板"></div>
         </div>
 
+        <div class="admin-dashboard-side">
         <div class="card" data-tour="admin-login-status">
           <div id="admin-login-status" class="admin-pending"></div>
         </div>
@@ -718,6 +743,7 @@
         <div class="card" data-tour="admin-recent-activity">
           <h3 class="section-title">最近活動</h3>
           <div id="admin-recent-activity" class="recent-activity"></div>
+        </div>
         </div>
       </div>
 
@@ -924,31 +950,9 @@
         </div>
       </div>
     </main>
-
-    <nav class="bottom-nav admin-bottom-nav" role="tablist" aria-label="管理員導航">
-      <button type="button" class="bottom-nav-item active" data-admin-tab="dashboard" role="tab" aria-selected="true">
-        <span class="bottom-nav-icon app-icon app-icon-chart" aria-hidden="true"></span>
-        <span class="bottom-nav-label">Dashboard</span>
-      </button>
-      <button type="button" class="bottom-nav-item" data-admin-tab="messages" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon app-icon app-icon-chat" aria-hidden="true"></span>
-        <span class="bottom-nav-label">Messages</span>
-      </button>
-      <button type="button" class="bottom-nav-item" data-admin-tab="voting" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon app-icon app-icon-trophy" aria-hidden="true"></span>
-        <span class="bottom-nav-label">Voting</span>
-      </button>
-      <button type="button" class="bottom-nav-item" data-admin-tab="results" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon app-icon app-icon-clipboard" aria-hidden="true"></span>
-        <span class="bottom-nav-label">Results</span>
-      </button>
-      <button type="button" class="bottom-nav-item" data-admin-tab="settings" role="tab" aria-selected="false">
-        <span class="bottom-nav-icon app-icon app-icon-settings" aria-hidden="true"></span>
-        <span class="bottom-nav-label">Settings</span>
-      </button>
-    </nav>
+    </div>
   </section>
 
-  <script type="module" src="app.js?v=20260817v4"></script>
+  <script type="module" src="app.js?v=20260817v5"></script>
 </body>
 </html>
