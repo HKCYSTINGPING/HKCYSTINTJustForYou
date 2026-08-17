@@ -41,7 +41,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260817v10';
+import { ADMIN_EMAIL, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260817v11';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -88,21 +88,35 @@ function isRetryableAuthLookup(err) {
     || code === 'auth/too-many-requests';
 }
 
+function authPasswordsToTry(participantId, entered) {
+  const passwords = [];
+  const add = (value) => {
+    const next = String(value || '');
+    if (next && !passwords.includes(next)) passwords.push(next);
+  };
+  add(resolveAuthPassword(participantId, entered));
+  const raw = String(entered || '').trim();
+  if (raw.length >= 6) add(raw);
+  return passwords;
+}
+
 async function signInWithResolvedPassword(authInstance, participantId, entered) {
-  const password = resolveAuthPassword(participantId, entered);
-  if (!password) {
+  const passwords = authPasswordsToTry(participantId, entered);
+  if (!passwords.length) {
     const err = new Error('請輸入密碼');
     err.code = 'auth/invalid-credential';
     throw err;
   }
   const emails = isAdminId(participantId) ? [ADMIN_EMAIL] : participantEmails(participantId);
   let lastErr = null;
-  for (const email of emails) {
-    try {
-      return await signInWithEmailAndPassword(authInstance, email, password);
-    } catch (err) {
-      lastErr = err;
-      if (!isRetryableAuthLookup(err)) throw hideAuthCooldown(err);
+  for (const password of passwords) {
+    for (const email of emails) {
+      try {
+        return await signInWithEmailAndPassword(authInstance, email, password);
+      } catch (err) {
+        lastErr = err;
+        if (!isRetryableAuthLookup(err)) throw hideAuthCooldown(err);
+      }
     }
   }
   throw hideAuthCooldown(lastErr || new Error('參加者編號或密碼不正確'));
@@ -144,6 +158,20 @@ export function resolveAuthPassword(participantId, entered) {
     let expanded = raw.toUpperCase();
     while (expanded.length < 6) expanded += raw.toUpperCase();
     return expanded;
+  }
+  return raw;
+}
+
+/** If the password was the old seat id, move it with the person to the new id. */
+function followSeatPassword(oldId, newId, stored) {
+  const raw = String(stored || '').trim();
+  const from = String(oldId || '').trim().toUpperCase();
+  const to = String(newId || '').trim().toUpperCase();
+  if (!to) return raw;
+  if (!raw) return to;
+  const expandedFrom = authPasswordForParticipantId(from);
+  if (raw.toUpperCase() === from || raw.toUpperCase() === expandedFrom.toUpperCase()) {
+    return to;
   }
   return raw;
 }
@@ -1062,7 +1090,8 @@ export async function renameParticipantId(oldId, newId, { groupId, displayName, 
 
   const contactSnap = await getDoc(doc(db, 'contacts', from));
   const oldPhone = contactSnap.exists() ? String((contactSnap.data() || {}).phone_number || '') : '';
-  const phone = password != null ? String(password).trim() : oldPhone;
+  const explicitPassword = password != null ? String(password).trim() : '';
+  const phone = explicitPassword || followSeatPassword(from, to, oldPhone);
   if (!phone) throw new Error('請先設定密碼再改編號');
 
   await ensureAuthAccount(to, phone);
