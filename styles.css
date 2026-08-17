@@ -1857,6 +1857,38 @@ html.keyboard-open body.admin-active .toast-container {
   font-size: var(--fs-caption);
   color: var(--text-muted);
   margin-top: var(--space-xs);
+  line-height: 1.35;
+  writing-mode: horizontal-tb;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.live-load-grid {
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 0;
+}
+
+.live-load-grid .stat-card {
+  min-width: 0;
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.live-load-grid .stat-value {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-load-grid .stat-label {
+  display: block;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  white-space: normal;
+  word-break: keep-all;
+  line-height: 1.35;
 }
 
 /* Voting-status tone cards: draft / open / closed / calculated / published */
@@ -3400,8 +3432,22 @@ button.group-voter-header:hover {
     min-width: 140px;
   }
 
-  body.admin-active .stats-grid {
+  body.admin-active #admin-trophy-stats.stats-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  body.admin-active #admin-live-load.live-load-grid,
+  body.admin-active .live-load-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body.admin-active #admin-dashboard-panel .live-load-grid .stat-card {
+    text-align: center;
+    padding: 12px 10px;
+  }
+
+  body.admin-active #admin-dashboard-panel .live-load-grid .stat-value {
+    font-size: 1.15rem;
   }
 
   body.admin-active #admin-participants-panel .admin-participant-form .form-row {
