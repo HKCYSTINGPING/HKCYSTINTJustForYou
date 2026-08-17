@@ -101,15 +101,22 @@ export function authPasswordForParticipantId(participantId, toUpper = true) {
 export function resolveAuthPassword(participantId, entered) {
   const raw = String(entered || '').trim();
   const id = String(participantId || '').trim();
-  if (raw && id && raw.toUpperCase() === id.toUpperCase()) {
-    return authPasswordForParticipantId(id.toUpperCase());
+  if (!raw) return '';
+  const expandedId = authPasswordForParticipantId(id);
+  if (id && (raw.toUpperCase() === id.toUpperCase() || raw.toUpperCase() === expandedId.toUpperCase())) {
+    return expandedId;
+  }
+  if (raw.length < 6) {
+    let expanded = raw.toUpperCase();
+    while (expanded.length < 6) expanded += raw.toUpperCase();
+    return expanded;
   }
   return raw;
 }
 
 /**
- * Returns candidate password variants (as typed, uppercase, lowercase, resolved)
- * so users can log in regardless of upper/lower case typing.
+ * Returns clean candidate password(s) ensuring all candidates are valid (>= 6 chars)
+ * and avoiding redundant calls to Firebase Auth.
  */
 export function getAuthPasswordCandidates(participantId, entered) {
   const raw = String(entered || '').trim();
@@ -117,24 +124,18 @@ export function getAuthPasswordCandidates(participantId, entered) {
   if (!raw) return [];
 
   const candidates = [];
-  const resolved = resolveAuthPassword(id, raw);
-  candidates.push(resolved);
+  const primary = resolveAuthPassword(id, raw);
+  if (primary && primary.length >= 6) {
+    candidates.push(primary);
+  }
 
-  if (raw !== resolved) {
+  // If user entered raw string with mixed/lower case >= 6 chars different from primary
+  if (raw.length >= 6 && raw !== primary && !candidates.includes(raw)) {
     candidates.push(raw);
   }
 
-  const upper = raw.toUpperCase();
-  const resolvedUpper = resolveAuthPassword(id, upper);
-  if (resolvedUpper !== resolved && !candidates.includes(resolvedUpper)) {
-    candidates.push(resolvedUpper);
-  } else if (upper !== resolved && !candidates.includes(upper)) {
-    candidates.push(upper);
-  }
-
-  const lower = raw.toLowerCase();
-  if (!candidates.includes(lower)) {
-    candidates.push(lower);
+  if (candidates.length === 0) {
+    candidates.push(primary || raw);
   }
 
   return candidates;
