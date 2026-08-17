@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260817v14">
+  <link rel="stylesheet" href="styles.css?v=20260817v15">
 </head>
 <body>
 
@@ -66,6 +66,14 @@
         <p class="app-subtitle">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
         <p class="login-welcome">歡迎回來，請登入以繼續</p>
       </header>
+
+      <div id="login-a2hs-banner" class="a2hs-banner">
+        <div class="a2hs-banner-copy">
+          <strong>建議加到主畫面</strong>
+          <span>全螢幕開啟會更清楚，唔使瀏覽器工具列擋住。</span>
+        </div>
+        <button type="button" id="login-add-home" class="btn btn-primary btn-sm">加入主畫面</button>
+      </div>
 
       <form id="login-form" class="login-form" novalidate>
         <div class="form-group">
@@ -971,6 +979,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260817v14"></script>
+  <script type="module" src="app.js?v=20260817v15"></script>
 </body>
 </html>

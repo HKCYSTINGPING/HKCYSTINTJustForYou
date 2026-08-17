@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v14';
+import * as data from './firebase-data.js?v=20260817v15';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -649,6 +649,8 @@ function cacheDOM() {
   DOM.a2hsInstall = document.getElementById('a2hs-install');
   DOM.profileAddHome = document.getElementById('profile-add-home');
   DOM.profileA2hsCard = document.getElementById('profile-a2hs-card');
+  DOM.loginA2hsBanner = document.getElementById('login-a2hs-banner');
+  DOM.loginAddHome = document.getElementById('login-add-home');
 
   DOM.trophyResultsModal = document.getElementById('trophy-results-modal');
   DOM.trophyResultsModalList = document.getElementById('trophy-results-modal-list');
@@ -3612,20 +3614,19 @@ function isOnboardingOpen() {
 }
 
 function isStandaloneApp() {
-  return window.matchMedia('(display-mode: standalone)').matches
-    || window.navigator.standalone === true;
+  if (window.navigator.standalone === true) return true;
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches
+      && !window.matchMedia('(display-mode: browser)').matches;
+  } catch (_) {
+    return false;
+  }
 }
 
 function isIosDevice() {
   const ua = String(navigator.userAgent || '');
   return /iPhone|iPad|iPod/i.test(ua)
     || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
-}
-
-function isSplashVisible() {
-  if (splashActive) return true;
-  if (!DOM.screenSplash) return false;
-  return !DOM.screenSplash.classList.contains('hidden');
 }
 
 function shouldHoldOnboardingForA2HS() {
@@ -3669,18 +3670,22 @@ function fillAddToHomeCopy() {
 }
 
 function openAddToHomePrompt({ force = false } = {}) {
-  if (!DOM.a2hsModal) return;
+  const modal = DOM.a2hsModal || document.getElementById('a2hs-modal');
+  if (!modal) return;
+  DOM.a2hsModal = modal;
   if (isStandaloneApp()) {
     a2hsQueued = false;
     if (force) showToast('你已經喺主畫面版本開啟', 'info');
     return;
   }
   a2hsQueued = false;
-  if (DOM.a2hsModal.parentNode !== document.body) {
-    document.body.appendChild(DOM.a2hsModal);
+  if (modal.parentNode !== document.body) {
+    document.body.appendChild(modal);
   }
   fillAddToHomeCopy();
-  DOM.a2hsModal.classList.remove('hidden');
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+  modal.style.zIndex = '10050';
   syncBodyModalOpen();
   (deferredA2HSPrompt ? DOM.a2hsInstall : DOM.a2hsLater)?.focus();
 }
@@ -3688,6 +3693,7 @@ function openAddToHomePrompt({ force = false } = {}) {
 function closeAddToHomePrompt() {
   if (!DOM.a2hsModal) return;
   DOM.a2hsModal.classList.add('hidden');
+  DOM.a2hsModal.style.removeProperty('display');
   syncBodyModalOpen();
   maybeShowPageOnboarding();
 }
@@ -3710,26 +3716,15 @@ async function handleAddToHomeInstall() {
 }
 
 function maybeShowAddToHomePrompt() {
-  if (isStandaloneApp() || isAddToHomeOpen()) {
+  if (isStandaloneApp()) {
     a2hsQueued = false;
+    if (DOM.loginA2hsBanner) DOM.loginA2hsBanner.classList.add('hidden');
     maybeShowPageOnboarding();
     return;
   }
+  if (isAddToHomeOpen()) return;
   a2hsQueued = true;
-  const tryOpen = () => {
-    if (isStandaloneApp()) {
-      a2hsQueued = false;
-      maybeShowPageOnboarding();
-      return;
-    }
-    if (isAddToHomeOpen()) return;
-    if (isSplashVisible()) {
-      window.setTimeout(tryOpen, 160);
-      return;
-    }
-    openAddToHomePrompt();
-  };
-  window.setTimeout(tryOpen, 280);
+  openAddToHomePrompt();
 }
 
 function initAddToHome() {
@@ -6367,6 +6362,9 @@ function bindEvents() {
   if (DOM.profileAddHome) {
     DOM.profileAddHome.addEventListener('click', () => openAddToHomePrompt({ force: true }));
   }
+  if (DOM.loginAddHome) {
+    DOM.loginAddHome.addEventListener('click', () => openAddToHomePrompt({ force: true }));
+  }
   document.querySelectorAll('.page-help-btn').forEach(btn => {
     btn.addEventListener('click', handlePageHelpClick);
   });
@@ -6670,11 +6668,13 @@ async function startApp() {
   }
 
   await endSplash();
+  maybeShowAddToHomePrompt();
   if (!restored) {
     showScreen('login');
     updateLoginStatusBanner();
     const loginInner = document.querySelector('#screen-login .login-inner');
     replayEnterAnimation(loginInner, 'page-enter');
+    maybeShowAddToHomePrompt();
   }
 }
 

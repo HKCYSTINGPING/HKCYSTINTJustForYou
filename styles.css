@@ -1606,7 +1606,39 @@ textarea.input-field {
 }
 
 #a2hs-modal {
-  z-index: 500;
+  z-index: 10050;
+  display: flex;
+}
+
+#a2hs-modal.hidden {
+  display: none !important;
+}
+
+.a2hs-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md);
+  background: var(--primary-light);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+}
+
+.a2hs-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.a2hs-banner-copy strong {
+  font-size: var(--fs-body);
+}
+
+.a2hs-banner-copy span {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
 }
 
 .a2hs-hero {
