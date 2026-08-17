@@ -17,6 +17,7 @@ import {
   onAuthStateChanged,
   setPersistence,
   browserSessionPersistence,
+  inMemoryPersistence,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   deleteUser,
@@ -40,7 +41,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v7';
+import { ADMIN_EMAIL, firebaseConfig, participantEmail } from './firebase-config.js?v=20260817v8';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -49,6 +50,7 @@ const db = getFirestore(app);
 /** Secondary Auth app so admin can create / delete other accounts without swapping session. */
 const secondaryApp = initializeApp(firebaseConfig, 'SecondaryAdmin');
 const secondaryAuth = getAuth(secondaryApp);
+setPersistence(secondaryAuth, inMemoryPersistence).catch(() => {});
 
 export const GROUP_UNASSIGNED = 'GROUP_UNASSIGNED';
 export const GROUP_STAFF = 'GROUP_STAFF';
@@ -923,39 +925,69 @@ async function withSecondaryAuth(fn) {
   }
 }
 
-async function ensureAuthAccount(participantId, password) {
+async function signInSecondaryWithHints(participantId, hints) {
   const email = participantEmail(participantId);
-  const authPwd = resolveAuthPassword(participantId, password);
-  if (!authPwd || authPwd.length < 6) {
+  const tried = new Set();
+  let lastErr = null;
+  for (const hint of hints) {
+    for (const candidate of getAuthPasswordCandidates(participantId, hint)) {
+      if (!candidate || tried.has(candidate)) continue;
+      tried.add(candidate);
+      try {
+        return await signInWithEmailAndPassword(secondaryAuth, email, candidate);
+      } catch (err) {
+        lastErr = err;
+        const code = err && err.code;
+        const retryable = code === 'auth/invalid-credential'
+          || code === 'auth/invalid-login-credentials'
+          || code === 'auth/wrong-password'
+          || code === 'auth/user-not-found';
+        if (!retryable) throw err;
+      }
+    }
+  }
+  if (lastErr) throw lastErr;
+  const missing = new Error('無法驗證現有登入帳戶');
+  missing.code = 'auth-password-sync-failed';
+  throw missing;
+}
+
+async function syncAuthPassword(participantId, newPassword, oldPassword) {
+  const pid = String(participantId || '').trim().toUpperCase();
+  const nextPwd = resolveAuthPassword(pid, newPassword);
+  if (!nextPwd || nextPwd.length < 6) {
     throw new Error('密碼長度至少需要 6 個字元（短編號會自動展開）');
   }
-  await withSecondaryAuth(async (secondary) => {
+  const email = participantEmail(pid);
+  const hints = [oldPassword, pid, authPasswordForParticipantId(pid)];
+
+  await withSecondaryAuth(async () => {
     try {
-      await createUserWithEmailAndPassword(secondary, email, authPwd);
-    } catch (err) {
-      if (err && err.code === 'auth/email-already-in-use') {
-        const cred = await signInWithEmailAndPassword(secondary, email, authPwd).catch(async () => {
-          // Password may differ from contacts — try candidates.
-          let last = err;
-          for (const candidate of getAuthPasswordCandidates(participantId, password)) {
-            try {
-              return await signInWithEmailAndPassword(secondary, email, candidate);
-            } catch (e) {
-              last = e;
-            }
-          }
-          throw last;
-        });
-        if (cred && cred.user) {
-          try {
-            await updatePassword(cred.user, authPwd);
-          } catch (_) { /* may require recent login; contacts still updated */ }
-        }
+      const cred = await signInSecondaryWithHints(pid, hints);
+      if (cred && cred.user) {
+        await updatePassword(cred.user, nextPwd);
         return;
       }
-      throw err;
+    } catch (err) {
+      const code = err && err.code;
+      if (code === 'auth/too-many-requests') throw err;
+      try {
+        await createUserWithEmailAndPassword(secondaryAuth, email, nextPwd);
+        return;
+      } catch (createErr) {
+        if (createErr && createErr.code === 'auth/email-already-in-use') {
+          const fail = new Error('登入密碼未能同步到 Firebase Auth，對方仍會用舊密碼登入。請再試一次，或先用舊密碼確認帳戶仍然有效。');
+          fail.code = 'auth-password-sync-failed';
+          throw fail;
+        }
+        throw createErr;
+      }
     }
   });
+}
+
+async function ensureAuthAccount(participantId, password) {
+  await syncAuthPassword(participantId, password, password);
 }
 
 async function deleteAuthAccount(participantId, passwordHint) {
@@ -1308,43 +1340,26 @@ export async function updateParticipantContact(participantId, newPassword) {
   const pid = String(participantId || '').trim().toUpperCase();
   if (!pid) return;
   const clean = String(newPassword || '').trim();
+  if (!clean) return;
+
   const contactSnap = await getDoc(doc(db, 'contacts', pid));
   const oldPhone = contactSnap.exists() ? String((contactSnap.data() || {}).phone_number || '') : '';
 
+  const identity = identityFromUser(auth.currentUser);
+  if (identity && identity.participantId === pid) {
+    await updatePassword(auth.currentUser, resolveAuthPassword(pid, clean));
+    await setDoc(doc(db, 'contacts', pid), {
+      participant_id: pid,
+      phone_number: clean
+    }, { merge: true });
+    return;
+  }
+
+  await syncAuthPassword(pid, clean, oldPhone || pid);
   await setDoc(doc(db, 'contacts', pid), {
     participant_id: pid,
     phone_number: clean
   }, { merge: true });
-
-  const identity = identityFromUser(auth.currentUser);
-  if (identity && identity.participantId === pid && clean.length >= 6) {
-    try {
-      await updatePassword(auth.currentUser, resolveAuthPassword(pid, clean));
-    } catch (_) {}
-    return;
-  }
-
-  // Admin updating someone else: sync Auth via secondary session.
-  if (clean && clean !== oldPhone) {
-    try {
-      await ensureAuthAccount(pid, clean);
-      // If account existed with old password, update it.
-      await withSecondaryAuth(async (secondary) => {
-        const email = participantEmail(pid);
-        let user = null;
-        for (const candidate of getAuthPasswordCandidates(pid, oldPhone || clean)) {
-          try {
-            const cred = await signInWithEmailAndPassword(secondary, email, candidate);
-            user = cred.user;
-            break;
-          } catch (_) { /* next */ }
-        }
-        if (user) {
-          await updatePassword(user, resolveAuthPassword(pid, clean));
-        }
-      });
-    } catch (_) { /* contacts updated; Auth may lag if old password unknown */ }
-  }
 }
 
 export function forceLogoutParticipant(participantId) {

@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v7';
+import * as data from './firebase-data.js?v=20260817v8';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -5831,17 +5831,21 @@ async function handleRosterEditSave() {
         }
         if (password) {
           await data.updateParticipantContact(finalId, password);
+          await data.forceLogoutParticipant(finalId).catch(() => {});
         }
       }
 
       // If renamed path already set name/password/group; still sync leftovers.
       if (newId && newId !== oldId) {
         if (name) await data.updateParticipantDisplayName(finalId, name).catch(() => {});
-        if (password) await data.updateParticipantContact(finalId, password).catch(() => {});
+        if (password) {
+          await data.updateParticipantContact(finalId, password);
+          await data.forceLogoutParticipant(finalId).catch(() => {});
+        }
       }
 
       closeRosterEditModal();
-      showToast('已更新 ' + finalId, 'success');
+      showToast(password ? ('已更新 ' + finalId + '，新密碼已即時生效') : ('已更新 ' + finalId), 'success');
     } catch (err) {
       showToast(data.describeFirestoreError(err, err.message || '儲存失敗'), 'error');
     }
@@ -5956,13 +5960,14 @@ async function handleAdminSaveParticipant() {
 
       if (newPassword) {
         await data.updateParticipantContact(pid, newPassword);
+        await data.forceLogoutParticipant(pid).catch(() => {});
         if (state.adminParticipant.detail?.participant) {
           state.adminParticipant.detail.participant.phone_number = newPassword;
         }
       }
 
       setParticipantsCache(state.participants);
-      showToast('參加者資料已更新', 'success');
+      showToast(newPassword ? '參加者資料已更新，新密碼已即時生效' : '參加者資料已更新', 'success');
       await refreshAdminParticipantDetail();
       refreshAdminTrophyViews();
       renderAdminGroupOverrides();
