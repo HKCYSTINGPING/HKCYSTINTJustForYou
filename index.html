@@ -5,13 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#FFF9F2">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TINT">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>HKCYS TINT — Just For You</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260817v11">
+  <link rel="stylesheet" href="styles.css?v=20260817v12">
 </head>
 <body>
 
@@ -329,6 +333,11 @@
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
         </div>
+        <div class="card profile-a2hs-card" id="profile-a2hs-card">
+          <h3 class="section-title">加入主畫面</h3>
+          <p class="form-hint">加到手機主畫面之後，全螢幕開啟會更清楚、更快。iPhone 請用 Safari。</p>
+          <button type="button" id="profile-add-home" class="btn btn-secondary btn-sm">加入主畫面</button>
+        </div>
         <div class="card profile-password-card">
           <h3 class="section-title">修改密碼</h3>
           <p class="form-hint">修改後下次登入請使用新密碼。</p>
@@ -510,6 +519,19 @@
       </button>
     </nav>
   </section>
+
+  <div id="a2hs-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="a2hs-title">
+    <div class="modal-card glass-card a2hs-modal-card">
+      <div class="a2hs-hero app-icon app-icon-home" aria-hidden="true"></div>
+      <h2 id="a2hs-title">加到主畫面</h2>
+      <p id="a2hs-subtitle" class="trophy-modal-subtitle">第一次用？加到主畫面之後全螢幕睇會更清楚。</p>
+      <ol id="a2hs-steps" class="a2hs-steps"></ol>
+      <div class="onboarding-actions">
+        <button type="button" id="a2hs-later" class="btn btn-secondary btn-sm">稍後</button>
+        <button type="button" id="a2hs-install" class="btn btn-primary btn-sm">加入主畫面</button>
+      </div>
+    </div>
+  </div>
 
   <!-- First-login coach tips (small cards by each feature) -->
   <div id="onboarding-coach" class="onboarding-coach hidden" aria-hidden="true">
@@ -949,6 +971,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260817v11"></script>
+  <script type="module" src="app.js?v=20260817v12"></script>
 </body>
 </html>

@@ -1601,6 +1601,33 @@ textarea.input-field {
   max-width: 320px;
 }
 
+.a2hs-modal-card {
+  max-width: 340px;
+}
+
+.a2hs-hero {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--space-sm);
+}
+
+.a2hs-steps {
+  text-align: left;
+  margin: 0 0 var(--space-md);
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: 1.55;
+}
+
+.a2hs-steps li + li {
+  margin-top: 6px;
+}
+
+.a2hs-steps strong {
+  color: var(--text);
+}
+
 /* ─── First-login coach tips ────────────────────────────────────────────── */
 
 .onboarding-coach {

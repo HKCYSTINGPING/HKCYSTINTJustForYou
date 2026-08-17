@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v11';
+import * as data from './firebase-data.js?v=20260817v12';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -569,6 +569,8 @@ const onboardingState = {
 };
 
 const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v2';
+const A2HS_SEEN_KEY = 'tnit_a2hs_prompted_v1';
+let deferredA2HSPrompt = null;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -640,6 +642,13 @@ function cacheDOM() {
   DOM.onboardingPrev = document.getElementById('onboarding-prev');
   DOM.onboardingNext = document.getElementById('onboarding-next');
   DOM.onboardingSkip = document.getElementById('onboarding-skip');
+  DOM.a2hsModal = document.getElementById('a2hs-modal');
+  DOM.a2hsSubtitle = document.getElementById('a2hs-subtitle');
+  DOM.a2hsSteps = document.getElementById('a2hs-steps');
+  DOM.a2hsLater = document.getElementById('a2hs-later');
+  DOM.a2hsInstall = document.getElementById('a2hs-install');
+  DOM.profileAddHome = document.getElementById('profile-add-home');
+  DOM.profileA2hsCard = document.getElementById('profile-a2hs-card');
 
   DOM.trophyResultsModal = document.getElementById('trophy-results-modal');
   DOM.trophyResultsModalList = document.getElementById('trophy-results-modal-list');
@@ -2428,6 +2437,7 @@ async function enterParticipantDashboard() {
     showToast('載入資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
     finishLoading();
+    maybeShowAddToHomePrompt();
   }
 }
 
@@ -2464,6 +2474,9 @@ function renderProfile() {
     <div class="profile-stat"><div class="profile-stat-value">${escapeHtml(formatGroupLabel(p.group_id || '—'))}</div><div class="profile-stat-label">分組</div></div>
     <div class="profile-stat"><div class="profile-stat-value">${votingLabel}</div><div class="profile-stat-label">投票狀態</div></div>
   `;
+  if (DOM.profileA2hsCard) {
+    DOM.profileA2hsCard.classList.toggle('hidden', isStandaloneApp());
+  }
   renderStaffFacilitatorPanel();
 }
 
@@ -2696,6 +2709,7 @@ async function enterAdminDashboard() {
     switchAdminTab('dashboard');
   } finally {
     finishLoading();
+    maybeShowAddToHomePrompt();
   }
 }
 
@@ -3340,7 +3354,7 @@ function hideTrophyResultsModal() {
 }
 
 function syncBodyModalOpen() {
-  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal, DOM.forceLogoutModal, DOM.forceLogoutAllModal]
+  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal, DOM.forceLogoutModal, DOM.forceLogoutAllModal, DOM.a2hsModal]
     .some(el => el && !el.classList.contains('hidden'));
   document.body.classList.toggle('modal-open', anyOpen);
 }
@@ -3597,7 +3611,145 @@ function isOnboardingOpen() {
   return !!(DOM.onboardingCoach && !DOM.onboardingCoach.classList.contains('hidden'));
 }
 
+function isStandaloneApp() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+}
+
+function isIosDevice() {
+  const ua = String(navigator.userAgent || '');
+  return /iPhone|iPad|iPod/i.test(ua)
+    || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
+}
+
+function hasSeenAddToHomePrompt() {
+  try {
+    return localStorage.getItem(A2HS_SEEN_KEY) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function markAddToHomePromptSeen() {
+  try {
+    localStorage.setItem(A2HS_SEEN_KEY, '1');
+  } catch (_) { /* private mode / quota */ }
+}
+
+function shouldPromptAddToHome() {
+  if (isStandaloneApp()) return false;
+  if (hasSeenAddToHomePrompt()) return false;
+  return true;
+}
+
+function isAddToHomeOpen() {
+  return !!(DOM.a2hsModal && !DOM.a2hsModal.classList.contains('hidden'));
+}
+
+function fillAddToHomeCopy() {
+  const canInstall = !!deferredA2HSPrompt;
+  const ios = isIosDevice();
+  if (DOM.a2hsSubtitle) {
+    DOM.a2hsSubtitle.textContent = canInstall
+      ? '撳下面掣，就可以加到主畫面，之後全螢幕開啟會更清楚。'
+      : '加到主畫面之後全螢幕開啟，唔使瀏覽器工具列擋住。';
+  }
+  if (DOM.a2hsSteps) {
+    if (canInstall) {
+      DOM.a2hsSteps.innerHTML = '';
+      DOM.a2hsSteps.classList.add('hidden');
+    } else if (ios) {
+      DOM.a2hsSteps.classList.remove('hidden');
+      DOM.a2hsSteps.innerHTML = `
+        <li>用 <strong>Safari</strong> 開啟呢個網站</li>
+        <li>撳底欄中間嘅 <strong>分享</strong> 按鈕</li>
+        <li>向下滑，揀 <strong>加入主畫面</strong></li>
+        <li>撳右上角 <strong>加入</strong></li>`;
+    } else {
+      DOM.a2hsSteps.classList.remove('hidden');
+      DOM.a2hsSteps.innerHTML = `
+        <li>撳瀏覽器右上角 <strong>⋮</strong> 選單</li>
+        <li>揀 <strong>加入主畫面</strong> 或 <strong>安裝應用程式</strong></li>
+        <li>之後喺主畫面撳 TINT 圖示開啟</li>`;
+    }
+  }
+  if (DOM.a2hsInstall) {
+    DOM.a2hsInstall.textContent = canInstall ? '加入主畫面' : '知道了';
+  }
+}
+
+function openAddToHomePrompt({ force = false } = {}) {
+  if (!DOM.a2hsModal) return;
+  if (isStandaloneApp()) {
+    showToast('你已經喺主畫面版本開啟', 'info');
+    return;
+  }
+  fillAddToHomeCopy();
+  DOM.a2hsModal.classList.remove('hidden');
+  syncBodyModalOpen();
+  if (!force) markAddToHomePromptSeen();
+  (deferredA2HSPrompt ? DOM.a2hsInstall : DOM.a2hsLater)?.focus();
+}
+
+function closeAddToHomePrompt() {
+  if (!DOM.a2hsModal) return;
+  DOM.a2hsModal.classList.add('hidden');
+  syncBodyModalOpen();
+  maybeShowPageOnboarding();
+}
+
+async function handleAddToHomeInstall() {
+  if (deferredA2HSPrompt) {
+    const promptEvent = deferredA2HSPrompt;
+    deferredA2HSPrompt = null;
+    try {
+      promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      if (choice && choice.outcome === 'accepted') {
+        showToast('已加入主畫面', 'success');
+      }
+    } catch (_) { /* user dismissed the native sheet */ }
+    markAddToHomePromptSeen();
+    closeAddToHomePrompt();
+    return;
+  }
+  markAddToHomePromptSeen();
+  closeAddToHomePrompt();
+}
+
+function maybeShowAddToHomePrompt() {
+  if (!shouldPromptAddToHome()) {
+    maybeShowPageOnboarding();
+    return;
+  }
+  window.setTimeout(() => {
+    if (!shouldPromptAddToHome()) {
+      maybeShowPageOnboarding();
+      return;
+    }
+    openAddToHomePrompt();
+  }, 450);
+}
+
+function initAddToHome() {
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredA2HSPrompt = event;
+    fillAddToHomeCopy();
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredA2HSPrompt = null;
+    markAddToHomePromptSeen();
+    if (isAddToHomeOpen()) closeAddToHomePrompt();
+    if (DOM.profileA2hsCard) DOM.profileA2hsCard.classList.add('hidden');
+  });
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
+  }
+}
+
 function maybeShowPageOnboarding({ force = false } = {}) {
+  if (!force && (shouldPromptAddToHome() || isAddToHomeOpen())) return;
   const ctx = getCurrentOnboardingContext();
   if (!ctx) return;
 
@@ -6200,6 +6352,26 @@ function bindEvents() {
   if (DOM.onboardingDim) {
     DOM.onboardingDim.addEventListener('click', finishOnboarding);
   }
+  if (DOM.a2hsLater) {
+    DOM.a2hsLater.addEventListener('click', () => {
+      markAddToHomePromptSeen();
+      closeAddToHomePrompt();
+    });
+  }
+  if (DOM.a2hsInstall) {
+    DOM.a2hsInstall.addEventListener('click', () => handleAddToHomeInstall());
+  }
+  if (DOM.a2hsModal) {
+    DOM.a2hsModal.addEventListener('click', (e) => {
+      if (e.target === DOM.a2hsModal) {
+        markAddToHomePromptSeen();
+        closeAddToHomePrompt();
+      }
+    });
+  }
+  if (DOM.profileAddHome) {
+    DOM.profileAddHome.addEventListener('click', () => openAddToHomePrompt({ force: true }));
+  }
   document.querySelectorAll('.page-help-btn').forEach(btn => {
     btn.addEventListener('click', handlePageHelpClick);
   });
@@ -6456,6 +6628,7 @@ function initPreventDoubleTapZoom() {
 function init() {
   cacheDOM();
   bindEvents();
+  initAddToHome();
   initPreventDoubleTapZoom();
   initKeyboardAvoidance();
   initAdminMessageScrollPause();
