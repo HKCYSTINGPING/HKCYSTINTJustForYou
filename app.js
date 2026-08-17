@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v15';
+import * as data from './firebase-data.js?v=20260817v16';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -647,8 +647,6 @@ function cacheDOM() {
   DOM.a2hsSteps = document.getElementById('a2hs-steps');
   DOM.a2hsLater = document.getElementById('a2hs-later');
   DOM.a2hsInstall = document.getElementById('a2hs-install');
-  DOM.profileAddHome = document.getElementById('profile-add-home');
-  DOM.profileA2hsCard = document.getElementById('profile-a2hs-card');
   DOM.loginA2hsBanner = document.getElementById('login-a2hs-banner');
   DOM.loginAddHome = document.getElementById('login-add-home');
 
@@ -821,6 +819,11 @@ function showScreen(name) {
     replayEnterAnimation(DOM.screenParticipant, 'screen-enter');
   } else if (name === 'admin') {
     replayEnterAnimation(DOM.screenAdmin, 'screen-enter');
+  }
+  if (name === 'login') {
+    maybeShowAddToHomePrompt();
+  } else {
+    closeAddToHomePrompt({ resumeOnboarding: false });
   }
 }
 
@@ -2439,7 +2442,6 @@ async function enterParticipantDashboard() {
     showToast('載入資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
     finishLoading();
-    maybeShowAddToHomePrompt();
   }
 }
 
@@ -2476,9 +2478,6 @@ function renderProfile() {
     <div class="profile-stat"><div class="profile-stat-value">${escapeHtml(formatGroupLabel(p.group_id || '—'))}</div><div class="profile-stat-label">分組</div></div>
     <div class="profile-stat"><div class="profile-stat-value">${votingLabel}</div><div class="profile-stat-label">投票狀態</div></div>
   `;
-  if (DOM.profileA2hsCard) {
-    DOM.profileA2hsCard.classList.toggle('hidden', isStandaloneApp());
-  }
   renderStaffFacilitatorPanel();
 }
 
@@ -2711,7 +2710,6 @@ async function enterAdminDashboard() {
     switchAdminTab('dashboard');
   } finally {
     finishLoading();
-    maybeShowAddToHomePrompt();
   }
 }
 
@@ -3629,10 +3627,6 @@ function isIosDevice() {
     || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
 }
 
-function shouldHoldOnboardingForA2HS() {
-  return !isStandaloneApp() && (a2hsQueued || isAddToHomeOpen());
-}
-
 function isAddToHomeOpen() {
   return !!(DOM.a2hsModal && !DOM.a2hsModal.classList.contains('hidden'));
 }
@@ -3690,12 +3684,13 @@ function openAddToHomePrompt({ force = false } = {}) {
   (deferredA2HSPrompt ? DOM.a2hsInstall : DOM.a2hsLater)?.focus();
 }
 
-function closeAddToHomePrompt() {
+function closeAddToHomePrompt({ resumeOnboarding = true } = {}) {
   if (!DOM.a2hsModal) return;
   DOM.a2hsModal.classList.add('hidden');
   DOM.a2hsModal.style.removeProperty('display');
+  a2hsQueued = false;
   syncBodyModalOpen();
-  maybeShowPageOnboarding();
+  if (resumeOnboarding) maybeShowPageOnboarding();
 }
 
 async function handleAddToHomeInstall() {
@@ -3716,12 +3711,13 @@ async function handleAddToHomeInstall() {
 }
 
 function maybeShowAddToHomePrompt() {
-  if (isStandaloneApp()) {
+  const onLogin = DOM.screenLogin && !DOM.screenLogin.classList.contains('hidden');
+  if (!onLogin || isStandaloneApp()) {
     a2hsQueued = false;
     if (DOM.loginA2hsBanner) DOM.loginA2hsBanner.classList.add('hidden');
-    maybeShowPageOnboarding();
     return;
   }
+  if (DOM.loginA2hsBanner) DOM.loginA2hsBanner.classList.remove('hidden');
   if (isAddToHomeOpen()) return;
   a2hsQueued = true;
   openAddToHomePrompt();
@@ -3736,8 +3732,7 @@ function initAddToHome() {
   window.addEventListener('appinstalled', () => {
     deferredA2HSPrompt = null;
     a2hsQueued = false;
-    if (isAddToHomeOpen()) closeAddToHomePrompt();
-    if (DOM.profileA2hsCard) DOM.profileA2hsCard.classList.add('hidden');
+    if (isAddToHomeOpen()) closeAddToHomePrompt({ resumeOnboarding: false });
   });
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
@@ -3745,7 +3740,6 @@ function initAddToHome() {
 }
 
 function maybeShowPageOnboarding({ force = false } = {}) {
-  if (!force && shouldHoldOnboardingForA2HS()) return;
   const ctx = getCurrentOnboardingContext();
   if (!ctx) return;
 
@@ -6359,9 +6353,6 @@ function bindEvents() {
       if (e.target === DOM.a2hsModal) closeAddToHomePrompt();
     });
   }
-  if (DOM.profileAddHome) {
-    DOM.profileAddHome.addEventListener('click', () => openAddToHomePrompt({ force: true }));
-  }
   if (DOM.loginAddHome) {
     DOM.loginAddHome.addEventListener('click', () => openAddToHomePrompt({ force: true }));
   }
@@ -6668,13 +6659,11 @@ async function startApp() {
   }
 
   await endSplash();
-  maybeShowAddToHomePrompt();
   if (!restored) {
     showScreen('login');
     updateLoginStatusBanner();
     const loginInner = document.querySelector('#screen-login .login-inner');
     replayEnterAnimation(loginInner, 'page-enter');
-    maybeShowAddToHomePrompt();
   }
 }
 
