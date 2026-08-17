@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v12';
+import * as data from './firebase-data.js?v=20260817v13';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -569,8 +569,8 @@ const onboardingState = {
 };
 
 const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v2';
-const A2HS_SEEN_KEY = 'tnit_a2hs_prompted_v1';
 let deferredA2HSPrompt = null;
+let pendingLoginA2HS = false;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -2044,6 +2044,7 @@ async function handleLogin(e) {
     state.participantId = participantId;
     state.isAdmin = isAdmin;
     saveSession(participantId, isAdmin);
+    pendingLoginA2HS = true;
 
     if (isAdmin) {
       await enterAdminDashboard();
@@ -3622,24 +3623,9 @@ function isIosDevice() {
     || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
 }
 
-function hasSeenAddToHomePrompt() {
-  try {
-    return localStorage.getItem(A2HS_SEEN_KEY) === '1';
-  } catch (_) {
-    return false;
-  }
-}
-
-function markAddToHomePromptSeen() {
-  try {
-    localStorage.setItem(A2HS_SEEN_KEY, '1');
-  } catch (_) { /* private mode / quota */ }
-}
-
 function shouldPromptAddToHome() {
   if (isStandaloneApp()) return false;
-  if (hasSeenAddToHomePrompt()) return false;
-  return true;
+  return pendingLoginA2HS;
 }
 
 function isAddToHomeOpen() {
@@ -3681,13 +3667,13 @@ function fillAddToHomeCopy() {
 function openAddToHomePrompt({ force = false } = {}) {
   if (!DOM.a2hsModal) return;
   if (isStandaloneApp()) {
-    showToast('你已經喺主畫面版本開啟', 'info');
+    if (force) showToast('你已經喺主畫面版本開啟', 'info');
     return;
   }
+  pendingLoginA2HS = false;
   fillAddToHomeCopy();
   DOM.a2hsModal.classList.remove('hidden');
   syncBodyModalOpen();
-  if (!force) markAddToHomePromptSeen();
   (deferredA2HSPrompt ? DOM.a2hsInstall : DOM.a2hsLater)?.focus();
 }
 
@@ -3709,11 +3695,9 @@ async function handleAddToHomeInstall() {
         showToast('已加入主畫面', 'success');
       }
     } catch (_) { /* user dismissed the native sheet */ }
-    markAddToHomePromptSeen();
     closeAddToHomePrompt();
     return;
   }
-  markAddToHomePromptSeen();
   closeAddToHomePrompt();
 }
 
@@ -3739,7 +3723,7 @@ function initAddToHome() {
   });
   window.addEventListener('appinstalled', () => {
     deferredA2HSPrompt = null;
-    markAddToHomePromptSeen();
+    pendingLoginA2HS = false;
     if (isAddToHomeOpen()) closeAddToHomePrompt();
     if (DOM.profileA2hsCard) DOM.profileA2hsCard.classList.add('hidden');
   });
@@ -6353,20 +6337,14 @@ function bindEvents() {
     DOM.onboardingDim.addEventListener('click', finishOnboarding);
   }
   if (DOM.a2hsLater) {
-    DOM.a2hsLater.addEventListener('click', () => {
-      markAddToHomePromptSeen();
-      closeAddToHomePrompt();
-    });
+    DOM.a2hsLater.addEventListener('click', () => closeAddToHomePrompt());
   }
   if (DOM.a2hsInstall) {
     DOM.a2hsInstall.addEventListener('click', () => handleAddToHomeInstall());
   }
   if (DOM.a2hsModal) {
     DOM.a2hsModal.addEventListener('click', (e) => {
-      if (e.target === DOM.a2hsModal) {
-        markAddToHomePromptSeen();
-        closeAddToHomePrompt();
-      }
+      if (e.target === DOM.a2hsModal) closeAddToHomePrompt();
     });
   }
   if (DOM.profileAddHome) {
