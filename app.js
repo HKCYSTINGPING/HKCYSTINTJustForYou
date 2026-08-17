@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v13';
+import * as data from './firebase-data.js?v=20260817v14';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -570,7 +570,7 @@ const onboardingState = {
 
 const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v2';
 let deferredA2HSPrompt = null;
-let pendingLoginA2HS = false;
+let a2hsQueued = false;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 
@@ -2044,7 +2044,6 @@ async function handleLogin(e) {
     state.participantId = participantId;
     state.isAdmin = isAdmin;
     saveSession(participantId, isAdmin);
-    pendingLoginA2HS = true;
 
     if (isAdmin) {
       await enterAdminDashboard();
@@ -3623,9 +3622,14 @@ function isIosDevice() {
     || (navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1);
 }
 
-function shouldPromptAddToHome() {
-  if (isStandaloneApp()) return false;
-  return pendingLoginA2HS;
+function isSplashVisible() {
+  if (splashActive) return true;
+  if (!DOM.screenSplash) return false;
+  return !DOM.screenSplash.classList.contains('hidden');
+}
+
+function shouldHoldOnboardingForA2HS() {
+  return !isStandaloneApp() && (a2hsQueued || isAddToHomeOpen());
 }
 
 function isAddToHomeOpen() {
@@ -3667,10 +3671,14 @@ function fillAddToHomeCopy() {
 function openAddToHomePrompt({ force = false } = {}) {
   if (!DOM.a2hsModal) return;
   if (isStandaloneApp()) {
+    a2hsQueued = false;
     if (force) showToast('你已經喺主畫面版本開啟', 'info');
     return;
   }
-  pendingLoginA2HS = false;
+  a2hsQueued = false;
+  if (DOM.a2hsModal.parentNode !== document.body) {
+    document.body.appendChild(DOM.a2hsModal);
+  }
   fillAddToHomeCopy();
   DOM.a2hsModal.classList.remove('hidden');
   syncBodyModalOpen();
@@ -3702,17 +3710,26 @@ async function handleAddToHomeInstall() {
 }
 
 function maybeShowAddToHomePrompt() {
-  if (!shouldPromptAddToHome()) {
+  if (isStandaloneApp() || isAddToHomeOpen()) {
+    a2hsQueued = false;
     maybeShowPageOnboarding();
     return;
   }
-  window.setTimeout(() => {
-    if (!shouldPromptAddToHome()) {
+  a2hsQueued = true;
+  const tryOpen = () => {
+    if (isStandaloneApp()) {
+      a2hsQueued = false;
       maybeShowPageOnboarding();
       return;
     }
+    if (isAddToHomeOpen()) return;
+    if (isSplashVisible()) {
+      window.setTimeout(tryOpen, 160);
+      return;
+    }
     openAddToHomePrompt();
-  }, 450);
+  };
+  window.setTimeout(tryOpen, 280);
 }
 
 function initAddToHome() {
@@ -3723,7 +3740,7 @@ function initAddToHome() {
   });
   window.addEventListener('appinstalled', () => {
     deferredA2HSPrompt = null;
-    pendingLoginA2HS = false;
+    a2hsQueued = false;
     if (isAddToHomeOpen()) closeAddToHomePrompt();
     if (DOM.profileA2hsCard) DOM.profileA2hsCard.classList.add('hidden');
   });
@@ -3733,7 +3750,7 @@ function initAddToHome() {
 }
 
 function maybeShowPageOnboarding({ force = false } = {}) {
-  if (!force && (shouldPromptAddToHome() || isAddToHomeOpen())) return;
+  if (!force && shouldHoldOnboardingForA2HS()) return;
   const ctx = getCurrentOnboardingContext();
   if (!ctx) return;
 

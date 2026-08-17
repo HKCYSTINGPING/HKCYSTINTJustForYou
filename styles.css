@@ -1605,6 +1605,10 @@ textarea.input-field {
   max-width: 340px;
 }
 
+#a2hs-modal {
+  z-index: 500;
+}
+
 .a2hs-hero {
   width: 56px;
   height: 56px;
