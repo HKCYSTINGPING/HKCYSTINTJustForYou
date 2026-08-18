@@ -152,7 +152,7 @@ def build_workbook():
     ws.column_dimensions["A"].width = 22
     ws.column_dimensions["B"].width = 60
     readme_rows = [
-        ("HKCYS TINT — Just For You", ""),
+        ("HKCYS TNIT — Just For You", ""),
         ("", ""),
         ("分頁名稱", "用途"),
         ("Participants", "參加者名單（登入驗證 + Trophy 分組）"),

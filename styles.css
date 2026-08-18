@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   HKCYS TINT — Just For You
+   HKCYS TNIT — Just For You
    Mobile-first Design System · Warm Cream Aesthetic
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -3394,7 +3394,7 @@ button.group-voter-header:hover {
   }
 
   body.admin-active #screen-admin .admin-bottom-nav::before {
-    content: "HKCYS TINT";
+    content: "HKCYS TNIT";
     display: block;
     font-size: 0.7rem;
     font-weight: 700;

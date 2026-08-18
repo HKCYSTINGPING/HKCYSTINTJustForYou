@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v17';
+import * as data from './firebase-data.js?v=20260818v1';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -208,7 +208,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="send-guide"]',
       prepare: 'send',
       title: '寫多啲',
-      body: '盡量寫具體：你欣賞對方咩、邊件事令你記得。寫唔出就即刻搵 tent Staff 幫手。'
+      body: '盡量寫具體：你欣賞對方咩、邊件事令你記得。寫唔出就即刻搵 TNIT Staff 幫手。'
     },
     {
       target: '[data-tour="send-receiver"]',
@@ -3663,7 +3663,7 @@ function fillAddToHomeCopy() {
       DOM.a2hsSteps.innerHTML = `
         <li>撳瀏覽器右上角 <strong>⋮</strong> 選單</li>
         <li>揀 <strong>加入主畫面</strong> 或 <strong>安裝應用程式</strong></li>
-        <li>之後喺主畫面撳 TINT 圖示開啟</li>`;
+        <li>之後喺主畫面撳 TNIT 圖示開啟</li>`;
     }
   }
   if (DOM.a2hsInstall) {

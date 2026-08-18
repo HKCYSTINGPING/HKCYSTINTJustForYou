@@ -78,7 +78,7 @@ function doGet(e) {
         if (!action) {
           return jsonResponse({
             status: 'success',
-            service: 'HKCYS TINT Just For You API',
+            service: 'HKCYS TNIT Just For You API',
             version: SCRIPT_VERSION,
             hint: '前端請使用 ?action=bootstrap 等參數；直接開啟此網址屬正常現象'
           });
@@ -127,7 +127,7 @@ function doPost(e) {
         if (!action) {
           return jsonResponse({
             status: 'success',
-            service: 'HKCYS TINT Just For You API',
+            service: 'HKCYS TNIT Just For You API',
             version: SCRIPT_VERSION,
             hint: 'POST 請在 body 加入 action 欄位'
           });

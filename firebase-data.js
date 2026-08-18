@@ -41,7 +41,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260817v11';
+import { ADMIN_EMAIL, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260818v1';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

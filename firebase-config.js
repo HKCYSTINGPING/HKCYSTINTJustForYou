@@ -1,4 +1,4 @@
-// Firebase client configuration for HKCYS TINT Just For You.
+// Firebase client configuration for HKCYS TNIT Just For You.
 //
 // These values are meant to be public: they identify the project, they do not
 // grant access to it. What actually protects the data is firestore.rules plus

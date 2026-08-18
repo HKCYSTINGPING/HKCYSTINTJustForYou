@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Access control for HKCYS TINT Just For You.
+// Access control for HKCYS TNIT Just For You.
 //
 // Participants sign in with Firebase Email/Password where the address is
 // derived from the participant id (1A -> 1a@tnit.local) and the password is

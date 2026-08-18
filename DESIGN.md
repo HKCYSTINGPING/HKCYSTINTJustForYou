@@ -1,4 +1,4 @@
-# HKCYS TINT — Just For You ❤️
+# HKCYS TNIT — Just For You ❤️
 ## Mobile UI/UX Design System & Specification
 
 ---

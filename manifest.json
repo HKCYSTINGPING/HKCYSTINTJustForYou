@@ -1,7 +1,7 @@
 {
-  "name": "HKCYS TINT — Just For You",
-  "short_name": "TINT",
-  "description": "HKCYS TINT 活動應用：匿名留言同獎項配對",
+  "name": "HKCYS TNIT — Just For You",
+  "short_name": "TNIT",
+  "description": "HKCYS TNIT 活動應用：匿名留言同獎項配對",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
