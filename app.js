@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260817v16';
+import * as data from './firebase-data.js?v=20260817v17';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -205,6 +205,12 @@ const ONBOARDING_STEPS = {
       body: '個人資料、改名同登出都喺呢度。'
     },
     {
+      target: '[data-tour="send-guide"]',
+      prepare: 'send',
+      title: '寫多啲',
+      body: '盡量寫具體：你欣賞對方咩、邊件事令你記得。寫唔出就即刻搵 tent Staff 幫手。'
+    },
+    {
       target: '[data-tour="send-receiver"]',
       prepare: 'send',
       title: '揀接收者',
@@ -214,7 +220,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="send-content"]',
       prepare: 'send',
       title: '留言內容',
-      body: '最多 300 字。'
+      body: '最多 300 字。唔好得一句「加油」，講多啲感受同原因。'
     },
     {
       target: '[data-tour="send-submit"]',
@@ -607,6 +613,7 @@ function cacheDOM() {
   DOM.homeInboxBadge = document.getElementById('home-inbox-badge');
 
   DOM.sendForm = document.getElementById('send-form');
+  DOM.sendGuide = document.querySelector('.send-guide');
   DOM.sendReceiver = document.getElementById('send-receiver');
   DOM.sendDropdown = document.getElementById('send-dropdown');
   DOM.sendComboboxToggle = document.getElementById('send-combobox-toggle');
@@ -2847,6 +2854,7 @@ function updateSendFormState() {
     DOM.sendForm.classList.toggle('hidden', closed);
     DOM.sendForm.classList.toggle('disabled', closed);
   }
+  if (DOM.sendGuide) DOM.sendGuide.classList.toggle('hidden', closed);
   if (DOM.sendSubmit) DOM.sendSubmit.disabled = closed;
 }
 

@@ -777,6 +777,34 @@ textarea.input-field {
   pointer-events: none;
 }
 
+.send-guide {
+  margin-bottom: var(--space-md);
+  text-align: left;
+  padding: var(--space-md);
+}
+
+.send-guide-title {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.send-guide-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: 1.55;
+}
+
+.send-guide-list li + li {
+  margin-top: 6px;
+}
+
+.send-guide-list strong {
+  color: var(--text);
+}
+
 /* ─── Input with action (numpad) ─────────────────────────────────────────── */
 
 .input-with-action {

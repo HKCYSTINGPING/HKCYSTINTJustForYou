@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260817v16">
+  <link rel="stylesheet" href="styles.css?v=20260817v17">
 </head>
 <body>
 
@@ -157,7 +157,7 @@
           <button type="button" class="home-card" data-nav="send">
             <span class="home-card-icon app-icon app-icon-loveletter" aria-hidden="true"></span>
             <span class="home-card-label">匿名留言</span>
-            <span class="home-card-desc">寫給隊友的鼓勵</span>
+            <span class="home-card-desc">寫多啲感受同具體事情</span>
           </button>
           <button type="button" class="home-card" data-nav="inbox">
             <span class="home-card-icon app-icon app-icon-inbox" aria-hidden="true"></span>
@@ -197,6 +197,14 @@
           <p>管理員已暫時關閉留言功能，請稍後再試</p>
         </div>
         <div id="send-closed-banner" class="status-banner status-banner-warning hidden" role="alert"></div>
+        <div class="send-guide card" data-tour="send-guide">
+          <h3 class="send-guide-title">寫留言小提示</h3>
+          <ul class="send-guide-list">
+            <li>對方收唔到你係邊個，可以放心講真話。</li>
+            <li><strong>寫多啲、寫具體啲</strong>：唔好得「加油／多謝」一句。可以講你欣賞對方咩、邊件事令你記得、你學到或感受到咩。</li>
+            <li><strong>有需要就即刻搵 tent Staff 幫手</strong>：寫唔出、睇唔明、或者想有人陪住寫，都得。</li>
+          </ul>
+        </div>
         <form id="send-form" class="send-form card" data-tour="send-form">
           <div class="form-group" data-tour="send-receiver">
             <label for="send-receiver">接收者</label>
@@ -212,7 +220,7 @@
           </div>
           <div class="form-group" data-tour="send-content">
             <label for="send-content">留言內容 <span id="char-counter" class="char-counter">0/300</span></label>
-            <textarea id="send-content" class="input-field" maxlength="300" rows="5" placeholder="寫下你想說的話…"></textarea>
+            <textarea id="send-content" class="input-field" maxlength="300" rows="6" placeholder="例如：今日你……令我好記得，因為……我學到／感受到……"></textarea>
             <p id="bad-words-warning" class="form-hint form-hint-danger hidden">內容包含不適當用語，請修改後再發送</p>
           </div>
           <button type="submit" id="send-submit" class="btn btn-primary btn-lg btn-progress" data-tour="send-submit">
@@ -974,6 +982,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260817v16"></script>
+  <script type="module" src="app.js?v=20260817v17"></script>
 </body>
 </html>
