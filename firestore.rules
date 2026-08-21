@@ -225,6 +225,9 @@ service cloud.firestore {
         // can never trigger a confusing server-side rejection.
         && request.resource.data.content.size() <= 500
         && request.resource.data.sender_group_id == participantDoc(pid()).data.group_id
+        // Messages are intra-group only: receiver must be in the sender's group.
+        && participantDoc(request.resource.data.receiver_id).data.group_id
+          == participantDoc(pid()).data.group_id
         && (
           request.resource.data.thread_group_id == ''
           || (

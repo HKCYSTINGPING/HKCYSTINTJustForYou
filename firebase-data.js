@@ -343,6 +343,20 @@ export function getTeammates(participantId, allParticipants) {
   );
 }
 
+/** Same-group recipients for anonymous messaging (seats + staff in that group). */
+export function getMessageRecipients(participantId, allParticipants) {
+  const me = (allParticipants || []).find(p => p.participant_id === participantId);
+  if (!me) return [];
+  const group = normalizeGroupId(me.group_id);
+  if (!group || isUnassignedGroup(group) || !isNumberedGroupId(group)) return [];
+  return (allParticipants || []).filter(p => {
+    const id = String(p.participant_id || '').trim().toUpperCase();
+    if (!id || id === String(participantId || '').trim().toUpperCase()) return false;
+    if (id === 'ADMIN') return false;
+    return normalizeGroupId(p.group_id) === group;
+  });
+}
+
 // ─── Messages ───────────────────────────────────────────────────────────────
 
 /**

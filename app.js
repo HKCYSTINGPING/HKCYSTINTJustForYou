@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v2';
+import * as data from './firebase-data.js?v=20260821v3';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -214,7 +214,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="send-receiver"]',
       prepare: 'send',
       title: '揀接收者',
-      body: '輸入或展開選單，揀你想留言嘅隊友。'
+      body: '輸入或展開選單，只可以揀自己組嘅隊友。'
     },
     {
       target: '[data-tour="send-content"]',
@@ -1866,9 +1866,10 @@ function initLoginCombobox() {
 }
 
 function initSendCombobox() {
+  const recipients = data.getMessageRecipients(state.participantId, state.participants);
   const exclude = [state.participantId, CONFIG.ADMIN_ID];
   if (sendCombobox) {
-    sendCombobox.setItems(state.participants);
+    sendCombobox.setItems(recipients);
     sendCombobox.setExcludeIds(exclude);
     return;
   }
@@ -1876,7 +1877,7 @@ function initSendCombobox() {
     input: DOM.sendReceiver,
     dropdown: DOM.sendDropdown,
     toggle: DOM.sendComboboxToggle,
-    items: state.participants,
+    items: recipients,
     excludeIds: exclude,
     getLabel: (item) => displayLabelOf(item),
     onSelect: (item) => {
@@ -1889,8 +1890,16 @@ function initSendCombobox() {
 function refreshComboboxItems() {
   if (loginCombobox) loginCombobox.setItems(getLoginMenuParticipants());
   if (sendCombobox) {
-    sendCombobox.setItems(state.participants);
+    sendCombobox.setItems(data.getMessageRecipients(state.participantId, state.participants));
     sendCombobox.setExcludeIds([state.participantId, CONFIG.ADMIN_ID]);
+    if (selectedReceiverId) {
+      const stillValid = data.getMessageRecipients(state.participantId, state.participants)
+        .some(p => p.participant_id === selectedReceiverId);
+      if (!stillValid) {
+        selectedReceiverId = null;
+        if (DOM.sendReceiver) DOM.sendReceiver.value = '';
+      }
+    }
   }
 }
 
@@ -2966,6 +2975,12 @@ async function handleSendMessage(e) {
 
   const sender = findParticipantById(state.participantId);
   const receiver = findParticipantById(receiverId);
+  const allowed = data.getMessageRecipients(state.participantId, state.participants)
+    .some(p => p.participant_id === receiverId);
+  if (!receiver || !allowed) {
+    showToast('只可以留言俾自己組嘅隊友', 'error');
+    return;
+  }
 
   DOM.sendContent.value = '';
   DOM.sendReceiver.value = '';
