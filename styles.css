@@ -1526,6 +1526,10 @@ textarea.input-field {
   font-size: 0.9rem;
   color: var(--text-secondary);
 }
+.trophy-deck-export {
+  width: 100%;
+  margin-top: 0.75rem;
+}
 
 .trophy-progress-label {
   display: flex;
