@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260821v8">
+  <link rel="stylesheet" href="styles.css?v=20260821v9">
 </head>
 <body>
 
@@ -593,6 +593,19 @@
     </div>
   </div>
 
+  <div id="confirm-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="modal-card glass-card confirm-modal-card">
+      <h2 id="confirm-modal-title">確認</h2>
+      <p id="confirm-modal-body" class="trophy-modal-subtitle confirm-modal-body"></p>
+      <div class="onboarding-actions">
+        <button type="button" id="confirm-modal-cancel" class="btn btn-secondary btn-sm">取消</button>
+        <button type="button" id="confirm-modal-ok" class="btn btn-primary btn-sm">
+          <span class="btn-label">確定</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="force-logout-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="force-logout-title">
     <div class="modal-card glass-card force-logout-modal-card">
       <h2 id="force-logout-title">強制登出</h2>
@@ -1005,6 +1018,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260821v8"></script>
+  <script type="module" src="app.js?v=20260821v9"></script>
 </body>
 </html>

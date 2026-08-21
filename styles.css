@@ -1653,6 +1653,16 @@ textarea.input-field {
   max-width: 320px;
 }
 
+.confirm-modal-card {
+  max-width: 400px;
+  width: min(92vw, 400px);
+}
+
+.confirm-modal-body {
+  white-space: pre-line;
+  text-align: left;
+}
+
 .a2hs-modal-card {
   max-width: 340px;
 }

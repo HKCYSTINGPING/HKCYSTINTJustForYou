@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v8';
+import * as data from './firebase-data.js?v=20260821v9';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ const ONBOARDING_STEPS = {
       prepare: 'trophy',
       skipIfStaff: true,
       title: '提交投票',
-      body: '配對完成後撳「提交投票」正式交卷（會再確認兩次）；「清除全部投票」可以一次清空重揀。'
+      body: '配對完成後撳「提交投票」正式交卷（提交後不可再改）；「清除全部投票」可以一次清空重揀。'
     },
     {
       target: '[data-tour="profile-header"]',
@@ -675,6 +675,12 @@ function cacheDOM() {
   DOM.forceLogoutAllModal = document.getElementById('force-logout-all-modal');
   DOM.forceLogoutAllCancel = document.getElementById('force-logout-all-cancel');
   DOM.forceLogoutAllConfirm = document.getElementById('force-logout-all-confirm');
+  DOM.confirmModal = document.getElementById('confirm-modal');
+  DOM.confirmModalTitle = document.getElementById('confirm-modal-title');
+  DOM.confirmModalBody = document.getElementById('confirm-modal-body');
+  DOM.confirmModalCancel = document.getElementById('confirm-modal-cancel');
+  DOM.confirmModalOk = document.getElementById('confirm-modal-ok');
+  DOM.confirmModalOkLabel = document.querySelector('#confirm-modal-ok .btn-label');
   DOM.trophyProgressText = document.getElementById('trophy-progress-text');
   DOM.trophyProgressFill = document.getElementById('trophy-progress-fill');
   DOM.trophyTeammates = document.getElementById('trophy-teammates');
@@ -3355,7 +3361,12 @@ function renderAdminLiveLoad() {
 }
 
 async function handleAdminDelete(messageId, btn) {
-  if (!window.confirm('確定要撤回此留言嗎？接收者將不會收到此訊息。')) return;
+  if (!(await showConfirmCard({
+    title: '撤回留言',
+    body: '確定要撤回此留言嗎？接收者將不會收到此訊息。',
+    confirmLabel: '撤回',
+    danger: true
+  }))) return;
 
   await runProgressButton(btn, (async () => {
     try {
@@ -3377,7 +3388,11 @@ async function handleAdminDelete(messageId, btn) {
 }
 
 async function handleAdminRestore(messageId, btn) {
-  if (!window.confirm('確定要取消撤回？留言會重新出現喺接收者收件箱。')) return;
+  if (!(await showConfirmCard({
+    title: '取消撤回',
+    body: '確定要取消撤回？留言會重新出現喺接收者收件箱。',
+    confirmLabel: '取消撤回'
+  }))) return;
 
   await runProgressButton(btn, (async () => {
     try {
@@ -3459,9 +3474,62 @@ function hideTrophyResultsModal() {
 }
 
 function syncBodyModalOpen() {
-  const anyOpen = [DOM.trophyResultsModal, DOM.voteMatrixModal, DOM.forceLogoutModal, DOM.forceLogoutAllModal, DOM.a2hsModal]
-    .some(el => el && !el.classList.contains('hidden'));
+  const anyOpen = [
+    DOM.trophyResultsModal,
+    DOM.voteMatrixModal,
+    DOM.forceLogoutModal,
+    DOM.forceLogoutAllModal,
+    DOM.a2hsModal,
+    DOM.confirmModal,
+    DOM.groupRenameModal,
+    DOM.rosterEditModal,
+    DOM.rosterAddModal
+  ].some(el => el && !el.classList.contains('hidden'));
   document.body.classList.toggle('modal-open', anyOpen);
+}
+
+let confirmModalResolver = null;
+
+/** In-app card confirm — replaces browser window.confirm popups. */
+function showConfirmCard({
+  title = '確認',
+  body = '',
+  confirmLabel = '確定',
+  cancelLabel = '取消',
+  danger = false
+} = {}) {
+  return new Promise(resolve => {
+    if (!DOM.confirmModal) {
+      resolve(false);
+      return;
+    }
+    if (confirmModalResolver) {
+      const prev = confirmModalResolver;
+      confirmModalResolver = null;
+      prev(false);
+    }
+    confirmModalResolver = resolve;
+    if (DOM.confirmModalTitle) DOM.confirmModalTitle.textContent = title;
+    if (DOM.confirmModalBody) DOM.confirmModalBody.textContent = body;
+    if (DOM.confirmModalCancel) DOM.confirmModalCancel.textContent = cancelLabel;
+    if (DOM.confirmModalOkLabel) DOM.confirmModalOkLabel.textContent = confirmLabel;
+    else if (DOM.confirmModalOk) DOM.confirmModalOk.textContent = confirmLabel;
+    if (DOM.confirmModalOk) {
+      DOM.confirmModalOk.classList.toggle('btn-danger', !!danger);
+      DOM.confirmModalOk.classList.toggle('btn-primary', !danger);
+    }
+    DOM.confirmModal.classList.remove('hidden');
+    syncBodyModalOpen();
+    setTimeout(() => DOM.confirmModalOk?.focus(), 0);
+  });
+}
+
+function closeConfirmModal(result) {
+  if (DOM.confirmModal) DOM.confirmModal.classList.add('hidden');
+  syncBodyModalOpen();
+  const resolve = confirmModalResolver;
+  confirmModalResolver = null;
+  if (resolve) resolve(!!result);
 }
 
 function clearOnboardingTarget() {
@@ -4166,7 +4234,12 @@ async function handleTrophyClearAll() {
     showToast('未有投票可以清除', 'info');
     return;
   }
-  if (!window.confirm('確定要清除全部投票嗎？')) return;
+  if (!(await showConfirmCard({
+    title: '清除投票',
+    body: '確定要清除全部投票嗎？',
+    confirmLabel: '清除',
+    danger: true
+  }))) return;
 
   await runProgressButton(DOM.trophyClearAll, (async () => {
     try {
@@ -4230,8 +4303,11 @@ async function handleTrophySubmitAll() {
     }
   }
 
-  if (!window.confirm('確定要提交投票嗎？提交後不可再修改。')) return;
-  if (!window.confirm('再次確認：真的要提交投票嗎？')) return;
+  if (!(await showConfirmCard({
+    title: '提交投票',
+    body: '確定要提交投票嗎？提交後不可再修改。',
+    confirmLabel: '提交'
+  }))) return;
 
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
   await runProgressButton(DOM.trophySubmitAll, (async () => {
@@ -5157,11 +5233,25 @@ function updateAdminVotingButtons() {
 
 async function handleAdminVotingAction(status, btn) {
   const confirmMessages = {
-    VOTING_OPEN: '確定要開放投票嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。每人只可提交一次，提交後不能再改。',
-    VOTING_CLOSED: '確定要關閉投票嗎？會覆蓋所有組別的投票覆寫；參加者將無法再提交。',
-    PUBLISHED: '確定要公布結果嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。'
+    VOTING_OPEN: {
+      title: '開放投票',
+      body: '確定要開放投票嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。每人只可提交一次，提交後不能再改。'
+    },
+    VOTING_CLOSED: {
+      title: '關閉投票',
+      body: '確定要關閉投票嗎？會覆蓋所有組別的投票覆寫；參加者將無法再提交。'
+    },
+    PUBLISHED: {
+      title: '公布結果',
+      body: '確定要公布結果嗎？會覆蓋所有組別的投票覆寫，令全場跟隨全域。'
+    }
   };
-  if (confirmMessages[status] && !window.confirm(confirmMessages[status])) return;
+  const confirmCfg = confirmMessages[status];
+  if (confirmCfg && !(await showConfirmCard({
+    ...confirmCfg,
+    confirmLabel: '確定',
+    danger: status === 'VOTING_CLOSED'
+  }))) return;
 
   await runProgressButton(btn, (async () => {
     try {
@@ -5527,7 +5617,12 @@ async function handleStaffForceLogoutGroup() {
     showToast('本組目前沒有已登入參加者', 'info');
     return;
   }
-  if (!window.confirm('確定要強制登出本組 ' + loggedIn.length + ' 位已登入參加者嗎？Staff 不受影響。')) return;
+  if (!(await showConfirmCard({
+    title: '強制登出本組',
+    body: '確定要強制登出本組 ' + loggedIn.length + ' 位已登入參加者嗎？Staff 不受影響。',
+    confirmLabel: '全部登出',
+    danger: true
+  }))) return;
   try {
     await data.forceLogoutParticipants(loggedIn);
     removeLocalPresence(loggedIn);
@@ -5624,11 +5719,25 @@ async function handleStaffVotingAction(status, btn) {
   const groupId = getFacilitatorGroupId();
   if (!groupId) return;
   const confirmMessages = {
-    VOTING_OPEN: '確定要為本組開放投票嗎？這會寫入本組覆寫，不再跟隨全域。',
-    VOTING_CLOSED: '確定要為本組關閉投票嗎？這會寫入本組覆寫，不再跟隨全域。',
-    PUBLISHED: '確定要為本組公布結果嗎？這會寫入本組覆寫，不再跟隨全域。'
+    VOTING_OPEN: {
+      title: '開放本組投票',
+      body: '確定要為本組開放投票嗎？這會寫入本組覆寫，不再跟隨全域。'
+    },
+    VOTING_CLOSED: {
+      title: '關閉本組投票',
+      body: '確定要為本組關閉投票嗎？這會寫入本組覆寫，不再跟隨全域。'
+    },
+    PUBLISHED: {
+      title: '公布本組結果',
+      body: '確定要為本組公布結果嗎？這會寫入本組覆寫，不再跟隨全域。'
+    }
   };
-  if (confirmMessages[status] && !window.confirm(confirmMessages[status])) return;
+  const confirmCfg = confirmMessages[status];
+  if (confirmCfg && !(await showConfirmCard({
+    ...confirmCfg,
+    confirmLabel: '確定',
+    danger: status === 'VOTING_CLOSED'
+  }))) return;
   await runProgressButton(btn, (async () => {
     try {
       await data.setGroupVotingStatus(groupId, status);
@@ -5646,7 +5755,11 @@ async function handleStaffVotingAction(status, btn) {
 async function handleStaffFollowGlobalVoting(btn) {
   const groupId = getFacilitatorGroupId();
   if (!groupId) return;
-  if (!window.confirm('確定清除本組投票覆寫，改為跟隨全域嗎？')) return;
+  if (!(await showConfirmCard({
+    title: '恢復跟隨全域',
+    body: '確定清除本組投票覆寫，改為跟隨全域嗎？',
+    confirmLabel: '恢復'
+  }))) return;
   await runProgressButton(btn, (async () => {
     try {
       await data.clearGroupVotingStatus(groupId);
@@ -5976,7 +6089,12 @@ async function confirmRosterPendingMoves() {
 
   const voting = state.votingConfig?.voting_status || '';
   if (voting === 'VOTING_OPEN' || voting === 'CALCULATED' || voting === 'PUBLISHED') {
-    if (!window.confirm('目前投票狀態為「' + (VOTING_STATUS_LABELS[voting] || voting) + '」。改組／重編號可能影響已投票或結果，確定繼續？')) {
+    if (!(await showConfirmCard({
+      title: '確認分組變更',
+      body: '目前投票狀態為「' + (VOTING_STATUS_LABELS[voting] || voting) + '」。改組／重編號可能影響已投票或結果，確定繼續？',
+      confirmLabel: '繼續',
+      danger: true
+    }))) {
       return;
     }
   }
@@ -6205,7 +6323,12 @@ async function handleRosterEditSave() {
 async function handleRosterEditDelete() {
   const pid = DOM.rosterEditModal?.dataset.editingId;
   if (!pid) return;
-  if (!window.confirm(`確定刪除 ${pid}？\n會刪除 Auth 帳戶、留言、投票同結果，無法復原。`)) return;
+  if (!(await showConfirmCard({
+    title: '刪除參加者',
+    body: `確定刪除 ${pid}？\n會刪除 Auth 帳戶、留言、投票同結果，無法復原。`,
+    confirmLabel: '刪除',
+    danger: true
+  }))) return;
   try {
     await data.deleteParticipantCompletely(pid, state.participants);
     closeRosterEditModal();
@@ -6374,7 +6497,12 @@ async function handleAdminForceLogoutAll() {
 async function handleAdminDeleteMessages() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) return;
-  if (!window.confirm('確定要刪除 ' + pid + ' 的所有已發留言嗎？')) return;
+  if (!(await showConfirmCard({
+    title: '刪除留言',
+    body: '確定要刪除 ' + pid + ' 的所有已發留言嗎？',
+    confirmLabel: '刪除',
+    danger: true
+  }))) return;
 
   await runProgressButton(DOM.adminDeleteMessages, (async () => {
     try {
@@ -6392,7 +6520,12 @@ async function handleAdminDeleteMessages() {
 async function handleAdminResetTrophy() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) return;
-  if (!window.confirm('確定要重置 ' + pid + ' 的獎項投票嗎？')) return;
+  if (!(await showConfirmCard({
+    title: '重置投票',
+    body: '確定要重置 ' + pid + ' 的獎項投票嗎？',
+    confirmLabel: '重置',
+    danger: true
+  }))) return;
 
   await runProgressButton(DOM.adminResetTrophy, (async () => {
     try {
@@ -6408,7 +6541,12 @@ async function handleAdminResetTrophy() {
 async function handleAdminDeleteAllRecords() {
   const pid = state.adminParticipant.selectedId;
   if (!pid) return;
-  if (!window.confirm('確定要刪除 ' + pid + ' 的所有紀錄嗎？\n包括：已發留言、獎項投票、結果。\n此操作無法復原！')) return;
+  if (!(await showConfirmCard({
+    title: '刪除全部紀錄',
+    body: '確定要刪除 ' + pid + ' 的所有紀錄嗎？\n包括：已發留言、獎項投票、結果。\n此操作無法復原！',
+    confirmLabel: '刪除',
+    danger: true
+  }))) return;
 
   await runProgressButton(DOM.adminDeleteAllRecords, (async () => {
     try {
@@ -6425,8 +6563,12 @@ async function handleAdminDeleteAllRecords() {
 
 async function handleAdminBulkResetVotes() {
   const count = state.participants.length;
-  if (!window.confirm('確定要重置全部 ' + count + ' 位參加者的獎項投票嗎？\n包括：已提交選票、計算結果。\n留言不會被刪除。\n此操作無法復原！')) return;
-  if (!window.confirm('再次確認：真的要清除全部參加者的投票嗎？')) return;
+  if (!(await showConfirmCard({
+    title: '重置全部投票',
+    body: '確定要重置全部 ' + count + ' 位參加者的獎項投票嗎？\n包括：已提交選票、計算結果。\n留言不會被刪除。\n此操作無法復原！',
+    confirmLabel: '重置全部',
+    danger: true
+  }))) return;
 
   await runProgressButton(DOM.adminBulkResetVotes, (async () => {
     try {
@@ -6442,8 +6584,12 @@ async function handleAdminBulkResetVotes() {
 
 async function handleAdminBulkDeleteAll() {
   const count = state.participants.length;
-  if (!window.confirm('確定要刪除全部 ' + count + ' 位參加者的所有紀錄嗎？\n包括：已發留言、獎項投票、結果。\n此操作無法復原！')) return;
-  if (!window.confirm('再次確認：真的要清除所有參加者的全部紀錄嗎？')) return;
+  if (!(await showConfirmCard({
+    title: '刪除全部紀錄',
+    body: '確定要刪除全部 ' + count + ' 位參加者的所有紀錄嗎？\n包括：已發留言、獎項投票、結果。\n此操作無法復原！',
+    confirmLabel: '全部刪除',
+    danger: true
+  }))) return;
 
   await runProgressButton(DOM.adminBulkDeleteAll, (async () => {
     try {
@@ -6676,6 +6822,17 @@ function bindEvents() {
   if (DOM.forceLogoutAllModal) {
     DOM.forceLogoutAllModal.addEventListener('click', (e) => {
       if (e.target === DOM.forceLogoutAllModal) closeForceLogoutAllModal();
+    });
+  }
+  if (DOM.confirmModalCancel) {
+    DOM.confirmModalCancel.addEventListener('click', () => closeConfirmModal(false));
+  }
+  if (DOM.confirmModalOk) {
+    DOM.confirmModalOk.addEventListener('click', () => closeConfirmModal(true));
+  }
+  if (DOM.confirmModal) {
+    DOM.confirmModal.addEventListener('click', (e) => {
+      if (e.target === DOM.confirmModal) closeConfirmModal(false);
     });
   }
 
