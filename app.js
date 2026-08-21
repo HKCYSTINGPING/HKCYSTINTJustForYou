@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v17';
+import * as data from './firebase-data.js?v=20260821v18';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -698,7 +698,6 @@ function cacheDOM() {
   DOM.trophyDeckPrev = document.getElementById('trophy-deck-prev');
   DOM.trophyDeckNext = document.getElementById('trophy-deck-next');
   DOM.trophyDeckIndex = document.getElementById('trophy-deck-index');
-  DOM.trophyDeckExportPdf = document.getElementById('trophy-deck-export-pdf');
 
   DOM.profileAvatar = document.getElementById('profile-avatar');
   DOM.profileName = document.getElementById('profile-name');
@@ -4376,253 +4375,6 @@ function closeTrophyGuideModal() {
   syncBodyModalOpen();
 }
 
-/** Poker card: 2.5" × 3.5" — render at 450 DPI for print-ready PDF pages. */
-const POKER_CARD_MM = { w: 63.5, h: 88.9 };
-const POKER_CARD_PX = { w: 1125, h: 1575 };
-
-function loadExternalScript(src) {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[data-src="${src}"]`);
-    if (existing) {
-      if (existing.dataset.loaded === '1') return resolve();
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('腳本載入失敗')), { once: true });
-      return;
-    }
-    const el = document.createElement('script');
-    el.src = src;
-    el.async = true;
-    el.dataset.src = src;
-    el.addEventListener('load', () => {
-      el.dataset.loaded = '1';
-      resolve();
-    }, { once: true });
-    el.addEventListener('error', () => reject(new Error('無法載入 PDF 元件')), { once: true });
-    document.head.appendChild(el);
-  });
-}
-
-async function ensureJsPdf() {
-  if (window.jspdf?.jsPDF) return window.jspdf.jsPDF;
-  await loadExternalScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js');
-  if (!window.jspdf?.jsPDF) throw new Error('PDF 元件未就緒');
-  return window.jspdf.jsPDF;
-}
-
-function loadTrophyArtImage(src) {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => resolve(img);
-    img.onerror = () => {
-      const fb = new Image();
-      fb.onload = () => resolve(fb);
-      fb.onerror = () => resolve(null);
-      fb.src = 'assets/trophy.png';
-    };
-    img.src = src;
-  });
-}
-
-function roundRectPath(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
-}
-
-function wrapCanvasText(ctx, text, maxWidth, maxLines) {
-  const chars = [...String(text || '').trim()];
-  if (!chars.length) return [];
-  const lines = [];
-  let line = '';
-  for (const ch of chars) {
-    const test = line + ch;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = ch;
-      if (lines.length >= maxLines) break;
-    } else {
-      line = test;
-    }
-  }
-  if (lines.length < maxLines && line) lines.push(line);
-  if (chars.join('').length && lines.length >= maxLines) {
-    const joined = lines.join('');
-    const remaining = chars.join('').slice(joined.length);
-    if (remaining) {
-      let last = lines[maxLines - 1];
-      while (last.length && ctx.measureText(last + '…').width > maxWidth) {
-        last = last.slice(0, -1);
-      }
-      lines[maxLines - 1] = last + '…';
-    }
-  }
-  return lines.slice(0, maxLines);
-}
-
-function mixHex(hex, whitePct) {
-  const raw = String(hex || '#C4A574').replace('#', '');
-  if (raw.length !== 6) return '#FFF8EF';
-  const r = parseInt(raw.slice(0, 2), 16);
-  const g = parseInt(raw.slice(2, 4), 16);
-  const b = parseInt(raw.slice(4, 6), 16);
-  const t = Math.max(0, Math.min(1, whitePct));
-  const mix = (c) => Math.round(c + (255 - c) * t);
-  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
-}
-
-async function renderPokerCardCanvas(item) {
-  const { w, h } = POKER_CARD_PX;
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  const accent = item.color || '#C4A574';
-  const pad = Math.round(w * 0.07);
-  const radius = Math.round(w * 0.08);
-
-  try {
-    await document.fonts.load('700 72px "Canva Handwriting Style TC"');
-    await document.fonts.ready;
-  } catch (_) { /* fallback fonts ok */ }
-
-  const fontFamily = '"Canva Handwriting Style TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
-
-  // Card face
-  roundRectPath(ctx, 0, 0, w, h, radius);
-  ctx.save();
-  ctx.clip();
-  const bg = ctx.createLinearGradient(0, 0, 0, h);
-  bg.addColorStop(0, '#FFFAF3');
-  bg.addColorStop(0.55, '#FFFFFF');
-  bg.addColorStop(1, mixHex(accent, 0.92));
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
-
-  // Accent wash behind art
-  const artBottom = Math.round(h * 0.58);
-  const wash = ctx.createRadialGradient(w / 2, artBottom * 0.38, 20, w / 2, artBottom * 0.35, w * 0.55);
-  wash.addColorStop(0, mixHex(accent, 0.55));
-  wash.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = wash;
-  ctx.fillRect(0, 0, w, artBottom);
-
-  // Art
-  const art = await loadTrophyArtImage(trophyGuideImageSrc(item.trophy_id));
-  if (art) {
-    const maxArtW = w * 0.72;
-    const maxArtH = artBottom - pad * 1.4;
-    const scale = Math.min(maxArtW / art.width, maxArtH / art.height);
-    const aw = art.width * scale;
-    const ah = art.height * scale;
-    const ax = (w - aw) / 2;
-    const ay = pad * 0.85 + (maxArtH - ah) / 2;
-    ctx.shadowColor = 'rgba(0,0,0,0.16)';
-    ctx.shadowBlur = 28;
-    ctx.shadowOffsetY = 12;
-    ctx.drawImage(art, ax, ay, aw, ah);
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-  }
-
-  // Copy block
-  let y = artBottom + Math.round(h * 0.02);
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-
-  ctx.fillStyle = '#2A2118';
-  ctx.font = `700 ${Math.round(w * 0.095)}px ${fontFamily}`;
-  const nameLines = wrapCanvasText(ctx, item.trophy_name || item.trophy_id, w - pad * 2, 2);
-  nameLines.forEach((ln, i) => {
-    ctx.fillText(ln, pad, y + i * Math.round(h * 0.07));
-  });
-  y += nameLines.length * Math.round(h * 0.07) + Math.round(h * 0.012);
-
-  if (item.en) {
-    ctx.fillStyle = '#8A7A68';
-    ctx.font = `600 ${Math.round(w * 0.042)}px ${fontFamily}`;
-    const enLines = wrapCanvasText(ctx, item.en, w - pad * 2, 2);
-    enLines.forEach((ln, i) => {
-      ctx.fillText(ln, pad, y + i * Math.round(h * 0.038));
-    });
-    y += enLines.length * Math.round(h * 0.038) + Math.round(h * 0.018);
-  }
-
-  ctx.fillStyle = '#4A3F34';
-  ctx.font = `600 ${Math.round(w * 0.048)}px ${fontFamily}`;
-  const descLines = wrapCanvasText(ctx, item.description || '', w - pad * 2, 5);
-  descLines.forEach((ln, i) => {
-    ctx.fillText(ln, pad, y + i * Math.round(h * 0.042));
-  });
-
-  // Corner id
-  ctx.fillStyle = 'rgba(42, 33, 24, 0.35)';
-  ctx.font = `700 ${Math.round(w * 0.036)}px ${fontFamily}`;
-  ctx.textAlign = 'right';
-  ctx.fillText(String(item.trophy_id || ''), w - pad, pad * 0.55);
-
-  ctx.restore();
-
-  // Outer card stroke
-  roundRectPath(ctx, 1.5, 1.5, w - 3, h - 3, radius);
-  ctx.strokeStyle = 'rgba(0,0,0,0.14)';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  roundRectPath(ctx, 10, 10, w - 20, h - 20, Math.max(8, radius - 8));
-  ctx.strokeStyle = mixHex(accent, 0.45);
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
-  return canvas;
-}
-
-async function exportTrophyGuidePokerPdf() {
-  const items = trophyDeckState.items.length
-    ? trophyDeckState.items
-    : getTrophyGuideItems();
-  if (!items.length) {
-    showToast('暫無獎項可匯出', 'info');
-    return;
-  }
-
-  const JsPDF = await ensureJsPdf();
-  const pdf = new JsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: [POKER_CARD_MM.w, POKER_CARD_MM.h],
-    compress: true
-  });
-
-  for (let i = 0; i < items.length; i++) {
-    if (i > 0) pdf.addPage([POKER_CARD_MM.w, POKER_CARD_MM.h], 'portrait');
-    const canvas = await renderPokerCardCanvas(items[i]);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.94);
-    pdf.addImage(dataUrl, 'JPEG', 0, 0, POKER_CARD_MM.w, POKER_CARD_MM.h, undefined, 'FAST');
-  }
-
-  const stamp = new Date().toISOString().slice(0, 10);
-  pdf.save(`TNIT-獎項摘要撲克卡-${stamp}.pdf`);
-}
-
-async function handleTrophyDeckExportPdf() {
-  if (!DOM.trophyDeckExportPdf) return;
-  await runProgressButton(DOM.trophyDeckExportPdf, (async () => {
-    try {
-      showToast('正在產生高清撲克卡 PDF…', 'info');
-      await exportTrophyGuidePokerPdf();
-      showToast('PDF 已下載', 'success');
-    } catch (err) {
-      showToast(err?.message || '匯出失敗', 'error');
-    }
-  })());
-}
-
 function updateTrophyProgress() {
   const { assigned, total } = state.trophy.progress;
   DOM.trophyProgressText.textContent = assigned + '/' + total;
@@ -7437,9 +7189,6 @@ function bindEvents() {
   }
   if (DOM.trophyDeckNext) {
     DOM.trophyDeckNext.addEventListener('click', () => stepTrophyDeck(1));
-  }
-  if (DOM.trophyDeckExportPdf) {
-    DOM.trophyDeckExportPdf.addEventListener('click', handleTrophyDeckExportPdf);
   }
 
   document.querySelectorAll('#screen-participant .bottom-nav .bottom-nav-item').forEach(btn => {
