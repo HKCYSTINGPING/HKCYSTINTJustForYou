@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v10';
+import * as data from './firebase-data.js?v=20260821v11';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -4264,7 +4264,6 @@ function renderTrophyDeckCard() {
         ${item.en ? `<p class="trophy-deck-en">${escapeHtml(item.en)}</p>` : ''}
         <p class="trophy-deck-desc">${escapeHtml(item.description || '')}</p>
       </div>
-      <div class="trophy-deck-hint" aria-hidden="true">← 滑動 →</div>
     </div>
   `;
   if (DOM.trophyDeckIndex) {
