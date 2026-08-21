@@ -1408,6 +1408,127 @@ textarea.input-field {
   line-height: 1.4;
 }
 
+.trophy-guide-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 var(--space-md);
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.trophy-guide-bar .form-hint { margin: 0; }
+.trophy-guide-modal-card {
+  max-width: 420px;
+  width: min(94vw, 420px);
+  padding-bottom: 1.1rem;
+}
+.trophy-guide-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.trophy-guide-modal-header h2 { margin: 0 0 0.2rem; }
+.trophy-deck {
+  position: relative;
+  min-height: 420px;
+  margin-bottom: 0.85rem;
+  touch-action: pan-y;
+}
+.trophy-deck-stack {
+  position: relative;
+  min-height: 420px;
+}
+.trophy-deck-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fffaf3 0%, #fff 58%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 14px 34px rgba(70, 45, 20, 0.12);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  --trophy-accent: #C4A574;
+}
+.trophy-deck-card.is-back {
+  transform: scale(0.96) translateY(10px);
+  opacity: 0.55;
+  filter: saturate(0.85);
+}
+.trophy-deck-card.is-front {
+  z-index: 2;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.trophy-deck-card.is-front:active { cursor: grabbing; }
+.trophy-deck-art {
+  flex: 1;
+  min-height: 210px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--trophy-accent) 28%, white), transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--trophy-accent) 18%, #fff8ef), #fff);
+  padding: 1.2rem;
+}
+.trophy-deck-art img {
+  width: min(72%, 220px);
+  height: auto;
+  max-height: 210px;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.12));
+}
+.trophy-deck-copy {
+  padding: 1rem 1.1rem 0.85rem;
+}
+.trophy-deck-color {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--trophy-accent) 70%, #333);
+}
+.trophy-deck-name {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+.trophy-deck-en {
+  margin: 0.2rem 0 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.trophy-deck-desc {
+  margin: 0;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+.trophy-deck-hint {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 0 0 0.75rem;
+}
+.trophy-deck-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.trophy-deck-index {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
 .trophy-progress-label {
   display: flex;
   justify-content: space-between;
@@ -2797,8 +2918,9 @@ button.group-voter-header:hover {
 
 .summary-item-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 0.55rem;
   padding: var(--space-md);
   cursor: pointer;
   font-weight: 700;
@@ -2815,9 +2937,29 @@ button.group-voter-header:hover {
   content: "▾";
   color: var(--text-muted);
   transition: transform var(--duration-fast);
+  margin-left: auto;
 }
 
 .summary-item.open .summary-item-header::after { transform: rotate(180deg); }
+
+.summary-item-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.summary-trophy-desc {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.summary-trophy-meta {
+  margin: 0 0 0.75rem;
+}
 
 .summary-item-body {
   display: none;

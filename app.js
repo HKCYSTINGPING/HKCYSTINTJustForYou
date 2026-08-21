@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v9';
+import * as data from './firebase-data.js?v=20260821v10';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -690,6 +690,14 @@ function cacheDOM() {
   DOM.trophySubmitAll = document.getElementById('trophy-submit-all');
   DOM.trophySubmittedHome = document.getElementById('trophy-submitted-home');
   DOM.trophySubmittedView = document.getElementById('trophy-submitted-view');
+  DOM.trophyGuideBar = document.getElementById('trophy-guide-bar');
+  DOM.trophyGuideOpen = document.getElementById('trophy-guide-open');
+  DOM.trophyGuideModal = document.getElementById('trophy-guide-modal');
+  DOM.trophyGuideClose = document.getElementById('trophy-guide-close');
+  DOM.trophyDeckStack = document.getElementById('trophy-deck-stack');
+  DOM.trophyDeckPrev = document.getElementById('trophy-deck-prev');
+  DOM.trophyDeckNext = document.getElementById('trophy-deck-next');
+  DOM.trophyDeckIndex = document.getElementById('trophy-deck-index');
 
   DOM.profileAvatar = document.getElementById('profile-avatar');
   DOM.profileName = document.getElementById('profile-name');
@@ -2910,6 +2918,7 @@ async function handleLogout() {
   closeForceLogoutModal();
   closeForceLogoutAllModal();
   closeConfirmModal(false);
+  closeTrophyGuideModal();
   hideOnboarding();
   state.trophy = {
     loaded: false,
@@ -3448,6 +3457,95 @@ function filterValidTrophies(trophies) {
   return (trophies || []).filter(t => /^T\d+$/i.test(String(t.trophy_id || '').trim()));
 }
 
+/** Fixed guide copy for award meanings (names may still be renamed by Admin). */
+const TROPHY_META = {
+  T01: {
+    en: 'Pump Up Man',
+    color: '#E85D75',
+    colorLabel: '粉紅',
+    description: '最經常為他人打氣／鼓勵他人'
+  },
+  T02: {
+    en: 'Icebreaker',
+    color: '#4A7FD4',
+    colorLabel: '藍色',
+    description: '勇於為團隊付出 — 願意做第一個破冰'
+  },
+  T03: {
+    en: 'Wor C Lo',
+    color: '#F5F0E8',
+    colorLabel: '白色',
+    description: '發生僵局或者爭執的時候勇敢站出'
+  },
+  T04: {
+    en: 'Real Good Guy',
+    color: '#5BAF7A',
+    colorLabel: '綠色',
+    description: '樂於助人 — 經常幫助隊友'
+  },
+  T05: {
+    en: 'Senior Jojo',
+    color: '#8B6BCF',
+    colorLabel: '紫色',
+    description: '數人數，唔比其他人漏底，幫助組爸媽 — 團體意識'
+  },
+  T06: {
+    en: 'Very Important People',
+    color: '#F0C94A',
+    colorLabel: '黃色',
+    description: '帶成組贏，力挽狂瀾 — 付出自己的力量為團隊付出'
+  },
+  T07: {
+    en: 'Stalker',
+    color: '#3A3A3A',
+    colorLabel: '黑色',
+    description: '紀錄全組的活動，用手機影相'
+  },
+  T08: {
+    en: 'Head Head Is Road',
+    color: '#E8913A',
+    colorLabel: '橙色',
+    description: '全程投入參與'
+  }
+};
+
+function normalizeTrophyId(trophyId) {
+  const raw = String(trophyId || '').trim().toUpperCase();
+  const m = raw.match(/^T0*(\d+)$/);
+  if (!m) return raw;
+  return 'T' + String(m[1]).padStart(2, '0');
+}
+
+function getTrophyMeta(trophyId, trophyName = '') {
+  const id = normalizeTrophyId(trophyId);
+  if (TROPHY_META[id]) return { id, ...TROPHY_META[id] };
+  const name = String(trophyName || '').trim();
+  const nameMap = {
+    '氣球人': 'T01',
+    '破冰人': 'T02',
+    '和事佬': 'T03',
+    '真好人': 'T04',
+    '組爸媽繼承人': 'T05',
+    '關鍵人物': 'T06',
+    '潛行者': 'T07',
+    '頭頭是道': 'T08'
+  };
+  const mapped = nameMap[name];
+  if (mapped && TROPHY_META[mapped]) return { id: mapped, ...TROPHY_META[mapped] };
+  return {
+    id,
+    en: '',
+    color: '#C4A574',
+    colorLabel: '',
+    description: ''
+  };
+}
+
+function trophyGuideImageSrc(trophyId) {
+  const id = normalizeTrophyId(trophyId).toLowerCase();
+  return `assets/trophies/${id}.png`;
+}
+
 function buildAwardsHtml(awards) {
   if (!awards || awards.length === 0) {
     return '<p class="trophy-results-empty">暫未獲得獎項，請稍後再查看</p>';
@@ -3484,7 +3582,8 @@ function syncBodyModalOpen() {
     DOM.confirmModal,
     DOM.groupRenameModal,
     DOM.rosterEditModal,
-    DOM.rosterAddModal
+    DOM.rosterAddModal,
+    DOM.trophyGuideModal
   ].some(el => el && !el.classList.contains('hidden'));
   document.body.classList.toggle('modal-open', anyOpen);
 }
@@ -4080,6 +4179,11 @@ function updateTrophyStatusBanner() {
     // Submitted review also hides the strip so the green submitted banner leads.
     DOM.trophyStatusBanner.classList.toggle('hidden', showIdle || isPublished || (submitted && showVoting));
   }
+
+  if (DOM.trophyGuideBar) {
+    // Hidden only while voting is closed; other states can browse award meanings.
+    DOM.trophyGuideBar.classList.toggle('hidden', status === 'VOTING_CLOSED');
+  }
 }
 
 function openSubmittedBallotReview() {
@@ -4091,6 +4195,154 @@ function openSubmittedBallotReview() {
   switchParticipantView('trophy');
   updateTrophyStatusBanner();
   renderTrophyTeammates();
+}
+
+const trophyDeckState = {
+  index: 0,
+  items: [],
+  dragX: 0,
+  startX: 0,
+  dragging: false
+};
+
+function getTrophyGuideItems() {
+  const live = filterValidTrophies(state.trophy.trophies);
+  if (live.length) {
+    return live.map(t => {
+      const meta = getTrophyMeta(t.trophy_id, t.trophy_name);
+      return {
+        trophy_id: meta.id || t.trophy_id,
+        trophy_name: t.trophy_name || meta.id,
+        en: meta.en,
+        color: meta.color,
+        colorLabel: meta.colorLabel,
+        description: meta.description
+      };
+    });
+  }
+  return Object.keys(TROPHY_META).sort().map(id => {
+    const meta = TROPHY_META[id];
+    const nameMap = {
+      T01: '氣球人', T02: '破冰人', T03: '和事佬', T04: '真好人',
+      T05: '組爸媽繼承人', T06: '關鍵人物', T07: '潛行者', T08: '頭頭是道'
+    };
+    return {
+      trophy_id: id,
+      trophy_name: nameMap[id] || id,
+      en: meta.en,
+      color: meta.color,
+      colorLabel: meta.colorLabel,
+      description: meta.description
+    };
+  });
+}
+
+function renderTrophyDeckCard() {
+  if (!DOM.trophyDeckStack) return;
+  const items = trophyDeckState.items;
+  if (!items.length) {
+    DOM.trophyDeckStack.innerHTML = '<p class="form-hint">暫無獎項資料</p>';
+    if (DOM.trophyDeckIndex) DOM.trophyDeckIndex.textContent = '0 / 0';
+    return;
+  }
+  const idx = ((trophyDeckState.index % items.length) + items.length) % items.length;
+  trophyDeckState.index = idx;
+  const item = items[idx];
+  const next = items[(idx + 1) % items.length];
+  const img = trophyGuideImageSrc(item.trophy_id);
+  DOM.trophyDeckStack.innerHTML = `
+    ${items.length > 1 ? `<div class="trophy-deck-card is-back" aria-hidden="true" style="--trophy-accent:${escapeHtml(next.color)}">
+      <div class="trophy-deck-art"><img src="${escapeHtml(trophyGuideImageSrc(next.trophy_id))}" alt="" onerror="this.src='assets/trophy.png'"></div>
+    </div>` : ''}
+    <div class="trophy-deck-card is-front" id="trophy-deck-front" style="--trophy-accent:${escapeHtml(item.color)}" data-trophy-id="${escapeHtml(item.trophy_id)}">
+      <div class="trophy-deck-art">
+        <img src="${escapeHtml(img)}" alt="${escapeHtml(item.trophy_name)}" onerror="this.src='assets/trophy.png'">
+      </div>
+      <div class="trophy-deck-copy">
+        <p class="trophy-deck-color">${escapeHtml(item.colorLabel || '')}</p>
+        <h3 class="trophy-deck-name">${escapeHtml(item.trophy_name)}</h3>
+        ${item.en ? `<p class="trophy-deck-en">${escapeHtml(item.en)}</p>` : ''}
+        <p class="trophy-deck-desc">${escapeHtml(item.description || '')}</p>
+      </div>
+      <div class="trophy-deck-hint" aria-hidden="true">← 滑動 →</div>
+    </div>
+  `;
+  if (DOM.trophyDeckIndex) {
+    DOM.trophyDeckIndex.textContent = `${idx + 1} / ${items.length}`;
+  }
+  bindTrophyDeckFrontGestures();
+}
+
+function stepTrophyDeck(delta) {
+  if (!trophyDeckState.items.length) return;
+  trophyDeckState.index += delta;
+  renderTrophyDeckCard();
+}
+
+function bindTrophyDeckFrontGestures() {
+  const card = document.getElementById('trophy-deck-front');
+  if (!card || card.dataset.bound === '1') return;
+  card.dataset.bound = '1';
+
+  const reset = () => {
+    trophyDeckState.dragging = false;
+    trophyDeckState.dragX = 0;
+    card.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
+    card.style.transform = '';
+    card.style.opacity = '';
+  };
+
+  const onPointerDown = (e) => {
+    trophyDeckState.dragging = true;
+    trophyDeckState.startX = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0;
+    trophyDeckState.dragX = 0;
+    card.style.transition = 'none';
+    card.setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    if (!trophyDeckState.dragging) return;
+    const x = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? trophyDeckState.startX;
+    trophyDeckState.dragX = x - trophyDeckState.startX;
+    const rot = trophyDeckState.dragX / 18;
+    card.style.transform = `translateX(${trophyDeckState.dragX}px) rotate(${rot}deg)`;
+    card.style.opacity = String(Math.max(0.45, 1 - Math.abs(trophyDeckState.dragX) / 280));
+  };
+  const onPointerUp = () => {
+    if (!trophyDeckState.dragging) return;
+    const dx = trophyDeckState.dragX;
+    if (Math.abs(dx) > 80) {
+      const dir = dx > 0 ? 1 : -1;
+      card.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
+      card.style.transform = `translateX(${dir * 420}px) rotate(${dir * 18}deg)`;
+      card.style.opacity = '0';
+      setTimeout(() => {
+        stepTrophyDeck(dir);
+      }, 180);
+      trophyDeckState.dragging = false;
+      return;
+    }
+    reset();
+  };
+
+  card.addEventListener('pointerdown', onPointerDown);
+  card.addEventListener('pointermove', onPointerMove);
+  card.addEventListener('pointerup', onPointerUp);
+  card.addEventListener('pointercancel', reset);
+}
+
+function openTrophyGuideModal() {
+  if (!DOM.trophyGuideModal) return;
+  trophyDeckState.items = getTrophyGuideItems();
+  trophyDeckState.index = 0;
+  renderTrophyDeckCard();
+  DOM.trophyGuideModal.classList.remove('hidden');
+  syncBodyModalOpen();
+}
+
+function closeTrophyGuideModal() {
+  if (!DOM.trophyGuideModal) return;
+  DOM.trophyGuideModal.classList.add('hidden');
+  syncBodyModalOpen();
 }
 
 function updateTrophyProgress() {
@@ -5087,6 +5339,11 @@ function renderTrophySummaryInto(container, items, options = {}) {
     ).join('');
     const isOpen = openIds.has(item.trophy_id);
     const fieldId = `${idPrefix}-name-${escapeHtml(item.trophy_id)}`;
+    const meta = getTrophyMeta(item.trophy_id, item.trophy_name);
+    const descHtml = meta.description
+      ? `<p class="summary-trophy-desc">${escapeHtml(meta.description)}</p>
+         <p class="form-hint summary-trophy-meta">${escapeHtml(meta.en)}${meta.colorLabel ? ' · ' + escapeHtml(meta.colorLabel) : ''}</p>`
+      : '';
     const renameHtml = allowRename ? `
         <div class="summary-rename">
           <label class="summary-rename-label" for="${fieldId}">獎項名稱</label>
@@ -5102,12 +5359,16 @@ function renderTrophySummaryInto(container, items, options = {}) {
               <span class="btn-progress-bar" aria-hidden="true"></span>
             </button>
           </div>
-          <p class="form-hint">編號 ${escapeHtml(item.trophy_id)}；改名會即時套用到投票畫面同已計算結果。</p>
+          <p class="form-hint">編號 ${escapeHtml(item.trophy_id)}；改名只可喺 Admin 改，會即時套用到投票畫面同已計算結果。</p>
         </div>` : '';
 
     return `<div class="summary-item${isOpen ? ' open' : ''}" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
-      <button type="button" class="summary-item-header">${escapeHtml(item.trophy_name)}</button>
+      <button type="button" class="summary-item-header">
+        <span class="summary-item-swatch" style="background:${escapeHtml(meta.color)}" aria-hidden="true"></span>
+        <span>${escapeHtml(item.trophy_name)}</span>
+      </button>
       <div class="summary-item-body">
+        ${descHtml}
         ${renameHtml}
         ${tieNote}
         ${winnerHtml || '<p>暫無得主</p>'}
@@ -5556,9 +5817,8 @@ function renderStaffResults() {
       }).join('');
   }
   renderTrophySummaryInto(DOM.staffSummaryList, state.staffTrophy.trophySummary, {
-    allowRename: true,
-    idPrefix: 'staff-summary',
-    onRename: handleAdminRenameTrophy
+    allowRename: false,
+    idPrefix: 'staff-summary'
   });
 }
 
@@ -6840,6 +7100,10 @@ function bindEvents() {
     if (e.key !== 'Escape') return;
     if (DOM.confirmModal && !DOM.confirmModal.classList.contains('hidden')) {
       closeConfirmModal(false);
+      return;
+    }
+    if (DOM.trophyGuideModal && !DOM.trophyGuideModal.classList.contains('hidden')) {
+      closeTrophyGuideModal();
     }
   });
 
@@ -6848,6 +7112,23 @@ function bindEvents() {
   }
   if (DOM.trophySubmittedView) {
     DOM.trophySubmittedView.addEventListener('click', openSubmittedBallotReview);
+  }
+  if (DOM.trophyGuideOpen) {
+    DOM.trophyGuideOpen.addEventListener('click', openTrophyGuideModal);
+  }
+  if (DOM.trophyGuideClose) {
+    DOM.trophyGuideClose.addEventListener('click', closeTrophyGuideModal);
+  }
+  if (DOM.trophyGuideModal) {
+    DOM.trophyGuideModal.addEventListener('click', (e) => {
+      if (e.target === DOM.trophyGuideModal) closeTrophyGuideModal();
+    });
+  }
+  if (DOM.trophyDeckPrev) {
+    DOM.trophyDeckPrev.addEventListener('click', () => stepTrophyDeck(-1));
+  }
+  if (DOM.trophyDeckNext) {
+    DOM.trophyDeckNext.addEventListener('click', () => stepTrophyDeck(1));
   }
 
   document.querySelectorAll('#screen-participant .bottom-nav .bottom-nav-item').forEach(btn => {

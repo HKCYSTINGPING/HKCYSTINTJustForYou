@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260821v9">
+  <link rel="stylesheet" href="styles.css?v=20260821v10">
 </head>
 <body>
 
@@ -272,6 +272,13 @@
       <!-- 獎項 -->
       <div id="view-trophy" class="app-view hidden" data-view="trophy">
         <div id="trophy-status-banner" class="status-banner hidden" role="status" data-tour="trophy-banner"></div>
+
+        <div id="trophy-guide-bar" class="trophy-guide-bar hidden">
+          <button type="button" id="trophy-guide-open" class="btn btn-secondary btn-sm">
+            獎項摘要
+          </button>
+          <p class="form-hint">左右滑動睇晒每個獎項意思</p>
+        </div>
 
         <div id="trophy-not-open" class="empty-state empty-illustration hidden" data-tour="trophy-not-open">
           <div class="illustration-circle"><span class="app-icon app-icon-trophy" aria-hidden="true"></span></div>
@@ -590,6 +597,30 @@
         <button type="button" id="vote-matrix-modal-back" class="btn btn-secondary btn-sm">返回總覽</button>
       </div>
       <div id="vote-matrix-modal-body" class="vote-matrix-modal-body"></div>
+    </div>
+  </div>
+
+  <div id="trophy-guide-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="trophy-guide-title">
+    <div class="modal-card glass-card trophy-guide-modal-card">
+      <div class="trophy-guide-modal-header">
+        <div>
+          <h2 id="trophy-guide-title">獎項摘要</h2>
+          <p class="form-hint">左右滑動切換 · 了解每個獎項</p>
+        </div>
+        <button type="button" id="trophy-guide-close" class="btn btn-ghost btn-icon" aria-label="關閉">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="trophy-deck" id="trophy-deck">
+        <div class="trophy-deck-stack" id="trophy-deck-stack" aria-live="polite"></div>
+      </div>
+      <div class="trophy-deck-controls">
+        <button type="button" id="trophy-deck-prev" class="btn btn-secondary btn-sm" aria-label="上一個">←</button>
+        <span id="trophy-deck-index" class="trophy-deck-index">1 / 8</span>
+        <button type="button" id="trophy-deck-next" class="btn btn-primary btn-sm" aria-label="下一個">→</button>
+      </div>
     </div>
   </div>
 
@@ -1018,6 +1049,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260821v9"></script>
+  <script type="module" src="app.js?v=20260821v10"></script>
 </body>
 </html>
