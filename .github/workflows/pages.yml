@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -17,15 +17,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
 
       - name: Prepare site
         run: |
@@ -63,29 +57,16 @@ jobs:
           PY
           grep -q "styles.css?v=${SHA}" _site/index.html
           grep -q "app.js?v=${SHA}" _site/index.html
-          # A missing module would only surface as a blank page in someone's
-          # browser, so fail the deploy here instead.
           for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json manifest.json sw.js fonts/CanvaHandwritingStyleTC.woff2 assets/trophy.png assets/heart.png assets/trophies/t01.png; do
             test -s "_site/$f" || { echo "缺少 $f"; exit 1; }
           done
           test "$(ls _site/assets/trophies/t0*.png 2>/dev/null | wc -l | tr -d ' ')" -ge 8 || { echo "獎項貼圖不足 8 張"; exit 1; }
           test "$(ls _site/assets/*.png | wc -l | tr -d ' ')" -ge 20 || { echo "assets 圖示數量不足"; exit 1; }
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: _site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        continue-on-error: true
-        uses: actions/deploy-pages@v4
-
-      - name: Wait if Pages is busy
-        if: steps.deployment.outcome == 'failure'
-        run: sleep 45
-
-      - name: Deploy to GitHub Pages (retry)
-        id: deployment_retry
-        if: steps.deployment.outcome == 'failure'
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          force_orphan: true
+          enable_jekyll: false
