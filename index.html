@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260821v7">
+  <link rel="stylesheet" href="styles.css?v=20260821v8">
 </head>
 <body>
 
@@ -325,7 +325,10 @@
           <div class="success-illustration app-icon app-icon-check" aria-hidden="true"></div>
           <h2>投票已提交</h2>
           <p>等待管理員處理結果</p>
-          <button type="button" id="trophy-submitted-home" class="btn btn-primary btn-lg">返回首頁</button>
+          <div class="success-actions">
+            <button type="button" id="trophy-submitted-view" class="btn btn-secondary btn-lg">查看我的配對</button>
+            <button type="button" id="trophy-submitted-home" class="btn btn-primary btn-lg">返回首頁</button>
+          </div>
         </div>
       </div>
 
@@ -455,8 +458,6 @@
             <div id="staff-voting-badge" class="voting-status-badge" data-tour="staff-voting-controls">—</div>
             <p id="staff-voting-source" class="form-hint staff-voting-source">—</p>
             <div id="staff-voting-stepper" class="voting-stepper">
-              <div class="stepper-step" data-step="DRAFT"><span class="stepper-dot"></span><span class="stepper-label">草稿</span></div>
-              <div class="stepper-line"></div>
               <div class="stepper-step" data-step="VOTING_OPEN"><span class="stepper-dot"></span><span class="stepper-label">開放投票</span></div>
               <div class="stepper-line"></div>
               <div class="stepper-step" data-step="VOTING_CLOSED"><span class="stepper-dot"></span><span class="stepper-label">關閉投票</span></div>
@@ -832,8 +833,6 @@
         <div id="admin-voting-status-badge" class="voting-status-badge" data-tour="admin-voting-badge">—</div>
 
         <div class="voting-stepper" data-tour="admin-voting-stepper">
-          <div class="stepper-step" data-step="DRAFT"><span class="stepper-dot"></span><span class="stepper-label">草稿</span></div>
-          <div class="stepper-line"></div>
           <div class="stepper-step" data-step="VOTING_OPEN"><span class="stepper-dot"></span><span class="stepper-label">開放投票</span></div>
           <div class="stepper-line"></div>
           <div class="stepper-step" data-step="VOTING_CLOSED"><span class="stepper-dot"></span><span class="stepper-label">關閉投票</span></div>
@@ -1006,6 +1005,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260821v7"></script>
+  <script type="module" src="app.js?v=20260821v8"></script>
 </body>
 </html>

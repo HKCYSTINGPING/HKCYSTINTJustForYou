@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v7';
+import * as data from './firebase-data.js?v=20260821v8';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -101,7 +101,8 @@ const state = {
     myAwards: [],
     showResults: false,
     trophyRevision: '',
-    resultsModalRevision: ''
+    resultsModalRevision: '',
+    reviewSubmitted: false
   },
   adminTrophy: {
     loading: false,
@@ -278,7 +279,7 @@ const ONBOARDING_STEPS = {
       prepare: 'trophy',
       skipIfStaff: true,
       title: '提交投票',
-      body: '配對完成後撳「提交投票」正式交卷；「清除全部投票」可以一次清空重揀。'
+      body: '配對完成後撳「提交投票」正式交卷（會再確認兩次）；「清除全部投票」可以一次清空重揀。'
     },
     {
       target: '[data-tour="profile-header"]',
@@ -457,13 +458,13 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-voting-badge"]',
       prepare: 'voting',
       title: '投票狀態',
-      body: '而家全域投票停喺邊一步（草稿／開放／關閉／計算／公布）。'
+      body: '而家全域投票停喺邊一步（開放／關閉／計算／公布）。'
     },
     {
       target: '[data-tour="admin-voting-stepper"]',
       prepare: 'voting',
       title: '流程進度條',
-      body: '由草稿一路到公布，清楚見到而家去到邊。'
+      body: '由開放投票一路到公布，清楚見到而家去到邊。'
     },
     {
       target: '[data-tour="admin-voting-stats"]',
@@ -682,6 +683,7 @@ function cacheDOM() {
   DOM.trophyClearAll = document.getElementById('trophy-clear-all');
   DOM.trophySubmitAll = document.getElementById('trophy-submit-all');
   DOM.trophySubmittedHome = document.getElementById('trophy-submitted-home');
+  DOM.trophySubmittedView = document.getElementById('trophy-submitted-view');
 
   DOM.profileAvatar = document.getElementById('profile-avatar');
   DOM.profileName = document.getElementById('profile-name');
@@ -2916,7 +2918,8 @@ async function handleLogout() {
     myAwards: [],
     showResults: false,
     trophyRevision: '',
-    resultsModalRevision: ''
+    resultsModalRevision: '',
+    reviewSubmitted: false
   };
   DOM.loginParticipant.value = '';
   DOM.loginPhone.value = '';
@@ -3965,9 +3968,11 @@ function updateTrophyStatusBanner() {
   const status = state.trophy.votingStatus;
   const label = VOTING_STATUS_LABELS[status] || status;
   const isPublished = status === 'PUBLISHED';
-  // Only while voting is open do participants see the ballot / submitted review.
-  // Closed / draft / calculated show a simple centered idle state (like empty inbox).
-  const showVoting = status === 'VOTING_OPEN';
+  const submitted = state.trophy.submissionStatus === 'submitted';
+  // Open ballot while voting is open; after submit, "查看我的配對" can force a
+  // readonly review even if voting later closes.
+  const showSubmittedReview = submitted && !!state.trophy.reviewSubmitted && !isPublished;
+  const showVoting = status === 'VOTING_OPEN' || showSubmittedReview;
   const idle = TROPHY_IDLE_COPY[status];
   const showIdle = !showVoting && !isPublished;
 
@@ -3992,7 +3997,7 @@ function updateTrophyStatusBanner() {
     );
   }
   if (DOM.trophySubmittedBanner) {
-    const showSubmitted = state.trophy.submissionStatus === 'submitted' && showVoting;
+    const showSubmitted = submitted && showVoting;
     DOM.trophySubmittedBanner.classList.toggle('hidden', !showSubmitted);
   }
 
@@ -4003,8 +4008,20 @@ function updateTrophyStatusBanner() {
     else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') DOM.trophyStatusBanner.classList.add('status-banner-warning');
     else if (status === 'PUBLISHED') DOM.trophyStatusBanner.classList.add('status-banner-success');
     // Idle empty-state pages stay clean — no status strip above the message.
-    DOM.trophyStatusBanner.classList.toggle('hidden', showIdle || isPublished);
+    // Submitted review also hides the strip so the green submitted banner leads.
+    DOM.trophyStatusBanner.classList.toggle('hidden', showIdle || isPublished || (submitted && showVoting));
   }
+}
+
+function openSubmittedBallotReview() {
+  if (state.trophy.submissionStatus !== 'submitted') {
+    showToast('尚未提交投票', 'info');
+    return;
+  }
+  state.trophy.reviewSubmitted = true;
+  switchParticipantView('trophy');
+  updateTrophyStatusBanner();
+  renderTrophyTeammates();
 }
 
 function updateTrophyProgress() {
@@ -4212,6 +4229,9 @@ async function handleTrophySubmitAll() {
       used.add(trophyId);
     }
   }
+
+  if (!window.confirm('確定要提交投票嗎？提交後不可再修改。')) return;
+  if (!window.confirm('再次確認：真的要提交投票嗎？')) return;
 
   const pairings = buildPairingsFromAssignments(state.trophy.assignments);
   await runProgressButton(DOM.trophySubmitAll, (async () => {
@@ -5097,7 +5117,7 @@ async function handleAdminRenameTrophy(btn) {
 
 function updateVotingStepper() {
   const status = state.adminTrophy.overview?.voting_status || 'DRAFT';
-  const steps = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
+  const steps = ['VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
   const currentIdx = steps.indexOf(status);
   const root = document.querySelector('#admin-trophy-panel .voting-stepper');
 
@@ -5294,7 +5314,7 @@ function syncStaffVotingControls(groupId = getFacilitatorGroupId()) {
 }
 
 function updateStaffVotingStepper(status) {
-  const steps = ['DRAFT', 'VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
+  const steps = ['VOTING_OPEN', 'VOTING_CLOSED', 'CALCULATED', 'PUBLISHED'];
   const idx = steps.indexOf(status);
   const root = document.getElementById('staff-voting-stepper');
   if (!root) return;
@@ -6457,6 +6477,9 @@ function switchParticipantView(viewName) {
     showToast('Staff 不參與投票', 'info');
     viewName = isGroupFacilitator() ? 'staff' : 'home';
   }
+  if (viewName !== 'trophy' && viewName !== 'trophy-submitted') {
+    state.trophy.reviewSubmitted = false;
+  }
   document.querySelectorAll('#screen-participant .app-view').forEach(view => {
     const isActive = view.dataset.view === viewName;
     view.classList.toggle('active', isActive);
@@ -6658,6 +6681,9 @@ function bindEvents() {
 
   if (DOM.trophySubmittedHome) {
     DOM.trophySubmittedHome.addEventListener('click', () => switchParticipantView('home'));
+  }
+  if (DOM.trophySubmittedView) {
+    DOM.trophySubmittedView.addEventListener('click', openSubmittedBallotReview);
   }
 
   document.querySelectorAll('#screen-participant .bottom-nav .bottom-nav-item').forEach(btn => {
