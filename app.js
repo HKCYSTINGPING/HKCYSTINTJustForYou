@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v3';
+import * as data from './firebase-data.js?v=20260821v4';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -3931,8 +3931,16 @@ function renderParticipantTrophyResults() {
 
 const TROPHY_IDLE_COPY = {
   DRAFT: {
-    title: '投票尚未開始',
+    title: '投票通道尚未開啟',
     body: '管理員開放投票後，你可以為隊友配對獎項'
+  },
+  VOTING_CLOSED: {
+    title: '投票通道尚未開啟',
+    body: '投票已關閉，請等候管理員公布結果'
+  },
+  CALCULATED: {
+    title: '投票通道尚未開啟',
+    body: '結果計算中，請稍候管理員公布'
   }
 };
 
@@ -3940,7 +3948,7 @@ function notifyVotingStatusChange(status) {
   if (isStaffPerson(state.participantId)) return;
   const messages = {
     VOTING_OPEN: '投票已開放，可以開始配對獎項',
-    VOTING_CLOSED: '投票已關閉；你仍可查看自己投咗咩',
+    VOTING_CLOSED: '投票已關閉',
     CALCULATED: '結果已計算，即將公布',
     PUBLISHED: '獎項結果已公布！',
     DRAFT: '投票已重設為尚未開始'
@@ -3956,21 +3964,21 @@ function notifyVotingStatusChange(status) {
 function updateTrophyStatusBanner() {
   const status = state.trophy.votingStatus;
   const label = VOTING_STATUS_LABELS[status] || status;
-  const isDraft = status === 'DRAFT';
   const isPublished = status === 'PUBLISHED';
-  // Once voting has started, keep the ballot visible (readonly when locked)
-  // so participants can always review what they cast.
-  const showVoting = !isDraft;
+  // Only while voting is open do participants see the ballot / submitted review.
+  // Closed / draft / calculated show a simple centered idle state (like empty inbox).
+  const showVoting = status === 'VOTING_OPEN';
   const idle = TROPHY_IDLE_COPY[status];
-  const showIdle = isDraft && !!idle;
+  const showIdle = !showVoting && !isPublished;
 
   if (DOM.trophyNotOpen) {
     DOM.trophyNotOpen.classList.toggle('hidden', !showIdle);
     if (showIdle) {
+      const copy = idle || TROPHY_IDLE_COPY.DRAFT;
       const title = DOM.trophyNotOpen.querySelector('h3');
       const body = DOM.trophyNotOpen.querySelector('p');
-      if (title) title.textContent = idle.title;
-      if (body) body.textContent = idle.body;
+      if (title) title.textContent = copy.title;
+      if (body) body.textContent = copy.body;
     }
   }
   if (DOM.trophyVotingSection) {
@@ -3994,7 +4002,8 @@ function updateTrophyStatusBanner() {
     if (status === 'VOTING_OPEN') DOM.trophyStatusBanner.classList.add('status-banner-success');
     else if (status === 'VOTING_CLOSED' || status === 'CALCULATED') DOM.trophyStatusBanner.classList.add('status-banner-warning');
     else if (status === 'PUBLISHED') DOM.trophyStatusBanner.classList.add('status-banner-success');
-    DOM.trophyStatusBanner.classList.toggle('hidden', isDraft);
+    // Idle empty-state pages stay clean — no status strip above the message.
+    DOM.trophyStatusBanner.classList.toggle('hidden', showIdle || isPublished);
   }
 }
 

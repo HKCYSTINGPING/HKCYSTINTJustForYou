@@ -1372,6 +1372,21 @@ textarea.input-field {
 
 /* ─── 獎項 ────────────────────────────────────────────────────────────── */
 
+#view-trophy:has(#trophy-not-open:not(.hidden)) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: min(70vh, 520px);
+}
+
+#view-trophy #trophy-not-open:not(.hidden) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .trophy-progress-wrap { margin-bottom: var(--space-md); }
 
 #trophy-voting-section.is-readonly .trophy-progress-wrap::before {
