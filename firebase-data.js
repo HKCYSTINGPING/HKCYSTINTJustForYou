@@ -1238,6 +1238,7 @@ export async function assignParticipantToGroup(participantId, targetGroupId, par
     await updateParticipantGroup(pid, target);
   }
 
+  let compactRemaps = [];
   if (isNumberedGroupId(sourceGroup) && sourceGroup !== target) {
     const afterMove = roster.map(p => {
       if (String(p.participant_id).toUpperCase() === pid) {
@@ -1245,10 +1246,61 @@ export async function assignParticipantToGroup(participantId, targetGroupId, par
       }
       return p;
     });
-    await compactGroupSeats(sourceGroup, afterMove);
+    compactRemaps = await compactGroupSeats(sourceGroup, afterMove);
   }
 
-  return { participantId: finalId, renamed: finalId !== pid };
+  return { participantId: finalId, renamed: finalId !== pid, compactRemaps };
+}
+
+/**
+ * Apply a batch of draft group placements (pid → target group).
+ * Tracks seat renames from each move so later pending keys stay resolvable.
+ */
+export async function applyRosterGroupDraft(desiredById, participants) {
+  let roster = (participants || []).map(p => ({ ...p }));
+  const idChain = new Map();
+  const resolve = (id) => {
+    let cur = String(id || '').trim().toUpperCase();
+    while (idChain.has(cur)) cur = idChain.get(cur);
+    return cur;
+  };
+  const noteRename = (from, to) => {
+    const a = String(from || '').trim().toUpperCase();
+    const b = String(to || '').trim().toUpperCase();
+    if (a && b && a !== b) idChain.set(a, b);
+  };
+
+  const entries = Object.entries(desiredById || {})
+    .map(([pid, groupId]) => [String(pid).trim().toUpperCase(), normalizeGroupId(groupId)])
+    .filter(([pid]) => pid)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  const results = [];
+  for (const [origId, target] of entries) {
+    const pid = resolve(origId);
+    const person = roster.find(p => String(p.participant_id).toUpperCase() === pid);
+    if (!person) continue;
+    if (normalizeGroupId(person.group_id) === target) continue;
+
+    const result = await assignParticipantToGroup(pid, target, roster);
+    noteRename(pid, result.participantId);
+    for (const row of result.compactRemaps || []) noteRename(row.from, row.to);
+
+    roster = roster.map(p => {
+      const id = String(p.participant_id).toUpperCase();
+      if (id === pid) {
+        return { ...p, participant_id: result.participantId, group_id: target };
+      }
+      for (const row of result.compactRemaps || []) {
+        if (id === String(row.from).toUpperCase()) {
+          return { ...p, participant_id: row.to };
+        }
+      }
+      return p;
+    });
+    results.push({ from: origId, to: result.participantId, groupId: target, renamed: result.renamed });
+  }
+  return { results, participants: roster };
 }
 
 export async function createParticipant({ participantId, groupId, password, displayName }) {

@@ -3223,7 +3223,22 @@ button.group-voter-header:hover {
   gap: var(--space-md);
   margin-bottom: var(--space-sm);
 }
-.admin-roster-actions { flex-shrink: 0; }
+.admin-roster-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+.roster-pending-hint {
+  color: #9a6700;
+  font-weight: 600;
+}
+.admin-roster-board.has-roster-draft {
+  outline: 2px dashed rgba(154, 103, 0, 0.35);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
 .admin-roster-board {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -3292,6 +3307,11 @@ button.group-voter-header:hover {
   border-color: rgba(47, 111, 237, 0.18);
 }
 .roster-chip.is-dragging { opacity: 0.45; }
+.roster-chip.is-pending {
+  border-color: rgba(154, 103, 0, 0.45);
+  background: rgba(255, 214, 102, 0.28);
+  box-shadow: inset 3px 0 0 #c69000;
+}
 .roster-chip-id { font-weight: 700; font-size: 0.9rem; }
 .roster-chip-name { font-size: 0.75rem; opacity: 0.7; }
 .roster-edit-modal-card { max-width: 420px; width: min(92vw, 420px); }

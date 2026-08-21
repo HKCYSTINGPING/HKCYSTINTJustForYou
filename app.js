@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260818v1';
+import * as data from './firebase-data.js?v=20260821v1';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -726,6 +726,9 @@ function cacheDOM() {
   DOM.adminDashboardStatus = document.getElementById('admin-dashboard-status');
   DOM.adminRosterBoard = document.getElementById('admin-roster-board');
   DOM.adminRosterAdd = document.getElementById('admin-roster-add');
+  DOM.adminRosterConfirm = document.getElementById('admin-roster-confirm');
+  DOM.adminRosterDiscard = document.getElementById('admin-roster-discard');
+  DOM.adminRosterPendingHint = document.getElementById('admin-roster-pending-hint');
   DOM.rosterEditModal = document.getElementById('roster-edit-modal');
   DOM.rosterEditTitle = document.getElementById('roster-edit-title');
   DOM.rosterEditSubtitle = document.getElementById('roster-edit-subtitle');
@@ -5719,11 +5722,70 @@ function normalizeRosterGroupId(groupId) {
   return data.normalizeGroupId(groupId);
 }
 
+/** Draft group moves from drag-drop; applied only after confirm. pid → target group. */
+const rosterPendingMoves = new Map();
+let rosterDraftApplying = false;
+
+function pruneRosterPendingMoves() {
+  const liveIds = new Set(state.participants.map(p => p.participant_id));
+  for (const pid of [...rosterPendingMoves.keys()]) {
+    if (!liveIds.has(pid)) {
+      rosterPendingMoves.delete(pid);
+      continue;
+    }
+    const person = state.participants.find(p => p.participant_id === pid);
+    if (!person) {
+      rosterPendingMoves.delete(pid);
+      continue;
+    }
+    if (normalizeRosterGroupId(person.group_id) === rosterPendingMoves.get(pid)) {
+      rosterPendingMoves.delete(pid);
+    }
+  }
+}
+
+function getRosterDraftParticipants() {
+  pruneRosterPendingMoves();
+  return state.participants.map(p => {
+    const pending = rosterPendingMoves.get(p.participant_id);
+    if (!pending) return p;
+    return { ...p, group_id: pending };
+  });
+}
+
+function syncRosterDraftActions() {
+  pruneRosterPendingMoves();
+  const pending = rosterPendingMoves.size > 0;
+  if (DOM.adminRosterConfirm) {
+    DOM.adminRosterConfirm.classList.toggle('hidden', !pending);
+    DOM.adminRosterConfirm.disabled = !pending || rosterDraftApplying;
+  }
+  if (DOM.adminRosterDiscard) {
+    DOM.adminRosterDiscard.classList.toggle('hidden', !pending);
+    DOM.adminRosterDiscard.disabled = !pending || rosterDraftApplying;
+  }
+  if (DOM.adminRosterPendingHint) {
+    DOM.adminRosterPendingHint.classList.toggle('hidden', !pending);
+    if (pending) {
+      DOM.adminRosterPendingHint.textContent =
+        `有 ${rosterPendingMoves.size} 項未儲存嘅分組變更 — 撳「確認變更」先會生效`;
+    }
+  }
+  if (DOM.adminRosterBoard) {
+    DOM.adminRosterBoard.classList.toggle('has-roster-draft', pending);
+  }
+}
+
+function clearRosterPendingMoves() {
+  rosterPendingMoves.clear();
+  syncRosterDraftActions();
+}
+
 function renderAdminRosterBoard() {
   if (!DOM.adminRosterBoard) return;
   const columns = rosterBoardColumns();
   const byGroup = new Map(columns.map(g => [g, []]));
-  state.participants.forEach(p => {
+  getRosterDraftParticipants().forEach(p => {
     const g = normalizeRosterGroupId(p.group_id);
     if (!byGroup.has(g)) byGroup.set(g, []);
     byGroup.get(g).push(p);
@@ -5737,7 +5799,8 @@ function renderAdminRosterBoard() {
       const id = p.participant_id;
       const name = (p.display_name || '').trim();
       const staff = isStaffPerson(id);
-      return `<button type="button" class="roster-chip${staff ? ' is-staff' : ''}"
+      const pending = rosterPendingMoves.has(id);
+      return `<button type="button" class="roster-chip${staff ? ' is-staff' : ''}${pending ? ' is-pending' : ''}"
         draggable="true" data-participant-id="${escapeHtml(id)}" data-group-id="${escapeHtml(groupId)}">
         <span class="roster-chip-id">${escapeHtml(id)}</span>
         ${name ? `<span class="roster-chip-name">${escapeHtml(name)}</span>` : ''}
@@ -5751,15 +5814,95 @@ function renderAdminRosterBoard() {
       <div class="roster-column-body">${cards || '<p class="roster-empty">尚未有人</p>'}</div>
     </section>`;
   }).join('');
+  syncRosterDraftActions();
 }
 
 let rosterDragPid = '';
+
+function queueRosterDraftMove(pid, targetGroup) {
+  const person = state.participants.find(p => p.participant_id === pid);
+  if (!person) return false;
+  const liveGroup = normalizeRosterGroupId(person.group_id);
+  if (liveGroup === targetGroup) {
+    rosterPendingMoves.delete(pid);
+  } else {
+    rosterPendingMoves.set(pid, targetGroup);
+  }
+  renderAdminRosterBoard();
+  return true;
+}
+
+async function confirmRosterPendingMoves() {
+  pruneRosterPendingMoves();
+  if (!rosterPendingMoves.size || rosterDraftApplying) return;
+
+  const draft = getRosterDraftParticipants();
+  for (const groupId of rosterBoardColumns()) {
+    if (!data.isNumberedGroupId(groupId)) continue;
+    const seats = draft.filter(p =>
+      normalizeRosterGroupId(p.group_id) === groupId && data.isSeatParticipantId(p.participant_id)
+    );
+    if (seats.length > data.SEAT_LETTERS.length) {
+      showToast(`${formatGroupLabel(groupId)} 超過 ${data.SEAT_LETTERS.length} 個座位，請先調整`, 'error');
+      return;
+    }
+  }
+
+  const voting = state.votingConfig?.voting_status || '';
+  if (voting === 'VOTING_OPEN' || voting === 'CALCULATED' || voting === 'PUBLISHED') {
+    if (!window.confirm('目前投票狀態為「' + (VOTING_STATUS_LABELS[voting] || voting) + '」。改組／重編號可能影響已投票或結果，確定繼續？')) {
+      return;
+    }
+  }
+
+  const desired = Object.fromEntries(rosterPendingMoves.entries());
+  const moveCount = rosterPendingMoves.size;
+  rosterDraftApplying = true;
+  syncRosterDraftActions();
+
+  await runProgressButton(DOM.adminRosterConfirm, (async () => {
+    try {
+      showToast(`正在套用 ${moveCount} 項分組變更…`, 'info');
+      const { results, participants } = await data.applyRosterGroupDraft(desired, state.participants);
+      state.participants = participants;
+      setParticipantsCache(participants);
+      clearRosterPendingMoves();
+      renderAdminRosterBoard();
+      const renamed = results.filter(r => r.renamed).length;
+      showToast(
+        renamed
+          ? `已確認 ${results.length} 項變更（其中 ${renamed} 人已重編號）`
+          : `已確認 ${results.length} 項分組變更`,
+        'success'
+      );
+    } catch (err) {
+      showToast(data.describeFirestoreError(err, err.message || '確認分組失敗'), 'error');
+      renderAdminRosterBoard();
+      throw err;
+    } finally {
+      rosterDraftApplying = false;
+      syncRosterDraftActions();
+    }
+  })());
+}
+
+function discardRosterPendingMoves() {
+  if (rosterDraftApplying) return;
+  if (!rosterPendingMoves.size) return;
+  clearRosterPendingMoves();
+  renderAdminRosterBoard();
+  showToast('已取消未儲存嘅分組變更', 'info');
+}
 
 function bindAdminRosterBoardEvents() {
   if (!DOM.adminRosterBoard || DOM.adminRosterBoard.dataset.bound === '1') return;
   DOM.adminRosterBoard.dataset.bound = '1';
 
   DOM.adminRosterBoard.addEventListener('dragstart', e => {
+    if (rosterDraftApplying) {
+      e.preventDefault();
+      return;
+    }
     const chip = e.target.closest('.roster-chip');
     if (!chip) return;
     rosterDragPid = chip.dataset.participantId || '';
@@ -5776,6 +5919,7 @@ function bindAdminRosterBoardEvents() {
     });
   });
   DOM.adminRosterBoard.addEventListener('dragover', e => {
+    if (rosterDraftApplying) return;
     const col = e.target.closest('.roster-column');
     if (!col) return;
     e.preventDefault();
@@ -5789,42 +5933,28 @@ function bindAdminRosterBoardEvents() {
     const col = e.target.closest('.roster-column');
     if (col && !col.contains(e.relatedTarget)) col.classList.remove('is-drop-target');
   });
-  DOM.adminRosterBoard.addEventListener('drop', async e => {
+  DOM.adminRosterBoard.addEventListener('drop', e => {
     const col = e.target.closest('.roster-column');
     if (!col) return;
     e.preventDefault();
     col.classList.remove('is-drop-target');
+    if (rosterDraftApplying) return;
     const pid = rosterDragPid || e.dataTransfer.getData('text/plain');
     const targetGroup = col.dataset.dropGroup;
     if (!pid || !targetGroup) return;
-    const person = state.participants.find(p => p.participant_id === pid);
-    if (!person) return;
-    if (normalizeRosterGroupId(person.group_id) === targetGroup) return;
-
-    const voting = state.votingConfig?.voting_status || '';
-    if (voting === 'VOTING_OPEN' || voting === 'CALCULATED' || voting === 'PUBLISHED') {
-      if (!window.confirm('目前投票狀態為「' + (VOTING_STATUS_LABELS[voting] || voting) + '」。改組／重編號可能影響已投票或結果，確定繼續？')) {
-        return;
-      }
-    }
-
-    try {
-      showToast('正在分配…', 'info');
-      const result = await data.assignParticipantToGroup(pid, targetGroup, state.participants);
-      showToast(
-        result.renamed
-          ? `${pid} 已改為 ${result.participantId}（${formatGroupLabel(targetGroup)}）`
-          : `${result.participantId} 已移至 ${formatGroupLabel(targetGroup)}`,
-        'success'
-      );
-    } catch (err) {
-      showToast(data.describeFirestoreError(err, err.message || '分配失敗'), 'error');
-    }
+    const draftPerson = getRosterDraftParticipants().find(p => p.participant_id === pid);
+    if (!draftPerson) return;
+    if (normalizeRosterGroupId(draftPerson.group_id) === targetGroup) return;
+    queueRosterDraftMove(pid, targetGroup);
   });
 
   DOM.adminRosterBoard.addEventListener('click', e => {
     const chip = e.target.closest('.roster-chip');
     if (!chip) return;
+    if (rosterPendingMoves.size > 0) {
+      showToast('請先確認或取消分組變更，再編輯參加者', 'info');
+      return;
+    }
     openRosterEditModal(chip.dataset.participantId);
   });
 }
@@ -5864,6 +5994,10 @@ function closeRosterEditModal() {
 
 function openRosterAddModal() {
   if (!DOM.rosterAddModal) return;
+  if (rosterPendingMoves.size > 0) {
+    showToast('請先確認或取消分組變更，再新增參加者', 'info');
+    return;
+  }
   if (DOM.rosterAddKind) DOM.rosterAddKind.value = 'seat';
   if (DOM.rosterAddId) DOM.rosterAddId.value = '';
   if (DOM.rosterAddName) DOM.rosterAddName.value = '';
@@ -6520,6 +6654,8 @@ function bindEvents() {
 
   bindAdminRosterBoardEvents();
   if (DOM.adminRosterAdd) DOM.adminRosterAdd.addEventListener('click', openRosterAddModal);
+  if (DOM.adminRosterConfirm) DOM.adminRosterConfirm.addEventListener('click', confirmRosterPendingMoves);
+  if (DOM.adminRosterDiscard) DOM.adminRosterDiscard.addEventListener('click', discardRosterPendingMoves);
   if (DOM.rosterEditCancel) DOM.rosterEditCancel.addEventListener('click', closeRosterEditModal);
   if (DOM.rosterEditSave) DOM.rosterEditSave.addEventListener('click', handleRosterEditSave);
   if (DOM.rosterEditDelete) DOM.rosterEditDelete.addEventListener('click', handleRosterEditDelete);
