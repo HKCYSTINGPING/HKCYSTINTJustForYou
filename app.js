@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v6';
+import * as data from './firebase-data.js?v=20260821v7';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -3936,7 +3936,7 @@ const TROPHY_IDLE_COPY = {
   },
   VOTING_CLOSED: {
     title: '投票已關閉，請等候管理員開啟',
-    body: '投票再次開放後，你可以繼續為隊友配對獎項'
+    body: '投票開放後，你可以為隊友配對獎項'
   },
   CALCULATED: {
     title: '投票計算中',
