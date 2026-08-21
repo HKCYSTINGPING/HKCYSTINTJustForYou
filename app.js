@@ -3935,8 +3935,8 @@ const TROPHY_IDLE_COPY = {
     body: '管理員開放投票後，你可以為隊友配對獎項'
   },
   VOTING_CLOSED: {
-    title: '投票通道尚未開啟',
-    body: '投票已關閉，請等候管理員公布結果'
+    title: '投票已關閉，請等候管理員開啟',
+    body: '投票再次開放後，你可以繼續為隊友配對獎項'
   },
   CALCULATED: {
     title: '投票計算中',
