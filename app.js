@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v12';
+import * as data from './firebase-data.js?v=20260821v13';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -3457,7 +3457,7 @@ function filterValidTrophies(trophies) {
   return (trophies || []).filter(t => /^T\d+$/i.test(String(t.trophy_id || '').trim()));
 }
 
-/** Fixed guide copy for award meanings (names may still be renamed by Admin). */
+/** Fixed defaults for award guide (Admin can override name/description in Firestore). */
 const TROPHY_META = {
   T01: {
     en: 'Pump Up Man',
@@ -3539,6 +3539,31 @@ function getTrophyMeta(trophyId, trophyName = '') {
     colorLabel: '',
     description: ''
   };
+}
+
+/** Prefer Firestore description; fall back to built-in guide copy. */
+function resolveTrophyDescription(trophyOrId, trophyName = '') {
+  if (trophyOrId && typeof trophyOrId === 'object') {
+    const stored = String(trophyOrId.description || '').trim();
+    if (stored) return stored;
+    const meta = getTrophyMeta(trophyOrId.trophy_id, trophyOrId.trophy_name || trophyName);
+    return meta.description || '';
+  }
+  const id = trophyOrId;
+  const pools = [
+    state.adminTrophy?.trophies,
+    state.staffTrophy?.trophies,
+    state.trophy?.trophies
+  ];
+  for (const list of pools) {
+    const hit = (list || []).find(t => t && t.trophy_id === id);
+    if (hit) {
+      const stored = String(hit.description || '').trim();
+      if (stored) return stored;
+      break;
+    }
+  }
+  return getTrophyMeta(id, trophyName).description || '';
 }
 
 function trophyGuideImageSrc(trophyId) {
@@ -4223,7 +4248,7 @@ function getTrophyGuideItems() {
         en: meta.en,
         color: meta.color,
         colorLabel: meta.colorLabel,
-        description: meta.description
+        description: resolveTrophyDescription(t)
       };
     });
   }
@@ -5348,28 +5373,35 @@ function renderTrophySummaryInto(container, items, options = {}) {
       `<div>${idx + 1}. ${escapeHtml(displayLabelOf(r.participant_id))} (${r.vote_count} 票)</div>`
     ).join('');
     const isOpen = openIds.has(item.trophy_id);
-    const fieldId = `${idPrefix}-name-${escapeHtml(item.trophy_id)}`;
+    const nameFieldId = `${idPrefix}-name-${escapeHtml(item.trophy_id)}`;
+    const descFieldId = `${idPrefix}-desc-${escapeHtml(item.trophy_id)}`;
     const meta = getTrophyMeta(item.trophy_id, item.trophy_name);
-    const descHtml = meta.description
-      ? `<p class="summary-trophy-desc">${escapeHtml(meta.description)}</p>
+    const description = resolveTrophyDescription(item, item.trophy_name);
+    const descHtml = (!allowRename && description)
+      ? `<p class="summary-trophy-desc">${escapeHtml(description)}</p>
          <p class="form-hint summary-trophy-meta">${escapeHtml(meta.en)}${meta.colorLabel ? ' · ' + escapeHtml(meta.colorLabel) : ''}</p>`
-      : '';
+      : (!allowRename ? '' : `<p class="form-hint summary-trophy-meta">${escapeHtml(meta.en)}${meta.colorLabel ? ' · ' + escapeHtml(meta.colorLabel) : ''}</p>`);
     const renameHtml = allowRename ? `
         <div class="summary-rename">
-          <label class="summary-rename-label" for="${fieldId}">獎項名稱</label>
-          <div class="summary-rename-row">
-            <input type="text" id="${fieldId}"
-              class="input-field summary-rename-input" maxlength="40"
-              data-trophy-id="${escapeHtml(item.trophy_id)}"
-              value="${escapeHtml(item.trophy_name)}"
-              autocomplete="off">
+          <label class="summary-rename-label" for="${nameFieldId}">獎項名稱</label>
+          <input type="text" id="${nameFieldId}"
+            class="input-field summary-rename-input" maxlength="40"
+            data-trophy-id="${escapeHtml(item.trophy_id)}"
+            value="${escapeHtml(item.trophy_name)}"
+            autocomplete="off">
+          <label class="summary-rename-label" for="${descFieldId}">獎項描述</label>
+          <textarea id="${descFieldId}"
+            class="input-field summary-desc-input" maxlength="160" rows="3"
+            data-trophy-id="${escapeHtml(item.trophy_id)}"
+            placeholder="參加者喺獎項摘要會睇到呢段說明">${escapeHtml(description)}</textarea>
+          <div class="summary-rename-row summary-rename-actions">
             <button type="button" class="btn btn-primary btn-sm btn-progress summary-rename-save"
               data-trophy-id="${escapeHtml(item.trophy_id)}">
               <span class="btn-label">儲存</span>
               <span class="btn-progress-bar" aria-hidden="true"></span>
             </button>
           </div>
-          <p class="form-hint">編號 ${escapeHtml(item.trophy_id)}；改名只可喺 Admin 改，會即時套用到投票畫面同已計算結果。</p>
+          <p class="form-hint">編號 ${escapeHtml(item.trophy_id)}；名稱同描述只可喺 Admin 改，會即時套用到投票畫面、獎項摘要同已計算結果。</p>
         </div>` : '';
 
     return `<div class="summary-item${isOpen ? ' open' : ''}" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
@@ -5404,23 +5436,29 @@ function renderTrophySummary() {
   renderTrophySummaryInto(DOM.summaryList, state.adminTrophy.trophySummary, {
     allowRename: true,
     idPrefix: 'summary',
-    onRename: handleAdminRenameTrophy
+    onRename: handleAdminSaveTrophyMeta
   });
 }
 
-function applyLocalTrophyName(trophyId, trophyName) {
-  const rename = list => {
+function applyLocalTrophyMeta(trophyId, { trophy_name: trophyName, description }) {
+  const patch = list => {
     (list || []).forEach(t => {
-      if (t && t.trophy_id === trophyId) t.trophy_name = trophyName;
+      if (!t || t.trophy_id !== trophyId) return;
+      if (trophyName !== undefined) t.trophy_name = trophyName;
+      if (description !== undefined) t.description = description;
     });
   };
-  rename(state.adminTrophy.trophies);
-  rename(state.staffTrophy.trophies);
-  rename(state.trophy.trophies);
+  patch(state.adminTrophy.trophies);
+  patch(state.staffTrophy.trophies);
+  patch(state.trophy.trophies);
+  patch(state.adminTrophy.trophySummary);
+  patch(state.staffTrophy.trophySummary);
   const patchResults = results => {
     (results || []).forEach(result => {
       (result.awards || []).forEach(award => {
-        if (award && award.trophy_id === trophyId) award.trophy_name = trophyName;
+        if (award && award.trophy_id === trophyId && trophyName !== undefined) {
+          award.trophy_name = trophyName;
+        }
       });
     });
   };
@@ -5428,35 +5466,48 @@ function applyLocalTrophyName(trophyId, trophyName) {
   patchResults(state.staffTrophy.results);
 }
 
-async function handleAdminRenameTrophy(btn) {
+async function handleAdminSaveTrophyMeta(btn) {
   const trophyId = btn?.dataset?.trophyId;
   if (!trophyId) return;
   if (!state.isAdmin) {
-    showToast('獎項名稱由管理員管理', 'info');
+    showToast('獎項內容由管理員管理', 'info');
     return;
   }
-  const input = btn.closest('.summary-item')?.querySelector(
+  const item = btn.closest('.summary-item');
+  const nameInput = item?.querySelector(
     `.summary-rename-input[data-trophy-id="${CSS.escape(trophyId)}"]`
   );
-  const nextName = String(input?.value || '').trim();
+  const descInput = item?.querySelector(
+    `.summary-desc-input[data-trophy-id="${CSS.escape(trophyId)}"]`
+  );
+  const nextName = String(nameInput?.value || '').trim();
+  const nextDesc = String(descInput?.value || '').trim();
   const current = (state.adminTrophy.trophies || state.trophy.trophies || [])
     .find(t => t.trophy_id === trophyId);
+  const currentDesc = resolveTrophyDescription(current || { trophy_id: trophyId, description: '' }, nextName);
   if (!nextName) {
     showToast('獎項名稱不可空白', 'error');
     return;
   }
-  if (current && current.trophy_name === nextName) {
-    showToast('名稱沒有變更', 'info');
+  if (!nextDesc) {
+    showToast('獎項描述不可空白', 'error');
+    return;
+  }
+  if (current && current.trophy_name === nextName && currentDesc === nextDesc) {
+    showToast('沒有變更', 'info');
     return;
   }
 
   await runProgressButton(btn, (async () => {
     try {
-      const saved = await data.updateTrophyName(trophyId, nextName);
-      applyLocalTrophyName(trophyId, saved);
+      const saved = await data.updateTrophyMeta(trophyId, {
+        trophyName: nextName,
+        description: nextDesc
+      });
+      applyLocalTrophyMeta(trophyId, saved);
       refreshAdminTrophyViews();
       refreshStaffTrophyViews();
-      showToast('獎項名稱已更新', 'success');
+      showToast('獎項已更新', 'success');
     } catch (err) {
       showToast(err.message || data.describeFirestoreError(err), 'error');
     }

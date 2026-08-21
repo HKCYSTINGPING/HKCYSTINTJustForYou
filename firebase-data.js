@@ -580,25 +580,35 @@ export async function clearGroupAllOverrides(groupId) {
 export async function fetchTrophies() {
   const snapshot = await getDocs(collection(db, 'trophies'));
   return snapshot.docs
-    .map(d => ({
-      trophy_id: (d.data() || {}).trophy_id || d.id,
-      trophy_name: (d.data() || {}).trophy_name || d.id
-    }))
+    .map(d => {
+      const raw = d.data() || {};
+      return {
+        trophy_id: raw.trophy_id || d.id,
+        trophy_name: raw.trophy_name || d.id,
+        description: typeof raw.description === 'string' ? raw.description : ''
+      };
+    })
     .sort((a, b) => a.trophy_id.localeCompare(b.trophy_id));
 }
 
-/** Rename a trophy and rewrite any stored result snapshots that still show the old label. */
-export async function updateTrophyName(trophyId, trophyName) {
+/** Update trophy name/description and rewrite result snapshots that still show the old label. */
+export async function updateTrophyMeta(trophyId, { trophyName, description } = {}) {
   const id = String(trophyId || '').trim();
   const name = String(trophyName || '').trim();
+  const hasDescription = description !== undefined;
+  const desc = hasDescription ? String(description ?? '').trim() : null;
   if (!id) throw new Error('缺少獎項編號');
   if (!name) throw new Error('獎項名稱不可空白');
   if (name.length > 40) throw new Error('獎項名稱最多 40 字');
+  if (hasDescription && desc.length > 160) throw new Error('獎項描述最多 160 字');
 
-  await updateDoc(doc(db, 'trophies', id), {
+  const payload = {
     trophy_id: id,
     trophy_name: name
-  });
+  };
+  if (hasDescription) payload.description = desc;
+
+  await updateDoc(doc(db, 'trophies', id), payload);
 
   const snapshot = await getDocs(collection(db, 'results'));
   const operations = [];
@@ -615,7 +625,17 @@ export async function updateTrophyName(trophyId, trophyName) {
     operations.push(batch => batch.update(doc(db, 'results', d.id), { awards: next }));
   });
   if (operations.length) await commitAll(operations);
-  return name;
+  return {
+    trophy_id: id,
+    trophy_name: name,
+    ...(hasDescription ? { description: desc } : {})
+  };
+}
+
+/** @deprecated Prefer updateTrophyMeta */
+export async function updateTrophyName(trophyId, trophyName) {
+  const saved = await updateTrophyMeta(trophyId, { trophyName });
+  return saved.trophy_name;
 }
 
 function submissionFromDoc(snapshot) {
@@ -776,6 +796,7 @@ export function computeResults(participants, trophies, submissions) {
     return {
       trophy_id: trophy.trophy_id,
       trophy_name: trophy.trophy_name,
+      description: typeof trophy.description === 'string' ? trophy.description : '',
       winners,
       is_tie: winners.length > 1,
       top_ranking: ranking

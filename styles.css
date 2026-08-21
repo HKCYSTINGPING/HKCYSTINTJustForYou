@@ -2993,19 +2993,36 @@ button.group-voter-header:hover {
 
 .summary-rename-label {
   display: block;
-  margin-bottom: var(--space-xs);
+  margin: var(--space-sm) 0 var(--space-xs);
   font-size: var(--fs-caption);
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.summary-rename-label:first-child { margin-top: 0; }
+
+.summary-rename-input,
+.summary-desc-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.summary-desc-input {
+  resize: vertical;
+  min-height: 4.5rem;
+  line-height: 1.45;
 }
 
 .summary-rename-row {
   display: flex;
   gap: var(--space-sm);
   align-items: center;
+  margin-top: var(--space-sm);
 }
 
-.summary-rename-input { flex: 1; min-width: 0; }
+.summary-rename-actions {
+  justify-content: flex-end;
+}
 
 .summary-rename-row .btn { flex-shrink: 0; }
 
