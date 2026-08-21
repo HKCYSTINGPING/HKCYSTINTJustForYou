@@ -1605,7 +1605,10 @@ textarea.input-field {
 }
 
 .trophy-chip {
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 6px 12px 6px 8px;
   border-radius: var(--radius-pill);
   border: 1.5px solid var(--border);
   background: var(--surface-warm);
@@ -1616,6 +1619,20 @@ textarea.input-field {
   cursor: pointer;
   transition: all var(--duration-fast);
 }
+
+.trophy-icon {
+  display: inline-block;
+  width: 1.35em;
+  height: 1.35em;
+  object-fit: contain;
+  vertical-align: -0.25em;
+  flex-shrink: 0;
+}
+.trophy-icon-xs { width: 1.1em; height: 1.1em; }
+.trophy-icon-sm { width: 1.45em; height: 1.45em; }
+.trophy-icon-md { width: 1.85em; height: 1.85em; }
+.trophy-icon-lg { width: 2.6em; height: 2.6em; }
+.trophy-icon-chip { width: 1.55em; height: 1.55em; }
 
 .trophy-chip.selected {
   background: var(--primary);
@@ -1668,21 +1685,16 @@ textarea.input-field {
 .trophy-result-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.75rem;
+  justify-content: flex-start;
   padding: var(--space-md);
   background: var(--primary-light);
   border-radius: var(--radius-md);
   font-weight: 600;
 }
 
-.trophy-result-name::before {
-  content: "";
-  display: inline-block;
-  width: 1.15em;
-  height: 1.15em;
-  margin-right: 0.35em;
-  vertical-align: -0.18em;
-  background: url("assets/trophy.png") center / contain no-repeat;
+.trophy-result-name {
+  flex: 1;
 }
 
 .trophy-results-empty {
@@ -2782,7 +2794,9 @@ button.group-voter-header:hover {
 }
 
 .vote-matrix-winner-trophy {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .vote-matrix-winner-empty {
@@ -2852,6 +2866,9 @@ button.group-voter-header:hover {
 }
 
 .audit-card-trophy {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: var(--fs-body);
   font-weight: 600;
 }
@@ -3107,8 +3124,9 @@ button.group-voter-header:hover {
 
 .profile-trophy-item {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 0.45rem;
   font-size: var(--fs-caption);
   padding: var(--space-xs) 0;
 }

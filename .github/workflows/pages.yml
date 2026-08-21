@@ -29,10 +29,11 @@ jobs:
 
       - name: Prepare site
         run: |
-          mkdir -p _site/fonts _site/assets
+          mkdir -p _site/fonts _site/assets _site/assets/trophies
           cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json manifest.json sw.js .nojekyll _site/
           cp fonts/CanvaHandwritingStyleTC.woff2 _site/fonts/
           cp assets/*.png _site/assets/
+          cp assets/trophies/*.png _site/assets/trophies/ 2>/dev/null || true
           # Bust browser / CDN caches on every Pages deploy (incl. font).
           SHA="$(git rev-parse --short HEAD)"
           python3 - "$SHA" <<'PY'
@@ -64,9 +65,10 @@ jobs:
           grep -q "app.js?v=${SHA}" _site/index.html
           # A missing module would only surface as a blank page in someone's
           # browser, so fail the deploy here instead.
-          for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json manifest.json sw.js fonts/CanvaHandwritingStyleTC.woff2 assets/trophy.png assets/heart.png; do
+          for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json manifest.json sw.js fonts/CanvaHandwritingStyleTC.woff2 assets/trophy.png assets/heart.png assets/trophies/t01.png; do
             test -s "_site/$f" || { echo "缺少 $f"; exit 1; }
           done
+          test "$(ls _site/assets/trophies/t0*.png 2>/dev/null | wc -l | tr -d ' ')" -ge 8 || { echo "獎項貼圖不足 8 張"; exit 1; }
           test "$(ls _site/assets/*.png | wc -l | tr -d ' ')" -ge 20 || { echo "assets 圖示數量不足"; exit 1; }
 
       - name: Upload artifact

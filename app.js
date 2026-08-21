@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v11';
+import * as data from './firebase-data.js?v=20260821v12';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -3546,12 +3546,19 @@ function trophyGuideImageSrc(trophyId) {
   return `assets/trophies/${id}.png`;
 }
 
+function trophyIconHtml(trophyId, trophyName = '', className = 'trophy-icon') {
+  const src = trophyGuideImageSrc(trophyId);
+  const alt = String(trophyName || trophyId || '').trim() || '獎項';
+  return `<img class="${escapeHtml(className)}" src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy" onerror="this.onerror=null;this.src='assets/trophy.png'">`;
+}
+
 function buildAwardsHtml(awards) {
   if (!awards || awards.length === 0) {
     return '<p class="trophy-results-empty">暫未獲得獎項，請稍後再查看</p>';
   }
   return awards.map(a => `
     <div class="trophy-result-item">
+      ${trophyIconHtml(a.trophy_id, a.trophy_name, 'trophy-icon trophy-icon-lg')}
       <div class="trophy-result-name">${escapeHtml(a.trophy_name)}</div>
     </div>
   `).join('');
@@ -4443,7 +4450,10 @@ function renderTrophyTeammates() {
       return `<button type="button" class="${classes}"
         data-teammate="${escapeHtml(tid)}" data-trophy="${escapeHtml(trophy.trophy_id)}"
         title="${title}"
-        ${disabled ? 'disabled' : ''}>${escapeHtml(trophy.trophy_name)}</button>`;
+        ${disabled ? 'disabled' : ''}>
+        ${trophyIconHtml(trophy.trophy_id, trophy.trophy_name, 'trophy-icon trophy-icon-chip')}
+        <span>${escapeHtml(trophy.trophy_name)}</span>
+      </button>`;
     }).join('');
 
     const label = displayLabelOf(teammate);
@@ -5025,7 +5035,7 @@ function buildGroupWinnersHtml(group) {
     const trophiesHtml = awards.length
       ? awards.map(a => {
           const votes = a.vote_count || 0;
-          return `<span class="vote-matrix-winner-trophy">${escapeHtml(a.trophy_name)}（${votes}票）</span>`;
+          return `<span class="vote-matrix-winner-trophy">${trophyIconHtml(a.trophy_id, a.trophy_name, 'trophy-icon trophy-icon-xs')}${escapeHtml(a.trophy_name)}（${votes}票）</span>`;
         }).join('')
       : '<span class="vote-matrix-winner-empty">暫未勝出</span>';
     return `
@@ -5287,7 +5297,7 @@ function renderAuditTable() {
       : filtered.map(v => `
         <div class="audit-card">
           <div class="audit-card-route">${escapeHtml(v.sender_id)} → ${escapeHtml(v.receiver_id)}</div>
-          <div class="audit-card-trophy">${appIcon('trophy')}${escapeHtml(v.trophy_name)}</div>
+          <div class="audit-card-trophy">${trophyIconHtml(v.trophy_id, v.trophy_name, 'trophy-icon trophy-icon-sm')}${escapeHtml(v.trophy_name)}</div>
           ${v.submitted_at ? `<div class="audit-card-time">${formatDateTime(v.submitted_at)}</div>` : ''}
         </div>
       `).join('');
@@ -5298,6 +5308,7 @@ function renderProfiles() {
   DOM.profilesList.innerHTML = state.adminTrophy.profiles.map(profile => {
     const trophies = (profile.trophies || []).map(t => {
       return `<li class="profile-trophy-item">
+        ${trophyIconHtml(t.trophy_id, t.trophy_name, 'trophy-icon trophy-icon-sm')}
         <span>${escapeHtml(t.trophy_name)} (${t.vote_count} 票)</span>
       </li>`;
     }).join('');
@@ -5363,7 +5374,7 @@ function renderTrophySummaryInto(container, items, options = {}) {
 
     return `<div class="summary-item${isOpen ? ' open' : ''}" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
       <button type="button" class="summary-item-header">
-        <span class="summary-item-swatch" style="background:${escapeHtml(meta.color)}" aria-hidden="true"></span>
+        ${trophyIconHtml(item.trophy_id, item.trophy_name, 'trophy-icon trophy-icon-md')}
         <span>${escapeHtml(item.trophy_name)}</span>
       </button>
       <div class="summary-item-body">
@@ -5791,7 +5802,7 @@ function renderStaffResults() {
       : audit.map(v => `
         <div class="audit-card">
           <div class="audit-card-route">${escapeHtml(displayLabelOf(v.sender_id))} → ${escapeHtml(displayLabelOf(v.receiver_id))}</div>
-          <div class="audit-card-trophy">${appIcon('trophy')}${escapeHtml(v.trophy_name)}</div>
+          <div class="audit-card-trophy">${trophyIconHtml(v.trophy_id, v.trophy_name, 'trophy-icon trophy-icon-sm')}${escapeHtml(v.trophy_name)}</div>
           ${v.submitted_at ? `<div class="audit-card-time">${formatDateTime(v.submitted_at)}</div>` : ''}
         </div>
       `).join('');
@@ -5803,6 +5814,7 @@ function renderStaffResults() {
       : profiles.map(profile => {
         const trophies = (profile.trophies || []).map(t => `
           <li class="profile-trophy-item">
+            ${trophyIconHtml(t.trophy_id, t.trophy_name, 'trophy-icon trophy-icon-sm')}
             <span>${escapeHtml(t.trophy_name)} (${t.vote_count} 票)</span>
           </li>
         `).join('');
