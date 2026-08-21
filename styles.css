@@ -1607,8 +1607,7 @@ textarea.input-field {
 .trophy-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 6px 12px 6px 8px;
+  padding: 8px 14px;
   border-radius: var(--radius-pill);
   border: 1.5px solid var(--border);
   background: var(--surface-warm);
@@ -1630,9 +1629,8 @@ textarea.input-field {
 }
 .trophy-icon-xs { width: 1.1em; height: 1.1em; }
 .trophy-icon-sm { width: 1.45em; height: 1.45em; }
-.trophy-icon-md { width: 1.85em; height: 1.85em; }
+.trophy-icon-md { width: 2.1em; height: 2.1em; }
 .trophy-icon-lg { width: 2.6em; height: 2.6em; }
-.trophy-icon-chip { width: 1.55em; height: 1.55em; }
 
 .trophy-chip.selected {
   background: var(--primary);
@@ -2931,17 +2929,30 @@ button.group-voter-header:hover {
   overflow: hidden;
 }
 
+.summary-item-top {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-left: var(--space-md);
+}
+
+.summary-item-top .trophy-icon {
+  pointer-events: none;
+}
+
 .summary-item-header {
   display: flex;
   justify-content: flex-start;
   align-items: center;
   gap: 0.55rem;
   padding: var(--space-md);
+  padding-left: 0;
   cursor: pointer;
   font-weight: 700;
   background: none;
   border: none;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   font-family: var(--font);
   font-size: var(--fs-body);
   color: var(--text);

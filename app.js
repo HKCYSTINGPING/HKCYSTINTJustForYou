@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v13';
+import * as data from './firebase-data.js?v=20260821v14';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -4475,10 +4475,7 @@ function renderTrophyTeammates() {
       return `<button type="button" class="${classes}"
         data-teammate="${escapeHtml(tid)}" data-trophy="${escapeHtml(trophy.trophy_id)}"
         title="${title}"
-        ${disabled ? 'disabled' : ''}>
-        ${trophyIconHtml(trophy.trophy_id, trophy.trophy_name, 'trophy-icon trophy-icon-chip')}
-        <span>${escapeHtml(trophy.trophy_name)}</span>
-      </button>`;
+        ${disabled ? 'disabled' : ''}>${escapeHtml(trophy.trophy_name)}</button>`;
     }).join('');
 
     const label = displayLabelOf(teammate);
@@ -5405,10 +5402,12 @@ function renderTrophySummaryInto(container, items, options = {}) {
         </div>` : '';
 
     return `<div class="summary-item${isOpen ? ' open' : ''}" data-idx="${i}" data-trophy-id="${escapeHtml(item.trophy_id)}">
-      <button type="button" class="summary-item-header">
+      <div class="summary-item-top">
         ${trophyIconHtml(item.trophy_id, item.trophy_name, 'trophy-icon trophy-icon-md')}
-        <span>${escapeHtml(item.trophy_name)}</span>
-      </button>
+        <button type="button" class="summary-item-header">
+          <span>${escapeHtml(item.trophy_name)}</span>
+        </button>
+      </div>
       <div class="summary-item-body">
         ${descHtml}
         ${renameHtml}
