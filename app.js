@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v16';
+import * as data from './firebase-data.js?v=20260821v17';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -4292,7 +4292,6 @@ function renderTrophyDeckCard() {
         <img src="${escapeHtml(img)}" alt="${escapeHtml(item.trophy_name)}" onerror="this.src='assets/trophy.png'">
       </div>
       <div class="trophy-deck-copy">
-        <p class="trophy-deck-color">${escapeHtml(item.colorLabel || '')}</p>
         <h3 class="trophy-deck-name">${escapeHtml(item.trophy_name)}</h3>
         ${item.en ? `<p class="trophy-deck-en">${escapeHtml(item.en)}</p>` : ''}
         <p class="trophy-deck-desc">${escapeHtml(item.description || '')}</p>
@@ -4534,14 +4533,8 @@ async function renderPokerCardCanvas(item) {
 
   // Copy block
   let y = artBottom + Math.round(h * 0.02);
-  ctx.fillStyle = mixHex(accent, 0.25);
-  ctx.font = `700 ${Math.round(w * 0.042)}px ${fontFamily}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  if (item.colorLabel) {
-    ctx.fillText(String(item.colorLabel), pad, y);
-    y += Math.round(h * 0.035);
-  }
 
   ctx.fillStyle = '#2A2118';
   ctx.font = `700 ${Math.round(w * 0.095)}px ${fontFamily}`;
@@ -5630,8 +5623,8 @@ function renderTrophySummaryInto(container, items, options = {}) {
     const description = resolveTrophyDescription(item, item.trophy_name);
     const descHtml = (!allowRename && description)
       ? `<p class="summary-trophy-desc">${escapeHtml(description)}</p>
-         <p class="form-hint summary-trophy-meta">${escapeHtml(meta.en)}${meta.colorLabel ? ' · ' + escapeHtml(meta.colorLabel) : ''}</p>`
-      : (!allowRename ? '' : `<p class="form-hint summary-trophy-meta">${escapeHtml(meta.en)}${meta.colorLabel ? ' · ' + escapeHtml(meta.colorLabel) : ''}</p>`);
+         ${meta.en ? `<p class="form-hint summary-trophy-meta">${escapeHtml(meta.en)}</p>` : ''}`
+      : (!allowRename ? '' : (meta.en ? `<p class="form-hint summary-trophy-meta">${escapeHtml(meta.en)}</p>` : ''));
     const renameHtml = allowRename ? `
         <div class="summary-rename">
           <label class="summary-rename-label" for="${nameFieldId}">獎項名稱</label>

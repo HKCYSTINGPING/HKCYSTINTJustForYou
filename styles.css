@@ -1487,13 +1487,6 @@ textarea.input-field {
 .trophy-deck-copy {
   padding: 1rem 1.1rem 0.85rem;
 }
-.trophy-deck-color {
-  margin: 0 0 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--trophy-accent) 70%, #333);
-}
 .trophy-deck-name {
   margin: 0;
   font-size: 1.35rem;
