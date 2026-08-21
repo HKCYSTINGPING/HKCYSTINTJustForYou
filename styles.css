@@ -1384,7 +1384,6 @@ textarea.input-field {
 #view-trophy:has(#trophy-not-open:not(.hidden)) {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   min-height: min(70vh, 520px);
 }
 
