@@ -3269,6 +3269,32 @@ button.group-voter-header:hover {
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   font-size: 0.85rem;
 }
+.roster-column-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+}
+.roster-column-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roster-column-rename {
+  flex-shrink: 0;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  opacity: 0.75;
+}
+.roster-column-rename:hover { opacity: 1; }
+.admin-group-override-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
 .roster-column-count {
   font-size: 0.75rem;
   opacity: 0.65;

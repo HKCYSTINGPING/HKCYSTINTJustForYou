@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v1';
+import * as data from './firebase-data.js?v=20260821v2';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -729,6 +729,11 @@ function cacheDOM() {
   DOM.adminRosterConfirm = document.getElementById('admin-roster-confirm');
   DOM.adminRosterDiscard = document.getElementById('admin-roster-discard');
   DOM.adminRosterPendingHint = document.getElementById('admin-roster-pending-hint');
+  DOM.groupRenameModal = document.getElementById('group-rename-modal');
+  DOM.groupRenameSubtitle = document.getElementById('group-rename-subtitle');
+  DOM.groupRenameInput = document.getElementById('group-rename-input');
+  DOM.groupRenameCancel = document.getElementById('group-rename-cancel');
+  DOM.groupRenameSave = document.getElementById('group-rename-save');
   DOM.rosterEditModal = document.getElementById('roster-edit-modal');
   DOM.rosterEditTitle = document.getElementById('roster-edit-title');
   DOM.rosterEditSubtitle = document.getElementById('roster-edit-subtitle');
@@ -1326,6 +1331,77 @@ function formatGroupLabel(label) {
   if (m) return 'Group ' + m[1];
   if (/STAFF/i.test(label)) return 'Staff';
   return label || '未分配';
+}
+
+function canRenameGroup(groupId) {
+  const g = normalizeRosterGroupId(groupId);
+  if (!g || data.isUnassignedGroup(g) || g === data.GROUP_UNASSIGNED) return false;
+  return data.isNumberedGroupId(g) || g === data.GROUP_STAFF || /STAFF/i.test(g);
+}
+
+function defaultGroupLabel(groupId) {
+  const g = String(groupId || '').trim();
+  if (data.isUnassignedGroup(g) || g === data.GROUP_UNASSIGNED) return '未分配';
+  const m = g.match(/^GROUP_(\d+)$/i);
+  if (m) return 'Group ' + m[1];
+  if (/STAFF/i.test(g)) return 'Staff';
+  return g || '未分配';
+}
+
+function openGroupRenameModal(groupId) {
+  const g = normalizeRosterGroupId(groupId);
+  if (!canRenameGroup(g) || !DOM.groupRenameModal) return;
+  DOM.groupRenameModal.dataset.groupId = g;
+  if (DOM.groupRenameSubtitle) {
+    DOM.groupRenameSubtitle.textContent = `${g} · 預設顯示「${defaultGroupLabel(g)}」`;
+  }
+  if (DOM.groupRenameInput) {
+    const meta = state.groupMeta[g] || {};
+    DOM.groupRenameInput.value = meta.display_name || '';
+  }
+  DOM.groupRenameModal.classList.remove('hidden');
+  setTimeout(() => DOM.groupRenameInput?.focus(), 0);
+}
+
+function closeGroupRenameModal() {
+  if (DOM.groupRenameModal) {
+    DOM.groupRenameModal.classList.add('hidden');
+    delete DOM.groupRenameModal.dataset.groupId;
+  }
+}
+
+async function handleGroupRenameSave() {
+  const groupId = DOM.groupRenameModal?.dataset.groupId;
+  if (!groupId || !canRenameGroup(groupId)) return;
+  const name = String(DOM.groupRenameInput?.value || '').trim();
+  if (name.length > 40) {
+    showToast('組名最多 40 字', 'error');
+    return;
+  }
+  await runProgressButton(DOM.groupRenameSave, (async () => {
+    try {
+      await data.setGroupDisplayName(groupId, name);
+      if (!state.groupMeta[groupId]) {
+        state.groupMeta[groupId] = {
+          group_id: groupId,
+          display_name: name,
+          messaging_status: 'OPEN',
+          voting_status: '',
+          allow_resubmit: false
+        };
+      } else {
+        state.groupMeta[groupId] = { ...state.groupMeta[groupId], display_name: name };
+      }
+      closeGroupRenameModal();
+      renderAdminRosterBoard();
+      renderAdminGroupOverrides();
+      populateAdminMsgGroupFilter();
+      refreshComboboxItems();
+      showToast(name ? `「${name}」組名已更新` : '已還原預設組名', 'success');
+    } catch (err) {
+      showToast(data.describeFirestoreError(err, err.message || '儲存組名失敗'), 'error');
+    }
+  })());
 }
 
 function getFacilitatorGroupMembers(groupId = getFacilitatorGroupId()) {
@@ -5595,7 +5671,10 @@ function renderAdminGroupOverrides() {
             <strong>${escapeHtml(formatGroupLabel(groupId))}</strong>
             <span class="form-hint">${escapeHtml(groupId)}</span>
           </div>
-          <span class="chip ${hasOverride ? 'chip-warning' : 'chip-secondary'}">${hasOverride ? '組別覆寫中' : '跟隨全域'}</span>
+          <div class="admin-group-override-head-actions">
+            <button type="button" class="btn btn-ghost btn-sm admin-rename-group" data-group="${escapeHtml(groupId)}">改名</button>
+            <span class="chip ${hasOverride ? 'chip-warning' : 'chip-secondary'}">${hasOverride ? '組別覆寫中' : '跟隨全域'}</span>
+          </div>
         </div>
         <div class="admin-group-override-meta">
           <span>留言：${msgOpen ? '開啟' : '關閉'}${hasMsgOverride ? '（組別覆寫）' : '（跟隨全域）'}</span>
@@ -5808,7 +5887,10 @@ function renderAdminRosterBoard() {
     }).join('');
     return `<section class="roster-column" data-drop-group="${escapeHtml(groupId)}">
       <header class="roster-column-header">
-        <strong>${escapeHtml(formatGroupLabel(groupId))}</strong>
+        <div class="roster-column-title-wrap">
+          <strong class="roster-column-title">${escapeHtml(formatGroupLabel(groupId))}</strong>
+          ${canRenameGroup(groupId) ? `<button type="button" class="btn btn-ghost btn-sm roster-column-rename" data-group-id="${escapeHtml(groupId)}" title="改組名" aria-label="改組名 ${escapeHtml(formatGroupLabel(groupId))}">改名</button>` : ''}
+        </div>
         <span class="roster-column-count">${members.length}</span>
       </header>
       <div class="roster-column-body">${cards || '<p class="roster-empty">尚未有人</p>'}</div>
@@ -5949,6 +6031,13 @@ function bindAdminRosterBoardEvents() {
   });
 
   DOM.adminRosterBoard.addEventListener('click', e => {
+    const renameBtn = e.target.closest('.roster-column-rename');
+    if (renameBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      openGroupRenameModal(renameBtn.dataset.groupId);
+      return;
+    }
     const chip = e.target.closest('.roster-chip');
     if (!chip) return;
     if (rosterPendingMoves.size > 0) {
@@ -6672,12 +6761,33 @@ function bindEvents() {
       if (e.target === DOM.rosterAddModal) closeRosterAddModal();
     });
   }
+  if (DOM.groupRenameCancel) DOM.groupRenameCancel.addEventListener('click', closeGroupRenameModal);
+  if (DOM.groupRenameSave) DOM.groupRenameSave.addEventListener('click', handleGroupRenameSave);
+  if (DOM.groupRenameModal) {
+    DOM.groupRenameModal.addEventListener('click', e => {
+      if (e.target === DOM.groupRenameModal) closeGroupRenameModal();
+    });
+  }
+  if (DOM.groupRenameInput) {
+    DOM.groupRenameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleGroupRenameSave();
+      }
+    });
+  }
 
   DOM.auditSearch.addEventListener('input', renderAuditTable);
   DOM.auditTrophyFilter.addEventListener('change', renderAuditTable);
 
   if (DOM.adminGroupOverrides) {
     DOM.adminGroupOverrides.addEventListener('click', async (e) => {
+      const renameBtn = e.target.closest('.admin-rename-group');
+      if (renameBtn) {
+        openGroupRenameModal(renameBtn.dataset.group);
+        return;
+      }
+
       const clearBtn = e.target.closest('.admin-clear-group-override');
       if (clearBtn) {
         const groupId = clearBtn.dataset.group;

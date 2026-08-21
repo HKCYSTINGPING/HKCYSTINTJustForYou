@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260821v1">
+  <link rel="stylesheet" href="styles.css?v=20260821v2">
 </head>
 <body>
 
@@ -620,6 +620,24 @@
     </div>
   </div>
 
+  <div id="group-rename-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="group-rename-title">
+    <div class="modal-card glass-card roster-edit-modal-card">
+      <h2 id="group-rename-title">改組名</h2>
+      <p id="group-rename-subtitle" class="form-hint"></p>
+      <div class="form-group">
+        <label for="group-rename-input">顯示名稱</label>
+        <input type="text" id="group-rename-input" class="input-field" maxlength="40" autocomplete="off" placeholder="例如：火熱第一組（留空還原預設）">
+      </div>
+      <div class="onboarding-actions roster-edit-actions">
+        <button type="button" id="group-rename-cancel" class="btn btn-secondary btn-sm">取消</button>
+        <button type="button" id="group-rename-save" class="btn btn-primary btn-sm btn-progress">
+          <span class="btn-label">儲存</span>
+          <span class="btn-progress-bar" aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="roster-edit-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="roster-edit-title">
     <div class="modal-card glass-card roster-edit-modal-card">
       <h2 id="roster-edit-title">編輯參加者</h2>
@@ -747,7 +765,7 @@
           <div class="admin-roster-header">
             <div>
               <h3 class="section-title">分組管理</h3>
-              <p class="form-hint">拖曳參加者／Staff 到各組後，撳「確認變更」先會寫入。座位組確認後會自動重編號（例如 3E → Group 1 變成下一席 1x）。未分配組唔參與留言／投票。</p>
+              <p class="form-hint">拖曳參加者／Staff 到各組後，撳「確認變更」先會寫入。撳組名旁「改名」可自訂顯示名稱。座位組確認後會自動重編號。未分配組唔參與留言／投票。</p>
               <p id="admin-roster-pending-hint" class="form-hint roster-pending-hint hidden" role="status">有未儲存嘅分組變更</p>
             </div>
             <div class="admin-roster-actions">
@@ -902,7 +920,7 @@
 
         <div class="card" data-tour="admin-group-overrides">
           <h3 class="section-title">各組狀態（Staff 覆寫）</h3>
-          <p class="form-hint">將 Staff（如 WILL）分到 GROUP_1…6 後，對方可改組名、監控組內留言，並獨立控制該組留言／投票。</p>
+          <p class="form-hint">可改組名、查看 Staff 覆寫狀態，並獨立控制該組留言／投票。將 Staff（如 WILL）分到 GROUP_1…6 後，對方亦可改組名同監控組內留言。</p>
           <div id="admin-group-overrides" class="admin-group-overrides"></div>
         </div>
 
@@ -988,6 +1006,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260821v1"></script>
+  <script type="module" src="app.js?v=20260821v2"></script>
 </body>
 </html>
