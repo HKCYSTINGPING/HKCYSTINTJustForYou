@@ -2909,6 +2909,7 @@ async function handleLogout() {
   hideTrophyResultsModal();
   closeForceLogoutModal();
   closeForceLogoutAllModal();
+  closeConfirmModal(false);
   hideOnboarding();
   state.trophy = {
     loaded: false,
@@ -6835,6 +6836,12 @@ function bindEvents() {
       if (e.target === DOM.confirmModal) closeConfirmModal(false);
     });
   }
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (DOM.confirmModal && !DOM.confirmModal.classList.contains('hidden')) {
+      closeConfirmModal(false);
+    }
+  });
 
   if (DOM.trophySubmittedHome) {
     DOM.trophySubmittedHome.addEventListener('click', () => switchParticipantView('home'));
