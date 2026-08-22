@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v6';
+import * as data from './firebase-data.js?v=20260822v7';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -677,6 +677,7 @@ let deferredA2HSPrompt = null;
 let serviceWorkerRegistration = null;
 let pushForegroundUnsub = null;
 let knownInboxIds = new Set();
+let inboxHydrated = false;
 let pushEnabledLocally = false;
 let a2hsQueued = false;
 
@@ -811,6 +812,7 @@ function cacheDOM() {
   DOM.profilePushStatus = document.getElementById('profile-push-status');
   DOM.profilePushEnable = document.getElementById('profile-push-enable');
   DOM.profilePushDisable = document.getElementById('profile-push-disable');
+  DOM.profilePushTest = document.getElementById('profile-push-test');
   DOM.profileStats = document.getElementById('profile-stats');
   DOM.homeStaffCard = document.getElementById('home-staff-card');
   DOM.staffFacilitatorPanel = document.getElementById('staff-facilitator-panel');
@@ -1378,7 +1380,8 @@ function maybeNotifyVotingStatusChange() {
     showLocalPushNotification(
       '獎項結果出咗喇',
       '入獎項頁睇你嘅結果。',
-      'tnit-trophy-local'
+      'tnit-trophy-local',
+      { toast: false }
     );
   }
 }
@@ -2432,16 +2435,18 @@ async function startParticipantSubscriptions() {
       (cb, err) => data.subscribeInbox(pid, cb, err),
       messages => {
         const ids = new Set((messages || []).map(m => m.message_id));
-        if (knownInboxIds.size) {
+        if (inboxHydrated) {
           const fresh = (messages || []).filter(m => m.message_id && !knownInboxIds.has(m.message_id));
           if (fresh.length) {
             showLocalPushNotification(
               '你有新嘅匿名留言',
               '入 Inbox 睇下對方寫咗咩。',
-              'tnit-message-local'
+              'tnit-message-local',
+              { toast: true }
             );
           }
         }
+        inboxHydrated = true;
         knownInboxIds = ids;
         state.inboxMessages = messages;
         renderInbox();
@@ -3016,6 +3021,7 @@ async function handleLogout() {
   state.inboxMessages = [];
   state.sentMessages = [];
   knownInboxIds = new Set();
+  inboxHydrated = false;
   pushEnabledLocally = false;
   if (pushForegroundUnsub) {
     try { pushForegroundUnsub(); } catch (_) { /* ignore */ }
@@ -4210,24 +4216,49 @@ function renderPushStatus() {
   if (DOM.profilePushDisable) DOM.profilePushDisable.disabled = !canUse;
 }
 
-function showLocalPushNotification(title, body, tag = 'tnit-local') {
+function showLocalPushNotification(title, body, tag = 'tnit-local', { toast = true } = {}) {
   if (hasPushOptOut()) return;
+  if (toast) showToast(body ? `${title}：${body}` : title, String(tag).includes('trophy') ? 'PUBLISHED' : 'info');
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  if (document.visibilityState === 'visible') return;
-  try {
-    const n = new Notification(title, {
-      body,
-      icon: 'assets/heart.png',
-      tag,
-      renotify: true
-    });
-    n.onclick = () => {
-      window.focus();
-      if (String(tag).includes('message')) switchParticipantView('inbox');
-      else if (String(tag).includes('trophy')) switchParticipantView('trophy');
-      n.close();
-    };
-  } catch (_) { /* ignore */ }
+
+  const url = String(tag).includes('trophy') ? './#trophy' : './#inbox';
+  const options = {
+    body,
+    icon: './assets/heart.png',
+    badge: './assets/heart.png',
+    tag,
+    renotify: true,
+    data: { url, tag }
+  };
+
+  const viaSw = (reg) => {
+    if (reg && typeof reg.showNotification === 'function') {
+      return reg.showNotification(title, options);
+    }
+    throw new Error('no-sw');
+  };
+
+  const fallback = () => {
+    try {
+      const n = new Notification(title, options);
+      n.onclick = () => {
+        window.focus();
+        if (String(tag).includes('message')) switchParticipantView('inbox');
+        else if (String(tag).includes('trophy')) switchParticipantView('trophy');
+        n.close();
+      };
+    } catch (_) { /* ignore */ }
+  };
+
+  if (serviceWorkerRegistration) {
+    Promise.resolve(viaSw(serviceWorkerRegistration)).catch(fallback);
+    return;
+  }
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.ready.then(viaSw).catch(fallback);
+    return;
+  }
+  fallback();
 }
 
 function pushOptOutKey() {
@@ -4347,6 +4378,22 @@ async function handleDisablePush() {
       renderPushStatus();
     }
   })());
+}
+
+async function handleTestPush() {
+  if (data.getNotificationPermission() !== 'granted') {
+    await requestEnablePush({ toast: true });
+  }
+  if (data.getNotificationPermission() !== 'granted') return;
+  setPushOptOut(false);
+  pushEnabledLocally = true;
+  renderPushStatus();
+  showLocalPushNotification(
+    '測試通知',
+    '如果你見到呢條，通知已經得。',
+    'tnit-test-local',
+    { toast: true }
+  );
 }
 
 async function loadAdminPushConfig() {
@@ -7564,6 +7611,9 @@ function bindEvents() {
   }
   if (DOM.profilePushDisable) {
     DOM.profilePushDisable.addEventListener('click', handleDisablePush);
+  }
+  if (DOM.profilePushTest) {
+    DOM.profilePushTest.addEventListener('click', handleTestPush);
   }
   document.querySelectorAll('.staff-result-tab').forEach(btn => {
     btn.addEventListener('click', () => switchStaffResultTab(btn.dataset.staffResultTab));

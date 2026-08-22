@@ -34,6 +34,21 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, options);
 });
 
+self.addEventListener('message', (event) => {
+  const msg = event.data || {};
+  if (msg.type !== 'tnit-notify') return;
+  const title = msg.title || 'TNIT';
+  const options = {
+    body: msg.body || '',
+    icon: './assets/heart.png',
+    badge: './assets/heart.png',
+    tag: msg.tag || 'tnit-local',
+    renotify: true,
+    data: { url: msg.url || './', tag: msg.tag || 'tnit-local' }
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const rawUrl = (event.notification.data && event.notification.data.url) || './';
