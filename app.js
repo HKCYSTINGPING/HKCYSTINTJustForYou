@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v10';
+import * as data from './firebase-data.js?v=20260822v11';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -4653,8 +4653,11 @@ function updateTrophyStatusBanner() {
   }
 
   if (DOM.trophyGuideBar) {
-    // Hidden only while voting is closed; other states can browse award meanings.
-    DOM.trophyGuideBar.classList.toggle('hidden', status === 'VOTING_CLOSED');
+    const showGuide = status === 'VOTING_OPEN';
+    DOM.trophyGuideBar.classList.toggle('hidden', !showGuide);
+    if (!showGuide && DOM.trophyGuideModal && !DOM.trophyGuideModal.classList.contains('hidden')) {
+      closeTrophyGuideModal();
+    }
   }
 }
 
