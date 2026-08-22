@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260821v18">
+  <link rel="stylesheet" href="styles.css?v=20260822v1">
 </head>
 <body>
 
@@ -273,7 +273,7 @@
       <div id="view-trophy" class="app-view hidden" data-view="trophy">
         <div id="trophy-status-banner" class="status-banner hidden" role="status" data-tour="trophy-banner"></div>
 
-        <div id="trophy-guide-bar" class="trophy-guide-bar hidden">
+        <div id="trophy-guide-bar" class="trophy-guide-bar hidden" data-tour="trophy-guide">
           <button type="button" id="trophy-guide-open" class="btn btn-secondary btn-sm">
             獎項摘要
           </button>
@@ -358,7 +358,7 @@
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
         </div>
-        <div class="card profile-password-card">
+        <div class="card profile-password-card" data-tour="profile-password">
           <h3 class="section-title">修改密碼</h3>
           <p class="form-hint">修改後下次登入請使用新密碼。</p>
           <div class="form-group">
@@ -463,7 +463,7 @@
           <div id="staff-section-voting" class="staff-section hidden" data-staff-section="voting">
             <div id="staff-voting-badge" class="voting-status-badge" data-tour="staff-voting-controls">—</div>
             <p id="staff-voting-source" class="form-hint staff-voting-source">—</p>
-            <div id="staff-voting-stepper" class="voting-stepper">
+            <div id="staff-voting-stepper" class="voting-stepper" data-tour="staff-voting-stepper">
               <div class="stepper-step" data-step="VOTING_OPEN"><span class="stepper-dot"></span><span class="stepper-label">開放投票</span></div>
               <div class="stepper-line"></div>
               <div class="stepper-step" data-step="VOTING_CLOSED"><span class="stepper-dot"></span><span class="stepper-label">關閉投票</span></div>
@@ -472,8 +472,8 @@
               <div class="stepper-line"></div>
               <div class="stepper-step" data-step="PUBLISHED"><span class="stepper-dot"></span><span class="stepper-label">公布</span></div>
             </div>
-            <div id="staff-trophy-stats" class="stats-grid"></div>
-            <div class="admin-trophy-controls">
+            <div id="staff-trophy-stats" class="stats-grid" data-tour="staff-voting-stats"></div>
+            <div class="admin-trophy-controls" data-tour="staff-voting-actions">
               <button type="button" id="staff-open-voting" class="btn btn-success btn-progress">
                 <span class="btn-label">開放投票</span>
                 <span class="btn-progress-bar" aria-hidden="true"></span>
@@ -491,25 +491,25 @@
                 <span class="btn-progress-bar" aria-hidden="true"></span>
               </button>
             </div>
-            <button type="button" id="staff-follow-global-voting" class="btn btn-ghost btn-sm staff-follow-global-voting hidden">
+            <button type="button" id="staff-follow-global-voting" class="btn btn-ghost btn-sm staff-follow-global-voting hidden" data-tour="staff-follow-global">
               恢復跟隨全域投票
             </button>
-            <div id="staff-pending-voters" class="admin-pending"></div>
+            <div id="staff-pending-voters" class="admin-pending" data-tour="staff-pending-voters"></div>
           </div>
 
           <div id="staff-section-results" class="staff-section hidden" data-staff-section="results" data-tour="staff-results">
-            <nav class="sub-tab-nav" role="tablist" aria-label="本組結果檢視">
+            <nav class="sub-tab-nav" role="tablist" aria-label="本組結果檢視" data-tour="staff-result-tabs">
               <button type="button" class="sub-tab-btn staff-result-tab active" data-staff-result-tab="audit">投票審計</button>
               <button type="button" class="sub-tab-btn staff-result-tab" data-staff-result-tab="profiles">個人檔案</button>
               <button type="button" class="sub-tab-btn staff-result-tab" data-staff-result-tab="summary">獎項摘要</button>
             </nav>
-            <div id="staff-result-audit" class="result-panel active">
+            <div id="staff-result-audit" class="result-panel active" data-tour="staff-audit-cards">
               <div id="staff-audit-cards" class="audit-cards"></div>
             </div>
-            <div id="staff-result-profiles" class="result-panel hidden">
+            <div id="staff-result-profiles" class="result-panel hidden" data-tour="staff-profiles">
               <div id="staff-profiles-list" class="profiles-grid"></div>
             </div>
-            <div id="staff-result-summary" class="result-panel hidden">
+            <div id="staff-result-summary" class="result-panel hidden" data-tour="staff-summary">
               <div id="staff-summary-list" class="summary-list accordion"></div>
             </div>
           </div>
@@ -1048,6 +1048,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260821v18"></script>
+  <script type="module" src="app.js?v=20260822v1"></script>
 </body>
 </html>

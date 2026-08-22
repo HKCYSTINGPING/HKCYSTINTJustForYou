@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260821v18';
+import * as data from './firebase-data.js?v=20260822v1';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -147,7 +147,13 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="participant-greeting"]',
       prepare: 'home',
       title: '你好',
-      body: '登入後會見你嘅名字。下面四個框框就係主要功能入口。'
+      body: '登入後會見你嘅名字。下面功能卡同底部導航就係主要入口；右上角「？」可重睇本頁說明。'
+    },
+    {
+      target: '[data-tour="home-unassigned"]',
+      prepare: 'home',
+      title: '尚未分組',
+      body: '如果仲未分配組別，會見到呢個提示。分組完成前唔可以留言同投票，請等工作人員安排。'
     },
     {
       target: '#screen-participant .home-card[data-nav="send"]',
@@ -166,7 +172,7 @@ const ONBOARDING_STEPS = {
       prepare: 'home',
       skipIfStaff: true,
       title: '獎項配對',
-      body: '投票開放後，喺呢度為每位隊友配對獎項。'
+      body: '投票開放後，喺呢度為每位隊友配對獎項；亦可睇「獎項摘要」了解每個獎嘅意思。'
     },
     {
       target: '#screen-participant .home-card[data-nav="sent"]',
@@ -178,7 +184,7 @@ const ONBOARDING_STEPS = {
       target: '#home-staff-card',
       prepare: 'home',
       title: '本組管理',
-      body: 'Staff 負責人才會見呢個框：監控本組留言、改組名、控制本組投票。'
+      body: 'Staff 負責人才會見呢個框：監控本組留言、改組名、控制本組投票同睇本組結果。'
     },
     {
       target: '#screen-participant .bottom-nav-item[data-tab="home"]',
@@ -197,13 +203,13 @@ const ONBOARDING_STEPS = {
       prepare: 'home',
       skipIfStaff: true,
       title: '底部・獎項',
-      body: '快捷入口去投票／睇得獎結果。'
+      body: '快捷入口去投票、獎項摘要同睇得獎結果。'
     },
     {
       target: '#screen-participant .bottom-nav-item[data-tab="profile"]',
       prepare: 'home',
       title: '底部・我的',
-      body: '個人資料、改名同登出都喺呢度。'
+      body: '個人資料、改顯示名稱、改密碼同登出都喺呢度。'
     },
     {
       target: '[data-tour="send-guide"]',
@@ -254,11 +260,18 @@ const ONBOARDING_STEPS = {
       body: '睇自己 send 過嘅內容同時間。'
     },
     {
+      target: '[data-tour="trophy-guide"]',
+      prepare: 'trophy',
+      skipIfStaff: true,
+      title: '獎項摘要',
+      body: '投票未關閉時可撳呢度，左右滑睇每個獎項嘅貼圖同說明，再決定點樣配對。'
+    },
+    {
       target: '[data-tour="trophy-voting"], [data-tour="trophy-not-open"], [data-tour="trophy-results"]',
       prepare: 'trophy',
       skipIfStaff: true,
       title: '獎項頁面',
-      body: '投票未開始會見提示；開放後喺呢度配對；公布後可睇你嘅得獎。'
+      body: '投票未開始會見提示；開放後喺呢度配對；提交後可「查看我的配對」；公布後可睇你嘅得獎。'
     },
     {
       target: '[data-tour="trophy-progress"]',
@@ -279,7 +292,7 @@ const ONBOARDING_STEPS = {
       prepare: 'trophy',
       skipIfStaff: true,
       title: '提交投票',
-      body: '配對完成後撳「提交投票」正式交卷（提交後不可再改）；「清除全部投票」可以一次清空重揀。'
+      body: '配對完成後撳「提交投票」正式交卷（提交後不可再改，除非管理員重開）；「清除全部投票」可以一次清空重揀。'
     },
     {
       target: '[data-tour="profile-header"]',
@@ -292,6 +305,12 @@ const ONBOARDING_STEPS = {
       prepare: 'profile',
       title: '改顯示名稱',
       body: '改名會出現喺名單同留言顯示；登入仍然用原本編號。'
+    },
+    {
+      target: '[data-tour="profile-password"]',
+      prepare: 'profile',
+      title: '修改密碼',
+      body: '可以喺呢度改登入密碼；改完之後請用新密碼再登入。'
     },
     {
       target: '[data-tour="profile-stats"]',
@@ -310,7 +329,7 @@ const ONBOARDING_STEPS = {
       prepare: 'staff',
       staffSection: 'dashboard',
       title: 'Staff 頁面',
-      body: '同 Admin 控制台一樣：上面切換 Dashboard、Messages、Voting、Results，只係範圍限於你負責嗰組。'
+      body: '同 Admin 控制台類似：上面切換 Dashboard、Messages、Voting、Results，只係範圍限於你負責嗰組。'
     },
     {
       target: '[data-tour="staff-group-card"]',
@@ -352,21 +371,81 @@ const ONBOARDING_STEPS = {
       prepare: 'staff',
       staffSection: 'messages',
       title: '組內留言監控',
-      body: '即時睇同組成員之間嘅留言，會顯示發送者同接收者姓名。參加者自己嘅收件箱仍然匿名。'
+      body: '即時睇同組成員之間嘅留言（含發送／接收者），亦可撤回或取消撤回。參加者自己嘅收件箱仍然匿名。'
     },
     {
       target: '[data-tour="staff-voting-controls"]',
       prepare: 'staff',
       staffSection: 'voting',
-      title: '本組投票控制',
-      body: '可以幫自己負責嗰組開放投票、關閉、計算結果同公布，亦會見到投票進度。'
+      title: '本組投票狀態',
+      body: '顯示呢組投票而家停喺邊一步；可能係跟隨全域，亦可能係本組獨立控制。'
     },
     {
-      target: '[data-tour="staff-results"]',
+      target: '[data-tour="staff-voting-stepper"]',
+      prepare: 'staff',
+      staffSection: 'voting',
+      title: '流程進度',
+      body: '由開放投票 → 關閉 → 計算 → 公布，清楚見到而家去到邊。'
+    },
+    {
+      target: '[data-tour="staff-voting-stats"]',
+      prepare: 'staff',
+      staffSection: 'voting',
+      title: '本組投票統計',
+      body: '本組提交進度、已投／未投等人數摘要。'
+    },
+    {
+      target: '[data-tour="staff-voting-actions"]',
+      prepare: 'staff',
+      staffSection: 'voting',
+      title: '本組投票操作',
+      body: '可以幫自己負責嗰組開放、關閉、計算結果同公布結果。'
+    },
+    {
+      target: '[data-tour="staff-follow-global"]',
+      prepare: 'staff',
+      staffSection: 'voting',
+      title: '恢復跟隨全域',
+      body: '如果本組曾經獨立改過投票狀態，可以撳呢度改返跟隨 Admin 全域設定。'
+    },
+    {
+      target: '[data-tour="staff-pending-voters"]',
+      prepare: 'staff',
+      staffSection: 'voting',
+      title: '本組投票詳情',
+      body: '睇邊個未交票；亦可打開投票總覽矩陣，核對組內配對情況。'
+    },
+    {
+      target: '[data-tour="staff-result-tabs"]',
       prepare: 'staff',
       staffSection: 'results',
-      title: '本組結果',
-      body: '同 Admin 結果頁一樣：審計、個人檔案、獎項摘要，只顯示你負責嗰組。'
+      staffResultTab: 'audit',
+      title: '本組結果分頁',
+      body: '三個分頁：投票審計、個人檔案、獎項摘要，只顯示你負責嗰組。'
+    },
+    {
+      target: '[data-tour="staff-audit-cards"]',
+      prepare: 'staff',
+      staffSection: 'results',
+      staffResultTab: 'audit',
+      title: '本組投票審計',
+      body: '核對本組每票邊個投邊個、投咗咩獎。'
+    },
+    {
+      target: '[data-tour="staff-profiles"]',
+      prepare: 'staff',
+      staffSection: 'results',
+      staffResultTab: 'profiles',
+      title: '本組個人檔案',
+      body: '睇本組每位參加者攞到邊啲獎、得幾多票。'
+    },
+    {
+      target: '[data-tour="staff-summary"]',
+      prepare: 'staff',
+      staffSection: 'results',
+      staffResultTab: 'summary',
+      title: '本組獎項摘要',
+      body: '展開可睇每個獎項說明同本組得主／排行。改名同改描述只可以由 Admin 做。'
     }
   ],
   admin: [
@@ -374,7 +453,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-header"]',
       prepare: 'dashboard',
       title: '管理員控制台',
-      body: '呢度係現場控制室：監控留言、推動投票、睇結果同改設定。'
+      body: '呢度係現場控制室：分組、監控留言、推動投票、睇結果同改設定。右上角「？」可重睇本頁說明。'
     },
     {
       target: '[data-tour="admin-live-badge"]',
@@ -395,10 +474,16 @@ const ONBOARDING_STEPS = {
       body: '參加者人數、留言總數、有效留言同留言開關狀態。'
     },
     {
+      target: '[data-tour="admin-roster-board"]',
+      prepare: 'dashboard',
+      title: '分組管理',
+      body: '拖曳參加者／Staff 到各組後，一定要撳「確認變更」先會寫入；「取消變更」可還原草稿。撳組名旁「改名」可自訂顯示名稱；「新增」可加座位／人員。未分配組唔參與留言／投票。'
+    },
+    {
       target: '[data-tour="admin-login-status"]',
       prepare: 'dashboard',
       title: '登入狀況',
-      body: '邊個已上線／未登入，方便點名同跟進。'
+      body: '邊個已上線／未登入。可以強制登出個別參加者，或一次過全部強制登出（Staff／Admin 不受影響）。'
     },
     {
       target: '[data-tour="admin-live-load"]',
@@ -482,7 +567,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-pending-voters"]',
       prepare: 'voting',
       title: '各组投票詳情',
-      body: '睇每組邊個未交；亦可打開投票總覽矩陣。'
+      body: '睇每組邊個未交；亦可打開投票總覽矩陣，逐組核對配對同勝出情況。'
     },
     {
       target: '.admin-bottom-nav .bottom-nav-item[data-admin-tab="results"]',
@@ -524,7 +609,7 @@ const ONBOARDING_STEPS = {
       prepare: 'results',
       resultTab: 'summary',
       title: '獎項摘要',
-      body: '每個獎項嘅得主同排行。展開後可以改獎項名稱。'
+      body: '每個獎項嘅說明、得主同排行。展開後可以改獎項名稱同描述，會即時套用到投票畫面同參加者獎項摘要。'
     },
     {
       target: '.admin-bottom-nav .bottom-nav-item[data-admin-tab="settings"]',
@@ -542,7 +627,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-group-overrides"]',
       prepare: 'settings',
       title: '各組狀態',
-      body: '睇每組留言／投票覆寫同 Staff 負責情況。'
+      body: '改組名、查看 Staff 覆寫，並可獨立控制該組留言／投票。將 Staff 分到 GROUP_1…6 後，對方即可監控同控場。'
     },
     {
       target: '[data-tour="admin-bulk-actions"]',
@@ -554,7 +639,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-pick-participant"]',
       prepare: 'settings',
       title: '揀參加者',
-      body: '揀一位之後可以改密碼、組別，或刪除其留言／投票紀錄。'
+      body: '揀一位之後可以改密碼、組別，撤回其留言、重置其投票，或刪除其全部紀錄。'
     },
     {
       target: '#admin-system-info',
@@ -575,7 +660,7 @@ const onboardingState = {
   skipDirection: 1
 };
 
-const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v2';
+const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v3';
 let deferredA2HSPrompt = null;
 let a2hsQueued = false;
 
