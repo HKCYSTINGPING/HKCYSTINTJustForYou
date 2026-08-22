@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v8';
+import * as data from './firebase-data.js?v=20260822v9';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -316,7 +316,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="profile-push"]',
       prepare: 'profile',
       title: '推送通知',
-      body: '免費方案會喺畫面頂出橫幅。iPhone 系統通知列做唔到；Android／電腦 Chrome 先有機會出系統通知。'
+      body: '請保持 App 開住（可以收埋去背景，唔好完全關掉），先至收到通知。'
     },
     {
       target: '[data-tour="profile-stats"]',
@@ -4251,9 +4251,9 @@ function openAlertBannerTarget() {
 }
 
 function showLocalPushNotification(title, body, tag = 'tnit-local', { toast = true } = {}) {
+  showAlertBanner(title, body, tag);
   if (toast) {
     showToast(body ? `${title}：${body}` : title, String(tag).includes('trophy') ? 'PUBLISHED' : 'info');
-    showAlertBanner(title, body, tag);
   }
   if (hasPushOptOut()) return;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
@@ -4377,7 +4377,7 @@ async function maybePromptPushOnLogin() {
 
   const ok = await showConfirmCard({
     title: '開啟推送通知',
-      body: '建議開啟。免費方案會喺畫面頂出橫幅。iPhone 系統通知列做唔到；Android／電腦 Chrome 先有機會出系統通知。App 要開住。',
+      body: '建議開啟。請保持 App 開住（可以收埋去背景，唔好完全關掉），先至收到通知。',
     confirmLabel: '開啟',
     cancelLabel: '稍後'
   });
