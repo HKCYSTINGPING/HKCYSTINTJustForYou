@@ -1151,65 +1151,26 @@ function finishLoading() {
 
 let handbookBlobUrl = '';
 let handbookLoading = false;
+let handbookRequestId = 0;
 
-function openHandbookLoadingWindow() {
-  const win = window.open('', '_blank');
-  if (!win) return null;
-  win.document.write(`<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>載入活動手冊…</title>
-  <style>
-    :root { color-scheme: light; }
-    body {
-      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
-      background: linear-gradient(160deg, #FFF9F2 0%, #FFE8D6 100%);
-      color: #5c4a3a;
-    }
-    .wrap { text-align: center; padding: 24px; max-width: 320px; }
-    .book { font-size: 2.5rem; line-height: 1; margin-bottom: 12px; }
-    h1 { font-size: 1.15rem; margin: 0 0 8px; font-weight: 700; }
-    p { margin: 0 0 16px; font-size: 0.95rem; opacity: 0.85; }
-    .bar { width: 100%; height: 8px; background: rgba(0,0,0,0.08); border-radius: 999px; overflow: hidden; }
-    .fill { height: 100%; width: 0%; background: linear-gradient(90deg, #F4A261, #E76F51); transition: width 0.2s ease; }
-    .pct { margin-top: 10px; font-weight: 700; font-variant-numeric: tabular-nums; color: #E76F51; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="book" aria-hidden="true">📖</div>
-    <h1>《解鎖成就》活動手冊</h1>
-    <p>正在載入，請稍候…</p>
-    <div class="bar"><div class="fill" id="handbook-fill"></div></div>
-    <div class="pct" id="handbook-pct">0%</div>
-  </div>
-</body>
-</html>`);
-  win.document.close();
-  return win;
-}
-
-function setHandbookWindowProgress(win, percent) {
-  if (!win || win.closed) return;
-  try {
-    const value = Math.max(0, Math.min(100, Math.round(percent)));
-    const fill = win.document.getElementById('handbook-fill');
-    const pct = win.document.getElementById('handbook-pct');
-    if (fill) fill.style.width = value + '%';
-    if (pct) pct.textContent = value + '%';
-  } catch (_) { /* cross-window race */ }
+function setHandbookModalProgress(percent) {
+  const value = Math.max(0, Math.min(100, Math.round(percent)));
+  const pct = document.getElementById('handbook-loading-percent');
+  const bar = document.getElementById('handbook-loading-bar');
+  if (pct) pct.textContent = value + '%';
+  if (bar) bar.style.width = value + '%';
 }
 
 function fetchHandbookWithProgress(onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('GET', CONFIG.HANDBOOK_URL, true);
+    xhr.open('GET', CONFIG.HANDBOOK_URL + '?t=' + Date.now(), true);
     xhr.responseType = 'blob';
     xhr.onprogress = (event) => {
-      if (!event.lengthComputable || !event.total) return;
+      if (!event.lengthComputable || !event.total) {
+        onProgress(Math.min(90, (event.loaded / (20 * 1024 * 1024)) * 100));
+        return;
+      }
       onProgress(Math.round((event.loaded / event.total) * 100));
     };
     xhr.onload = () => {
@@ -1240,46 +1201,78 @@ async function ensureHandbookBlobUrl(onProgress) {
   return handbookBlobUrl;
 }
 
-async function handleOpenHandbook() {
-  if (handbookLoading) return;
+function closeHandbookModal() {
+  handbookRequestId += 1;
+  handbookLoading = false;
+  const modal = document.getElementById('handbook-modal');
+  const frame = document.getElementById('handbook-frame');
+  const loading = document.getElementById('handbook-loading');
+  if (modal) modal.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  if (frame) {
+    frame.onload = null;
+    frame.onerror = null;
+    frame.classList.add('hidden');
+    frame.removeAttribute('src');
+  }
+  if (loading) loading.classList.remove('hidden');
+  setHandbookModalProgress(0);
+}
+
+async function handleOpenHandbook(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (handbookLoading) {
+    showToast('正在載入手冊，請稍候…', 'info');
+    return;
+  }
+
+  const modal = document.getElementById('handbook-modal');
+  const frame = document.getElementById('handbook-frame');
+  const loading = document.getElementById('handbook-loading');
+  const openTab = document.getElementById('handbook-open-tab');
+  if (!modal || !frame || !loading) {
+    window.open(CONFIG.HANDBOOK_URL, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  const requestId = ++handbookRequestId;
   handbookLoading = true;
-
-  const win = openHandbookLoadingWindow();
-  clearLoadingSafetyTimer();
-  stopLoadingTick();
-  if (DOM.loadingLabel) DOM.loadingLabel.textContent = '正在開啟活動手冊…';
-  DOM.loadingOverlay.classList.remove('hidden');
-  DOM.loadingOverlay.setAttribute('aria-hidden', 'false');
-  document.body.classList.add('is-loading');
-  setLoadingPercent(0);
-
-  let safetyTimer = setTimeout(() => {
-    if (handbookLoading) {
-      showToast('手冊較大，仍在載入中…', 'info');
-    }
-  }, 20000);
+  modal.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  loading.classList.remove('hidden');
+  frame.classList.add('hidden');
+  frame.removeAttribute('src');
+  setHandbookModalProgress(0);
+  if (openTab) openTab.href = CONFIG.HANDBOOK_URL;
 
   try {
-    const url = await ensureHandbookBlobUrl((pct) => {
-      setLoadingPercent(pct);
-      setHandbookWindowProgress(win, pct);
-    });
-    setLoadingPercent(100);
-    setHandbookWindowProgress(win, 100);
-    if (win && !win.closed) {
-      win.location.replace(url);
-    } else {
-      const opened = window.open(url, '_blank');
-      if (!opened) showToast('請允許彈出視窗以開啟活動手冊', 'error');
-    }
-    setTimeout(() => showLoading(false), 160);
+    const url = await ensureHandbookBlobUrl(setHandbookModalProgress);
+    if (requestId !== handbookRequestId) return;
+    if (openTab) openTab.href = url;
+
+    const reveal = () => {
+      if (requestId !== handbookRequestId) return;
+      loading.classList.add('hidden');
+      frame.classList.remove('hidden');
+      handbookLoading = false;
+    };
+
+    frame.onload = reveal;
+    frame.onerror = () => {
+      reveal();
+      showToast('預覽失敗，請用「新分頁開啟」', 'error');
+    };
+    frame.src = url;
+    // Some mobile browsers never fire iframe load for PDFs.
+    setTimeout(reveal, 2500);
   } catch (err) {
-    if (win && !win.closed) win.close();
-    showLoading(false);
-    showToast(err?.message || '無法開啟活動手冊', 'error');
-  } finally {
-    clearTimeout(safetyTimer);
+    if (requestId !== handbookRequestId) return;
     handbookLoading = false;
+    loading.classList.add('hidden');
+    showToast(err?.message || '無法開啟活動手冊', 'error');
   }
 }
 
@@ -8094,6 +8087,16 @@ function bindEvents() {
   document.querySelectorAll('.handbook-btn').forEach(btn => {
     btn.addEventListener('click', handleOpenHandbook);
   });
+  const handbookClose = document.getElementById('handbook-modal-close');
+  if (handbookClose) {
+    handbookClose.addEventListener('click', closeHandbookModal);
+  }
+  const handbookModal = document.getElementById('handbook-modal');
+  if (handbookModal) {
+    handbookModal.addEventListener('click', (e) => {
+      if (e.target === handbookModal) closeHandbookModal();
+    });
+  }
 
   if (DOM.voteMatrixModalClose) {
     DOM.voteMatrixModalClose.addEventListener('click', closeVoteMatrixModal);

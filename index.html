@@ -601,6 +601,35 @@
     </div>
   </div>
 
+  <!-- Achievement handbook viewer -->
+  <div id="handbook-modal" class="modal-overlay glass-overlay handbook-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="handbook-modal-title">
+    <div class="modal-card glass-card handbook-modal-card">
+      <div class="handbook-modal-header">
+        <div>
+          <h2 id="handbook-modal-title">《解鎖成就》活動手冊</h2>
+          <p class="handbook-modal-subtitle">載入完成後可於下方預覽，亦可開新分頁</p>
+        </div>
+        <div class="handbook-modal-actions">
+          <a id="handbook-open-tab" class="btn btn-secondary btn-sm" href="assets/achievement-handbook.pdf" target="_blank" rel="noopener noreferrer">新分頁開啟</a>
+          <button type="button" id="handbook-modal-close" class="btn btn-ghost btn-icon" aria-label="關閉">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="handbook-loading" class="handbook-loading" aria-live="polite">
+        <div class="skeleton-pulse"></div>
+        <p class="handbook-loading-text">正在載入手冊… <span id="handbook-loading-percent">0%</span></p>
+        <div class="loading-bar" aria-hidden="true">
+          <div id="handbook-loading-bar" class="loading-bar-fill"></div>
+        </div>
+        <p id="handbook-loading-hint" class="hint-text">檔案較大，首次開啟可能需要一點時間</p>
+      </div>
+      <iframe id="handbook-frame" class="handbook-frame hidden" title="《解鎖成就》活動手冊"></iframe>
+    </div>
+  </div>
+
   <!-- Award Popup (Glass) -->
   <div id="trophy-results-modal" class="modal-overlay glass-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="trophy-results-modal-title">
     <div class="modal-card glass-card trophy-modal-card">
