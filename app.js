@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v13';
+import * as data from './firebase-data.js?v=20260822v14';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1305,6 +1305,59 @@ function containsBadWords(text) {
   return BAD_WORDS.some(word => lower.includes(word.toLowerCase()));
 }
 
+function containsEmoji(text) {
+  return /\p{Extended_Pictographic}/u.test(String(text || ''));
+}
+
+function stripEmojis(text) {
+  return String(text || '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/\u200D/g, '')
+    .replace(/\uFE0F/g, '');
+}
+
+function blockIfEmoji(text, label = '內容') {
+  if (!containsEmoji(text)) return false;
+  showToast(`${label}不可包含 emoji`, 'error');
+  return true;
+}
+
+function bindEmojiFreeInput(el) {
+  if (!el || el.dataset.emojiFreeBound === '1') return;
+  el.dataset.emojiFreeBound = '1';
+  const scrub = () => {
+    const raw = el.value;
+    const cleaned = stripEmojis(raw);
+    if (cleaned === raw) return;
+    const pos = el.selectionStart;
+    el.value = cleaned;
+    if (typeof pos === 'number') {
+      const next = Math.max(0, pos - (raw.length - cleaned.length));
+      try { el.setSelectionRange(next, next); } catch (_) {}
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  el.addEventListener('input', scrub);
+  el.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const paste = stripEmojis(e.clipboardData?.getData('text') || '');
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    let nextValue = el.value.slice(0, start) + paste + el.value.slice(end);
+    if (el.maxLength > 0) nextValue = nextValue.slice(0, el.maxLength);
+    el.value = nextValue;
+    const cursor = Math.min(start + paste.length, el.value.length);
+    try { el.setSelectionRange(cursor, cursor); } catch (_) {}
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+function bindAllEmojiFreeInputs(root = document) {
+  root.querySelectorAll(
+    'textarea.input-field, input.input-field[type="text"], input.input-field[type="search"], input.input-field[type="password"]'
+  ).forEach(bindEmojiFreeInput);
+}
+
 function runProgressButton(btn, promise) {
   btn.classList.add('is-loading');
   btn.disabled = true;
@@ -1514,6 +1567,7 @@ async function handleGroupRenameSave() {
     showToast('組名最多 40 字', 'error');
     return;
   }
+  if (blockIfEmoji(name, '組名')) return;
   await runProgressButton(DOM.groupRenameSave, (async () => {
     try {
       await data.setGroupDisplayName(groupId, name);
@@ -3134,10 +3188,18 @@ function updateCharCounter() {
   DOM.charCounter.classList.toggle('over', len > CONFIG.MAX_MESSAGE_LENGTH);
 
   const hasBad = containsBadWords(DOM.sendContent.value);
-  DOM.badWordsWarning.classList.toggle('hidden', !hasBad);
+  const hasEmoji = containsEmoji(DOM.sendContent.value);
+  if (DOM.badWordsWarning) {
+    DOM.badWordsWarning.classList.toggle('hidden', !hasBad && !hasEmoji);
+    if (hasBad) {
+      DOM.badWordsWarning.textContent = '內容包含不適當用語，請修改後再發送';
+    } else if (hasEmoji) {
+      DOM.badWordsWarning.textContent = '內容不可包含 emoji，請修改後再發送';
+    }
+  }
   const empty = !DOM.sendContent.value.trim();
   const messagingOpen = isMessagingOpenForMe();
-  DOM.sendSubmit.disabled = hasBad || !messagingOpen || empty;
+  DOM.sendSubmit.disabled = hasBad || hasEmoji || !messagingOpen || empty;
 }
 
 async function handleSendMessage(e) {
@@ -3153,6 +3215,7 @@ async function handleSendMessage(e) {
   if (!receiverId) { showToast('請選擇接收者', 'error'); return; }
   if (!content) { showToast('請輸入留言內容', 'error'); return; }
   if (containsBadWords(content)) { showToast('內容包含不適當用語', 'error'); return; }
+  if (containsEmoji(content)) { showToast('留言不可包含 emoji', 'error'); return; }
 
   const sender = findParticipantById(state.participantId);
   const receiver = findParticipantById(receiverId);
@@ -6144,6 +6207,7 @@ function renderTrophySummaryInto(container, items, options = {}) {
     container.querySelectorAll('.summary-rename-save').forEach(btn => {
       btn.addEventListener('click', () => onRename(btn));
     });
+    container.querySelectorAll('.summary-rename-input, .summary-desc-input').forEach(bindEmojiFreeInput);
   }
 }
 
@@ -6208,6 +6272,8 @@ async function handleAdminSaveTrophyMeta(btn) {
     showToast('獎項描述不可空白', 'error');
     return;
   }
+  if (blockIfEmoji(nextName, '獎項名稱')) return;
+  if (blockIfEmoji(nextDesc, '獎項描述')) return;
   if (current && current.trophy_name === nextName && currentDesc === nextDesc) {
     showToast('沒有變更', 'info');
     return;
@@ -6344,6 +6410,7 @@ async function handleSaveDisplayName() {
     showToast('顯示名稱最多 40 字', 'error');
     return;
   }
+  if (blockIfEmoji(name, '顯示名稱')) return;
   await runProgressButton(DOM.profileSaveName, (async () => {
     try {
       await data.updateParticipantDisplayName(pid, name);
@@ -6367,6 +6434,7 @@ async function handleSavePassword() {
     showToast('請輸入新密碼', 'error');
     return;
   }
+  if (blockIfEmoji(newPassword, '密碼')) return;
   await runProgressButton(DOM.profileSavePassword, (async () => {
     try {
       await data.updateMyPassword(newPassword);
@@ -6729,6 +6797,7 @@ async function handleStaffSaveGroupName() {
     showToast('組名最多 40 字', 'error');
     return;
   }
+  if (blockIfEmoji(name, '組名')) return;
   await runProgressButton(DOM.staffSaveGroupName, (async () => {
     try {
       await data.setGroupDisplayName(groupId, name);
@@ -7312,6 +7381,9 @@ async function handleRosterEditSave() {
   const name = (DOM.rosterEditName?.value || '').trim();
   const password = (DOM.rosterEditPassword?.value || '').trim();
   const groupId = (DOM.rosterEditGroup?.value || '').trim() || data.GROUP_UNASSIGNED;
+  if (blockIfEmoji(newId, '編號')) return;
+  if (blockIfEmoji(name, '名稱')) return;
+  if (blockIfEmoji(password, '密碼')) return;
 
   await runProgressButton(DOM.rosterEditSave, (async () => {
     try {
@@ -7407,6 +7479,9 @@ async function handleRosterAddSave() {
     showToast('請輸入密碼', 'error');
     return;
   }
+  if (blockIfEmoji(name, '名稱')) return;
+  if (blockIfEmoji(password, '密碼')) return;
+  if (kind === 'staff' && blockIfEmoji(pid, '編號')) return;
 
   await runProgressButton(DOM.rosterAddSave, (async () => {
     try {
@@ -7462,6 +7537,7 @@ async function handleAdminSaveParticipant() {
   const groupId = DOM.adminEditGroup.value.trim();
   if (!groupId) { showToast('分組不能為空', 'error'); return; }
   const newPassword = (DOM.adminEditPhone?.value || '').trim();
+  if (blockIfEmoji(newPassword, '密碼')) return;
 
   await runProgressButton(DOM.adminSaveParticipant, (async () => {
     try {
@@ -8159,6 +8235,7 @@ function initPreventDoubleTapZoom() {
 
 function init() {
   cacheDOM();
+  bindAllEmojiFreeInputs();
   bindEvents();
   initAddToHome();
   initPreventDoubleTapZoom();

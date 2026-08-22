@@ -411,6 +411,10 @@ export function subscribeAllMessages(onData, onError) {
 }
 
 export function sendMessage(senderId, receiverId, content, groupMeta = {}) {
+  const body = String(content || '');
+  if (/\p{Extended_Pictographic}/u.test(body)) {
+    return Promise.reject(Object.assign(new Error('留言不可包含 emoji'), { code: 'invalid-argument' }));
+  }
   const ref = doc(collection(db, 'messages'));
   const senderGroupId = String(groupMeta.senderGroupId || '').trim();
   const receiverGroupId = String(groupMeta.receiverGroupId || '').trim();
