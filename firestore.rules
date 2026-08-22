@@ -168,6 +168,13 @@ service cloud.firestore {
     // roster that every participant can read.
     match /contacts/{participantId} {
       allow read, write: if isAdmin();
+      allow read: if isParticipant() && participantId == pid();
+      allow create, update: if isParticipant() && participantId == pid()
+        && request.resource.data.participant_id == pid()
+        && request.resource.data.phone_number is string
+        && request.resource.data.phone_number.size() >= 1
+        && request.resource.data.phone_number.size() <= 40
+        && request.resource.data.keys().hasOnly(['participant_id', 'phone_number']);
     }
 
     match /trophies/{trophyId} {

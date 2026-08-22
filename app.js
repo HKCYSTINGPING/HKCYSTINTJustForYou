@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v12';
+import * as data from './firebase-data.js?v=20260822v13';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -6373,7 +6373,7 @@ async function handleSavePassword() {
       if (DOM.profilePassword) DOM.profilePassword.value = '';
       showToast('密碼已成功更新，下次登入請使用新密碼', 'success');
     } catch (err) {
-      showToast('密碼更新失敗，請再試一次', 'error');
+      showToast(data.describeFirestoreError(err, '密碼更新失敗，請再試一次'), 'error');
     }
   })());
 }

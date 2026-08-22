@@ -249,6 +249,9 @@ export function describeFirestoreError(err, fallback = '操作失敗，請再試
   if (code === 'not-found') {
     return '找不到相關資料';
   }
+  if (code === 'auth-password-sync-failed') {
+    return String((err && err.message) || '').trim() || fallback;
+  }
   const msg = String((err && err.message) || '').trim();
   if (!msg) return fallback;
   if (/missing or insufficient permissions/i.test(msg)) {
@@ -969,12 +972,10 @@ export async function updateMyPassword(newPassword) {
   const authPwd = resolveAuthPassword(pid, clean);
   await updatePassword(auth.currentUser, authPwd);
   if (pid) {
-    try {
-      await setDoc(doc(db, 'contacts', pid), {
-        participant_id: pid,
-        phone_number: clean
-      }, { merge: true });
-    } catch (_) {}
+    await setDoc(doc(db, 'contacts', pid), {
+      participant_id: pid,
+      phone_number: clean
+    }, { merge: true });
   }
 }
 
@@ -999,32 +1000,66 @@ async function signInSecondaryOnce(participantId, hint) {
   return signInWithResolvedPassword(secondaryAuth, participantId, hint);
 }
 
+function passwordHintsForSync(participantId, oldPassword) {
+  const pid = String(participantId || '').trim().toUpperCase();
+  const hints = [];
+  const add = (value) => {
+    const raw = String(value || '').trim();
+    if (raw && !hints.includes(raw)) hints.push(raw);
+  };
+  add(oldPassword);
+  add(pid);
+  add(authPasswordForParticipantId(pid));
+  return hints;
+}
+
+async function trySecondaryUpdatePassword(participantId, hints, nextPwd) {
+  const tried = new Set();
+  for (const hint of hints) {
+    for (const pwd of authPasswordsToTry(participantId, hint)) {
+      if (tried.has(pwd)) continue;
+      tried.add(pwd);
+      try {
+        const cred = await signInWithResolvedPassword(secondaryAuth, participantId, pwd);
+        if (cred?.user) {
+          await updatePassword(cred.user, nextPwd);
+          return true;
+        }
+      } catch (err) {
+        if (!isRetryableAuthLookup(err)) throw hideAuthCooldown(err);
+      }
+    }
+  }
+  return false;
+}
+
 async function syncAuthPassword(participantId, newPassword, oldPassword) {
   const pid = String(participantId || '').trim().toUpperCase();
   const nextPwd = resolveAuthPassword(pid, newPassword);
   if (!nextPwd) throw new Error('請輸入密碼');
-  const email = participantEmail(pid);
 
   await withSecondaryAuth(async () => {
-    try {
-      const cred = await signInSecondaryOnce(pid, oldPassword || pid);
-      if (cred && cred.user) {
-        await updatePassword(cred.user, nextPwd);
-        return;
-      }
-    } catch (err) {
+    const hints = passwordHintsForSync(pid, oldPassword);
+
+    if (await trySecondaryUpdatePassword(pid, hints, nextPwd)) return;
+
+    for (const email of participantEmails(pid)) {
       try {
         await createUserWithEmailAndPassword(secondaryAuth, email, nextPwd);
         return;
       } catch (createErr) {
-        if (createErr && createErr.code === 'auth/email-already-in-use') {
-          const fail = new Error('登入密碼未能同步到 Firebase Auth，對方仍會用舊密碼登入。請再試一次，或先用舊密碼確認帳戶仍然有效。');
-          fail.code = 'auth-password-sync-failed';
-          throw fail;
-        }
-        throw createErr;
+        if (createErr?.code !== 'auth/email-already-in-use') throw createErr;
       }
     }
+
+    if (await trySecondaryUpdatePassword(pid, hints, nextPwd)) return;
+
+    const fail = new Error(
+      '登入密碼未能同步到 Firebase Auth，對方仍會用舊密碼登入。'
+      + '請先用舊密碼確認對方可登入，或執行 set_participant_phone.py 修正。'
+    );
+    fail.code = 'auth-password-sync-failed';
+    throw fail;
   });
 }
 
