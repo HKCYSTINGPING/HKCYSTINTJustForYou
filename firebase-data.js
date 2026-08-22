@@ -1663,9 +1663,8 @@ export async function removePushToken(participantId, token) {
  * Spark/free: permission + Firestore listeners while the PWA/tab stays open.
  * Returns { ok, token, reason }.
  */
-export async function enablePushNotifications(participantId, serviceWorkerRegistration) {
-  const id = String(participantId || '').trim().toUpperCase();
-  if (!id) return { ok: false, reason: 'missing-id' };
+export async function enablePushNotifications(participantId, _serviceWorkerRegistration) {
+  if (!String(participantId || '').trim()) return { ok: false, reason: 'missing-id' };
   if (!isNotificationApiSupported()) return { ok: false, reason: 'unsupported' };
 
   if (Notification.permission === 'denied') return { ok: false, reason: 'denied' };
@@ -1674,33 +1673,18 @@ export async function enablePushNotifications(participantId, serviceWorkerRegist
     if (perm !== 'granted') return { ok: false, reason: perm === 'denied' ? 'denied' : 'dismissed' };
   }
 
-  let token = '';
-  try {
-    const vapidKey = await fetchPushVapidKey();
-    if (vapidKey && await isPushSupported()) {
-      const messaging = await getMessagingSafe();
-      if (messaging) {
-        const registration = serviceWorkerRegistration
-          || await navigator.serviceWorker.ready;
-        token = await getToken(messaging, {
-          vapidKey,
-          serviceWorkerRegistration: registration
-        }) || '';
-        if (token) await savePushToken(id, token);
-      }
-    }
-  } catch (_) { /* local notifications still work without FCM */ }
-
-  return { ok: true, token };
+  // Spark/free: do not write push_tokens (needs unpublished rules + Cloud Functions).
+  return { ok: true, token: '' };
 }
 
 export async function disablePushNotifications(participantId, token) {
-  const id = String(participantId || '').trim().toUpperCase();
   try {
     const messaging = await getMessagingSafe();
     if (messaging) await deleteToken(messaging);
   } catch (_) { /* ignore */ }
-  await removePushToken(id, token || '');
+  try {
+    await removePushToken(participantId, token || '');
+  } catch (_) { /* live rules may not allow push_tokens */ }
 }
 
 /** Foreground FCM handler (app open). */

@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v5';
+import * as data from './firebase-data.js?v=20260822v6';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -4197,8 +4197,9 @@ function pushStatusLabel() {
   const perm = data.getNotificationPermission();
   if (perm === 'unsupported') return '此裝置／瀏覽器唔支援推送通知';
   if (perm === 'denied') return '狀態：已封鎖（請到系統設定重新允許）';
+  if (hasPushOptOut()) return '狀態：已關閉';
   if (pushEnabledLocally && perm === 'granted') return '狀態：已開啟';
-  if (perm === 'granted') return '狀態：已允許，但未註冊（可再撳開啟）';
+  if (perm === 'granted') return '狀態：瀏覽器已允許，撳開啟即可使用';
   return '狀態：未開啟';
 }
 
@@ -4305,28 +4306,13 @@ async function maybePromptPushOnLogin() {
 async function setupPushAfterLogin() {
   renderPushStatus();
   if (!data.isNotificationApiSupported()) return;
-  if (data.getNotificationPermission() !== 'granted') return;
-  try {
-    const result = await data.enablePushNotifications(
-      state.participantId,
-      serviceWorkerRegistration || (navigator.serviceWorker && await navigator.serviceWorker.ready)
-    );
-    pushEnabledLocally = !!result.ok;
-    if (result.ok) {
-      if (pushForegroundUnsub) {
-        try { pushForegroundUnsub(); } catch (_) { /* ignore */ }
-      }
-      pushForegroundUnsub = await data.listenForegroundPush(payload => {
-        const title = payload.notification?.title || payload.data?.title || 'TNIT';
-        const body = payload.notification?.body || payload.data?.body || '';
-        showToast(body ? `${title}：${body}` : title, 'info');
-        const type = payload.data?.type || '';
-        if (type === 'new_message') switchParticipantView('inbox');
-        if (type === 'trophy_published') switchParticipantView('trophy');
-      });
-    }
-  } catch (_) {
+  if (hasPushOptOut()) {
     pushEnabledLocally = false;
+    renderPushStatus();
+    return;
+  }
+  if (data.getNotificationPermission() === 'granted') {
+    pushEnabledLocally = true;
   }
   renderPushStatus();
 }
@@ -4337,7 +4323,7 @@ async function handleEnablePush() {
     try {
       await requestEnablePush({ toast: true });
     } catch (err) {
-      showToast(err.message || data.describeFirestoreError(err), 'error');
+      showToast(data.describeFirestoreError(err), 'error');
       renderPushStatus();
     }
   })());
@@ -4356,7 +4342,7 @@ async function handleDisablePush() {
       }
       showToast('已關閉推送通知', 'info');
     } catch (err) {
-      showToast(err.message || data.describeFirestoreError(err), 'error');
+      showToast(data.describeFirestoreError(err), 'error');
     } finally {
       renderPushStatus();
     }
