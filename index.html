@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260822v7">
+  <link rel="stylesheet" href="styles.css?v=20260822v8">
 </head>
 <body>
 
@@ -51,6 +51,13 @@
 
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <div id="alert-banner" class="alert-banner hidden" role="alert">
+    <button type="button" id="alert-banner-main" class="alert-banner-main">
+      <strong id="alert-banner-title">通知</strong>
+      <span id="alert-banner-body"></span>
+    </button>
+    <button type="button" id="alert-banner-close" class="alert-banner-close" aria-label="關閉">×</button>
+  </div>
 
   <!-- Confetti Canvas -->
   <canvas id="confetti-canvas" class="confetti-canvas" aria-hidden="true"></canvas>
@@ -372,7 +379,7 @@
         </div>
         <div class="card" data-tour="profile-push">
           <h3 class="section-title">推送通知</h3>
-          <p class="form-hint">免費方案：App／分頁要開住（可以收埋去背景）。新留言同公布獎項會彈通知。完全關閉瀏覽器就收唔到。iPhone 請先加到主畫面。</p>
+          <p class="form-hint">免費方案會喺畫面頂出橫幅。iPhone 系統通知列（鎖屏／頂部）免費方案做唔到，一定要 App 開住。Android／電腦 Chrome 先有機會出系統通知。</p>
           <p id="profile-push-status" class="form-hint">狀態：檢查中…</p>
           <div class="toggle-group">
             <button type="button" id="profile-push-enable" class="btn btn-primary btn-sm btn-progress">
@@ -1079,6 +1086,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260822v7"></script>
+  <script type="module" src="app.js?v=20260822v8"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v7';
+import * as data from './firebase-data.js?v=20260822v8';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -316,7 +316,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="profile-push"]',
       prepare: 'profile',
       title: '推送通知',
-      body: '開啟後，收到新匿名留言或獎項結果公布時，只要 App／分頁仲開住（可以收埋去背景）就會彈通知。完全關閉瀏覽器就收唔到。iPhone 請先加到主畫面。'
+      body: '免費方案會喺畫面頂出橫幅。iPhone 系統通知列做唔到；Android／電腦 Chrome 先有機會出系統通知。'
     },
     {
       target: '[data-tour="profile-stats"]',
@@ -693,6 +693,11 @@ function cacheDOM() {
   DOM.splashBarFill = document.getElementById('splash-bar-fill');
   DOM.splashStatus = document.getElementById('splash-status');
   DOM.toastContainer = document.getElementById('toast-container');
+  DOM.alertBanner = document.getElementById('alert-banner');
+  DOM.alertBannerMain = document.getElementById('alert-banner-main');
+  DOM.alertBannerTitle = document.getElementById('alert-banner-title');
+  DOM.alertBannerBody = document.getElementById('alert-banner-body');
+  DOM.alertBannerClose = document.getElementById('alert-banner-close');
   DOM.confettiCanvas = document.getElementById('confetti-canvas');
 
   DOM.screenSplash = document.getElementById('screen-splash');
@@ -4216,16 +4221,49 @@ function renderPushStatus() {
   if (DOM.profilePushDisable) DOM.profilePushDisable.disabled = !canUse;
 }
 
+function notificationIconUrl() {
+  try {
+    return new URL('assets/heart.png', location.href).href;
+  } catch (_) {
+    return 'assets/heart.png';
+  }
+}
+
+function hideAlertBanner() {
+  if (DOM.alertBanner) DOM.alertBanner.classList.add('hidden');
+}
+
+function showAlertBanner(title, body, tag = 'tnit-local') {
+  if (!DOM.alertBanner) return;
+  if (DOM.alertBannerTitle) DOM.alertBannerTitle.textContent = title;
+  if (DOM.alertBannerBody) DOM.alertBannerBody.textContent = body || '';
+  DOM.alertBanner.dataset.tag = tag;
+  DOM.alertBanner.classList.remove('hidden');
+  clearTimeout(showAlertBanner._timer);
+  showAlertBanner._timer = setTimeout(hideAlertBanner, 14000);
+}
+
+function openAlertBannerTarget() {
+  const tag = String((DOM.alertBanner && DOM.alertBanner.dataset.tag) || '');
+  hideAlertBanner();
+  if (tag.includes('trophy')) switchParticipantView('trophy');
+  else switchParticipantView('inbox');
+}
+
 function showLocalPushNotification(title, body, tag = 'tnit-local', { toast = true } = {}) {
+  if (toast) {
+    showToast(body ? `${title}：${body}` : title, String(tag).includes('trophy') ? 'PUBLISHED' : 'info');
+    showAlertBanner(title, body, tag);
+  }
   if (hasPushOptOut()) return;
-  if (toast) showToast(body ? `${title}：${body}` : title, String(tag).includes('trophy') ? 'PUBLISHED' : 'info');
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
 
   const url = String(tag).includes('trophy') ? './#trophy' : './#inbox';
+  const icon = notificationIconUrl();
   const options = {
     body,
-    icon: './assets/heart.png',
-    badge: './assets/heart.png',
+    icon,
+    badge: icon,
     tag,
     renotify: true,
     data: { url, tag }
@@ -4243,12 +4281,25 @@ function showLocalPushNotification(title, body, tag = 'tnit-local', { toast = tr
       const n = new Notification(title, options);
       n.onclick = () => {
         window.focus();
-        if (String(tag).includes('message')) switchParticipantView('inbox');
-        else if (String(tag).includes('trophy')) switchParticipantView('trophy');
+        if (String(tag).includes('trophy')) switchParticipantView('trophy');
+        else switchParticipantView('inbox');
         n.close();
       };
     } catch (_) { /* ignore */ }
   };
+
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'tnit-notify',
+        title,
+        body,
+        tag,
+        url,
+        icon
+      });
+    }
+  } catch (_) { /* ignore */ }
 
   if (serviceWorkerRegistration) {
     Promise.resolve(viaSw(serviceWorkerRegistration)).catch(fallback);
@@ -4326,7 +4377,7 @@ async function maybePromptPushOnLogin() {
 
   const ok = await showConfirmCard({
     title: '開啟推送通知',
-    body: '建議開啟：收到新匿名留言或獎項結果公布時，只要 App／分頁仲開住（收埋去背景都可以）就會彈通知。完全關閉就收唔到。iPhone 請先加到主畫面。',
+      body: '建議開啟。免費方案會喺畫面頂出橫幅。iPhone 系統通知列做唔到；Android／電腦 Chrome 先有機會出系統通知。App 要開住。',
     confirmLabel: '開啟',
     cancelLabel: '稍後'
   });
@@ -7614,6 +7665,12 @@ function bindEvents() {
   }
   if (DOM.profilePushTest) {
     DOM.profilePushTest.addEventListener('click', handleTestPush);
+  }
+  if (DOM.alertBannerMain) {
+    DOM.alertBannerMain.addEventListener('click', openAlertBannerTarget);
+  }
+  if (DOM.alertBannerClose) {
+    DOM.alertBannerClose.addEventListener('click', hideAlertBanner);
   }
   document.querySelectorAll('.staff-result-tab').forEach(btn => {
     btn.addEventListener('click', () => switchStaffResultTab(btn.dataset.staffResultTab));

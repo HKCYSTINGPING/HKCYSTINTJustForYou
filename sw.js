@@ -1,38 +1,12 @@
-/* Service worker: A2HS + FCM background push for TNIT. */
-/* global importScripts, firebase */
+/* Service worker: A2HS + local notifications for TNIT. */
 
-importScripts('https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/12.17.1/firebase-messaging-compat.js');
-
-firebase.initializeApp({
-  apiKey: 'AIzaSyBIQrLARWje_fe7TX7f2u0Wk7xjFDAyNcs',
-  authDomain: 'tnit-6c48d.firebaseapp.com',
-  projectId: 'tnit-6c48d',
-  storageBucket: 'tnit-6c48d.firebasestorage.app',
-  messagingSenderId: '649245917670',
-  appId: '1:649245917670:web:dce565a213bade09fc1627'
-});
-
-const messaging = firebase.messaging();
-
-messaging.onBackgroundMessage((payload) => {
-  const title = (payload.notification && payload.notification.title)
-    || (payload.data && payload.data.title)
-    || 'TNIT';
-  const body = (payload.notification && payload.notification.body)
-    || (payload.data && payload.data.body)
-    || '';
-  const data = payload.data || {};
-  const options = {
-    body,
-    icon: './assets/heart.png',
-    badge: './assets/heart.png',
-    data,
-    tag: data.tag || 'tnit-push',
-    renotify: true
-  };
-  self.registration.showNotification(title, options);
-});
+function iconUrl() {
+  try {
+    return new URL('./assets/heart.png', self.location.href).href;
+  } catch (_) {
+    return './assets/heart.png';
+  }
+}
 
 self.addEventListener('message', (event) => {
   const msg = event.data || {};
@@ -40,8 +14,8 @@ self.addEventListener('message', (event) => {
   const title = msg.title || 'TNIT';
   const options = {
     body: msg.body || '',
-    icon: './assets/heart.png',
-    badge: './assets/heart.png',
+    icon: msg.icon || iconUrl(),
+    badge: msg.icon || iconUrl(),
     tag: msg.tag || 'tnit-local',
     renotify: true,
     data: { url: msg.url || './', tag: msg.tag || 'tnit-local' }
