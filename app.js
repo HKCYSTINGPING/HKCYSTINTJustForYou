@@ -26,6 +26,9 @@ const CONFIG = {
   // wait this long means the network is the problem and saying so beats
   // leaving someone watching a progress bar.
   LOADING_TIMEOUT_MS: 15000,
+  // Activity handbook PDF is large (~20MB); allow a longer wait on mobile networks.
+  HANDBOOK_URL: 'assets/achievement-handbook.pdf',
+  HANDBOOK_LOADING_TIMEOUT_MS: 90000,
   // How often a logged-in participant refreshes their presence document.
   PRESENCE_HEARTBEAT_MS: 45000,
   // last_seen newer than this counts as currently online on the dashboard.
@@ -700,6 +703,7 @@ const DOM = {};
 
 function cacheDOM() {
   DOM.loadingOverlay = document.getElementById('loading-overlay');
+  DOM.loadingLabel = document.getElementById('loading-label');
   DOM.loadingPercent = document.getElementById('loading-percent');
   DOM.loadingBarFill = document.getElementById('loading-bar-fill');
   DOM.splashPercent = document.getElementById('splash-percent');
@@ -1118,6 +1122,7 @@ function showLoading(show, percent) {
     DOM.loadingOverlay.classList.add('hidden');
     DOM.loadingOverlay.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('is-loading');
+    if (DOM.loadingLabel) DOM.loadingLabel.textContent = '載入中…';
     return;
   }
 
@@ -1142,6 +1147,140 @@ function finishLoading() {
   clearLoadingSafetyTimer();
   setLoadingPercent(100);
   setTimeout(() => showLoading(false), 120);
+}
+
+let handbookBlobUrl = '';
+let handbookLoading = false;
+
+function openHandbookLoadingWindow() {
+  const win = window.open('', '_blank');
+  if (!win) return null;
+  win.document.write(`<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>載入活動手冊…</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: linear-gradient(160deg, #FFF9F2 0%, #FFE8D6 100%);
+      color: #5c4a3a;
+    }
+    .wrap { text-align: center; padding: 24px; max-width: 320px; }
+    .book { font-size: 2.5rem; line-height: 1; margin-bottom: 12px; }
+    h1 { font-size: 1.15rem; margin: 0 0 8px; font-weight: 700; }
+    p { margin: 0 0 16px; font-size: 0.95rem; opacity: 0.85; }
+    .bar { width: 100%; height: 8px; background: rgba(0,0,0,0.08); border-radius: 999px; overflow: hidden; }
+    .fill { height: 100%; width: 0%; background: linear-gradient(90deg, #F4A261, #E76F51); transition: width 0.2s ease; }
+    .pct { margin-top: 10px; font-weight: 700; font-variant-numeric: tabular-nums; color: #E76F51; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="book" aria-hidden="true">📖</div>
+    <h1>《解鎖成就》活動手冊</h1>
+    <p>正在載入，請稍候…</p>
+    <div class="bar"><div class="fill" id="handbook-fill"></div></div>
+    <div class="pct" id="handbook-pct">0%</div>
+  </div>
+</body>
+</html>`);
+  win.document.close();
+  return win;
+}
+
+function setHandbookWindowProgress(win, percent) {
+  if (!win || win.closed) return;
+  try {
+    const value = Math.max(0, Math.min(100, Math.round(percent)));
+    const fill = win.document.getElementById('handbook-fill');
+    const pct = win.document.getElementById('handbook-pct');
+    if (fill) fill.style.width = value + '%';
+    if (pct) pct.textContent = value + '%';
+  } catch (_) { /* cross-window race */ }
+}
+
+function fetchHandbookWithProgress(onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', CONFIG.HANDBOOK_URL, true);
+    xhr.responseType = 'blob';
+    xhr.onprogress = (event) => {
+      if (!event.lengthComputable || !event.total) return;
+      onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300 && xhr.response) {
+        onProgress(100);
+        resolve(xhr.response);
+      } else {
+        reject(new Error('無法載入活動手冊（' + xhr.status + '）'));
+      }
+    };
+    xhr.onerror = () => reject(new Error('網絡錯誤，無法載入活動手冊'));
+    xhr.ontimeout = () => reject(new Error('載入逾時，請稍後再試'));
+    xhr.timeout = CONFIG.HANDBOOK_LOADING_TIMEOUT_MS;
+    xhr.send();
+  });
+}
+
+async function ensureHandbookBlobUrl(onProgress) {
+  if (handbookBlobUrl) {
+    onProgress(100);
+    return handbookBlobUrl;
+  }
+  const blob = await fetchHandbookWithProgress(onProgress);
+  const pdfBlob = blob.type === 'application/pdf'
+    ? blob
+    : new Blob([blob], { type: 'application/pdf' });
+  handbookBlobUrl = URL.createObjectURL(pdfBlob);
+  return handbookBlobUrl;
+}
+
+async function handleOpenHandbook() {
+  if (handbookLoading) return;
+  handbookLoading = true;
+
+  const win = openHandbookLoadingWindow();
+  clearLoadingSafetyTimer();
+  stopLoadingTick();
+  if (DOM.loadingLabel) DOM.loadingLabel.textContent = '正在開啟活動手冊…';
+  DOM.loadingOverlay.classList.remove('hidden');
+  DOM.loadingOverlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('is-loading');
+  setLoadingPercent(0);
+
+  let safetyTimer = setTimeout(() => {
+    if (handbookLoading) {
+      showToast('手冊較大，仍在載入中…', 'info');
+    }
+  }, 20000);
+
+  try {
+    const url = await ensureHandbookBlobUrl((pct) => {
+      setLoadingPercent(pct);
+      setHandbookWindowProgress(win, pct);
+    });
+    setLoadingPercent(100);
+    setHandbookWindowProgress(win, 100);
+    if (win && !win.closed) {
+      win.location.replace(url);
+    } else {
+      const opened = window.open(url, '_blank');
+      if (!opened) showToast('請允許彈出視窗以開啟活動手冊', 'error');
+    }
+    setTimeout(() => showLoading(false), 160);
+  } catch (err) {
+    if (win && !win.closed) win.close();
+    showLoading(false);
+    showToast(err?.message || '無法開啟活動手冊', 'error');
+  } finally {
+    clearTimeout(safetyTimer);
+    handbookLoading = false;
+  }
 }
 
 function showToast(message, type = 'info') {
@@ -7951,6 +8090,9 @@ function bindEvents() {
   }
   document.querySelectorAll('.page-help-btn').forEach(btn => {
     btn.addEventListener('click', handlePageHelpClick);
+  });
+  document.querySelectorAll('.handbook-btn').forEach(btn => {
+    btn.addEventListener('click', handleOpenHandbook);
   });
 
   if (DOM.voteMatrixModalClose) {

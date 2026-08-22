@@ -43,7 +43,7 @@
   <!-- Global Loading Overlay -->
   <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="載入中">
     <div class="skeleton-pulse"></div>
-    <p class="loading-text">載入中… <span id="loading-percent" class="loading-percent">0%</span></p>
+    <p class="loading-text"><span id="loading-label">載入中…</span> <span id="loading-percent" class="loading-percent">0%</span></p>
     <div class="loading-bar" aria-hidden="true">
       <div id="loading-bar-fill" class="loading-bar-fill"></div>
     </div>
@@ -144,12 +144,12 @@
         <p id="participant-subgreeting" class="greeting-sub">Just For You <span class="app-icon app-icon-heart inline-icon" aria-hidden="true"></span></p>
       </div>
       <div class="app-header-actions">
-        <a id="participant-handbook-btn" class="btn btn-ghost btn-icon handbook-btn hidden" href="assets/achievement-handbook.pdf" target="_blank" rel="noopener noreferrer" aria-label="開啟活動手冊" title="《解鎖成就》活動手冊">
+        <button type="button" id="participant-handbook-btn" class="btn btn-ghost btn-icon handbook-btn hidden" aria-label="開啟活動手冊" title="《解鎖成就》活動手冊">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
           </svg>
-        </a>
+        </button>
         <button type="button" class="btn btn-ghost btn-icon page-help-btn" aria-label="本頁說明" title="本頁說明">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9"/>
@@ -799,12 +799,12 @@
         <span id="admin-queue-pill" class="badge badge-queue hidden" role="status" aria-live="polite">排隊 0</span>
       </div>
       <div class="app-header-actions">
-        <a id="admin-handbook-btn" class="btn btn-ghost btn-icon handbook-btn" href="assets/achievement-handbook.pdf" target="_blank" rel="noopener noreferrer" aria-label="開啟活動手冊" title="《解鎖成就》活動手冊">
+        <button type="button" id="admin-handbook-btn" class="btn btn-ghost btn-icon handbook-btn" aria-label="開啟活動手冊" title="《解鎖成就》活動手冊">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
           </svg>
-        </a>
+        </button>
         <button type="button" class="btn btn-ghost btn-icon page-help-btn" aria-label="本頁說明" title="本頁說明">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9"/>
