@@ -41,7 +41,8 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260818v1';
+import { ADMIN_EMAIL, FCM_VAPID_KEY, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260822v3';
+import { getMessaging, getToken, deleteToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-messaging.js';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1564,4 +1565,141 @@ export function subscribePresence(onData, onError) {
 export async function fetchPresence() {
   const snapshot = await getDocs(collection(db, 'presence'));
   return snapshot.docs.map(presenceFromDoc);
+}
+
+// ─── Web Push (FCM) ─────────────────────────────────────────────────────────
+
+const PUSH_TOKEN_LIMIT = 8;
+let messagingInstance = null;
+let messagingInitPromise = null;
+
+export async function fetchPushVapidKey() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'push'));
+    const fromDoc = String((snap.data() || {}).vapidKey || '').trim();
+    if (fromDoc) return fromDoc;
+  } catch (_) { /* permission or offline */ }
+  return String(FCM_VAPID_KEY || '').trim();
+}
+
+export async function setPushVapidKey(vapidKey) {
+  const key = String(vapidKey || '').trim();
+  if (!key) throw new Error('VAPID 金鑰不可空白');
+  await setDoc(doc(db, 'config', 'push'), {
+    vapidKey: key,
+    updated_at: serverTimestamp()
+  }, { merge: true });
+  return key;
+}
+
+async function getMessagingSafe() {
+  if (messagingInstance) return messagingInstance;
+  if (messagingInitPromise) return messagingInitPromise;
+  messagingInitPromise = (async () => {
+    if (typeof window === 'undefined') return null;
+    if (!(await isSupported())) return null;
+    messagingInstance = getMessaging(app);
+    return messagingInstance;
+  })();
+  return messagingInitPromise;
+}
+
+export async function isPushSupported() {
+  try {
+    if (typeof window === 'undefined') return false;
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return false;
+    return await isSupported();
+  } catch (_) {
+    return false;
+  }
+}
+
+export function getNotificationPermission() {
+  if (typeof Notification === 'undefined') return 'unsupported';
+  return Notification.permission;
+}
+
+export async function savePushToken(participantId, token) {
+  const id = String(participantId || '').trim().toUpperCase();
+  const nextToken = String(token || '').trim();
+  if (!id || !nextToken) return;
+  const ref = doc(db, 'push_tokens', id);
+  const snap = await getDoc(ref);
+  const existing = snap.exists() && Array.isArray(snap.data().tokens)
+    ? snap.data().tokens.map(t => String(t || '').trim()).filter(Boolean)
+    : [];
+  const tokens = [nextToken, ...existing.filter(t => t !== nextToken)].slice(0, PUSH_TOKEN_LIMIT);
+  await setDoc(ref, {
+    participant_id: id,
+    tokens,
+    updated_at: serverTimestamp()
+  }, { merge: true });
+}
+
+export async function removePushToken(participantId, token) {
+  const id = String(participantId || '').trim().toUpperCase();
+  const drop = String(token || '').trim();
+  if (!id) return;
+  const ref = doc(db, 'push_tokens', id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const existing = Array.isArray(snap.data().tokens) ? snap.data().tokens : [];
+  const tokens = drop
+    ? existing.filter(t => t !== drop)
+    : [];
+  await setDoc(ref, {
+    participant_id: id,
+    tokens,
+    updated_at: serverTimestamp()
+  }, { merge: true });
+}
+
+/**
+ * Ask for notification permission, register FCM token, store under push_tokens/{id}.
+ * Returns { ok, token, reason }.
+ */
+export async function enablePushNotifications(participantId, serviceWorkerRegistration) {
+  const id = String(participantId || '').trim().toUpperCase();
+  if (!id) return { ok: false, reason: 'missing-id' };
+  if (!(await isPushSupported())) return { ok: false, reason: 'unsupported' };
+
+  const vapidKey = await fetchPushVapidKey();
+  if (!vapidKey) return { ok: false, reason: 'missing-vapid' };
+
+  if (Notification.permission === 'denied') return { ok: false, reason: 'denied' };
+  if (Notification.permission !== 'granted') {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return { ok: false, reason: perm === 'denied' ? 'denied' : 'dismissed' };
+  }
+
+  const messaging = await getMessagingSafe();
+  if (!messaging) return { ok: false, reason: 'unsupported' };
+
+  const registration = serviceWorkerRegistration
+    || await navigator.serviceWorker.ready;
+  const token = await getToken(messaging, {
+    vapidKey,
+    serviceWorkerRegistration: registration
+  });
+  if (!token) return { ok: false, reason: 'no-token' };
+  await savePushToken(id, token);
+  return { ok: true, token };
+}
+
+export async function disablePushNotifications(participantId, token) {
+  const id = String(participantId || '').trim().toUpperCase();
+  try {
+    const messaging = await getMessagingSafe();
+    if (messaging) await deleteToken(messaging);
+  } catch (_) { /* ignore */ }
+  await removePushToken(id, token || '');
+}
+
+/** Foreground FCM handler (app open). */
+export async function listenForegroundPush(onPayload) {
+  const messaging = await getMessagingSafe();
+  if (!messaging) return () => {};
+  return onMessage(messaging, payload => {
+    if (typeof onPayload === 'function') onPayload(payload);
+  });
 }

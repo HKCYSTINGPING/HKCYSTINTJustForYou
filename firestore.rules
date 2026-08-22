@@ -305,6 +305,23 @@ service cloud.firestore {
         );
     }
 
+    // FCM device tokens for Web Push (new message / published trophy results).
+    match /push_tokens/{participantId} {
+      allow read: if isAdmin() || (signedIn() && pid() == participantId);
+      allow create, update: if signedIn()
+        && pid() == participantId
+        && request.resource.data.participant_id == participantId
+        && request.resource.data.tokens is list
+        && request.resource.data.tokens.size() <= 8;
+      allow delete: if isAdmin() || (signedIn() && pid() == participantId);
+    }
+
+    // Runtime Web Push config (vapidKey) — readable by signed-in clients.
+    match /config/push {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
     // Anything not named above is closed.
     match /{document=**} {
       allow read, write: if false;

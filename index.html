@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260822v2">
+  <link rel="stylesheet" href="styles.css?v=20260822v3">
 </head>
 <body>
 
@@ -369,6 +369,21 @@
             <span class="btn-label">更新密碼</span>
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
+        </div>
+        <div class="card" data-tour="profile-push">
+          <h3 class="section-title">推送通知</h3>
+          <p class="form-hint">開啟後，收到新匿名留言或獎項結果公布時會收到通知（iPhone 請先加到主畫面）。</p>
+          <p id="profile-push-status" class="form-hint">狀態：檢查中…</p>
+          <div class="toggle-group">
+            <button type="button" id="profile-push-enable" class="btn btn-primary btn-sm btn-progress">
+              <span class="btn-label">開啟通知</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+            <button type="button" id="profile-push-disable" class="btn btn-secondary btn-sm btn-progress">
+              <span class="btn-label">關閉通知</span>
+              <span class="btn-progress-bar" aria-hidden="true"></span>
+            </button>
+          </div>
         </div>
         <div id="profile-stats" class="profile-stats" data-tour="profile-stats"></div>
         <button type="button" id="participant-logout" class="btn btn-danger btn-lg" data-tour="profile-logout">登出</button>
@@ -960,6 +975,19 @@
           </div>
         </div>
 
+        <div class="card" data-tour="admin-push-config">
+          <h3 class="section-title">推送通知（Web Push）</h3>
+          <p class="form-hint">到 Firebase Console → Project settings → Cloud Messaging → Web Push certificates 產生金鑰，貼上後儲存。部署 Cloud Functions 後，新留言同公布結果會推送。</p>
+          <div class="form-group">
+            <label for="admin-vapid-key">VAPID 金鑰</label>
+            <input type="text" id="admin-vapid-key" class="input-field" autocomplete="off" placeholder="BPxxxxxxxx…">
+          </div>
+          <button type="button" id="admin-save-vapid" class="btn btn-primary btn-sm btn-progress">
+            <span class="btn-label">儲存推送金鑰</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+        </div>
+
         <div class="card" data-tour="admin-group-overrides">
           <h3 class="section-title">各組狀態（Staff 覆寫）</h3>
           <p class="form-hint">可改組名、查看 Staff 覆寫狀態，並獨立控制該組留言／投票。將 Staff（如 WILL）分到 GROUP_1…6 後，對方亦可改組名同監控組內留言。</p>
@@ -1048,6 +1076,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260822v2"></script>
+  <script type="module" src="app.js?v=20260822v3"></script>
 </body>
 </html>

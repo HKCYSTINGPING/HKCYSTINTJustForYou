@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v2';
+import * as data from './firebase-data.js?v=20260822v3';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -311,6 +311,12 @@ const ONBOARDING_STEPS = {
       prepare: 'profile',
       title: '修改密碼',
       body: '可以喺呢度改登入密碼；改完之後請用新密碼再登入。'
+    },
+    {
+      target: '[data-tour="profile-push"]',
+      prepare: 'profile',
+      title: '推送通知',
+      body: '開啟後，收到新匿名留言或獎項結果公布時會收到通知。iPhone 請先加到主畫面。'
     },
     {
       target: '[data-tour="profile-stats"]',
@@ -624,6 +630,12 @@ const ONBOARDING_STEPS = {
       body: '一鍵開／關全部組留言。Staff 仍可覆寫自己負責嗰組。'
     },
     {
+      target: '[data-tour="admin-push-config"]',
+      prepare: 'settings',
+      title: '推送通知設定',
+      body: '貼上 Firebase Web Push VAPID 金鑰並儲存；另需部署 Cloud Functions，先至可以喺 App 關閉時推送新留言同獎項結果。'
+    },
+    {
       target: '[data-tour="admin-group-overrides"]',
       prepare: 'settings',
       title: '各組狀態',
@@ -660,8 +672,12 @@ const onboardingState = {
   skipDirection: 1
 };
 
-const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v3';
+const ONBOARDING_SEEN_KEY = 'tnit_onboarding_seen_v4';
 let deferredA2HSPrompt = null;
+let serviceWorkerRegistration = null;
+let pushForegroundUnsub = null;
+let knownInboxIds = new Set();
+let pushEnabledLocally = false;
 let a2hsQueued = false;
 
 // ─── DOM References ─────────────────────────────────────────────────────────
@@ -792,6 +808,9 @@ function cacheDOM() {
   DOM.profileSaveName = document.getElementById('profile-save-name');
   DOM.profilePassword = document.getElementById('profile-password');
   DOM.profileSavePassword = document.getElementById('profile-save-password');
+  DOM.profilePushStatus = document.getElementById('profile-push-status');
+  DOM.profilePushEnable = document.getElementById('profile-push-enable');
+  DOM.profilePushDisable = document.getElementById('profile-push-disable');
   DOM.profileStats = document.getElementById('profile-stats');
   DOM.homeStaffCard = document.getElementById('home-staff-card');
   DOM.staffFacilitatorPanel = document.getElementById('staff-facilitator-panel');
@@ -869,6 +888,8 @@ function cacheDOM() {
   DOM.adminMsgEmpty = document.getElementById('admin-msg-empty');
   DOM.adminEnableMsg = document.getElementById('admin-enable-msg');
   DOM.adminDisableMsg = document.getElementById('admin-disable-msg');
+  DOM.adminVapidKey = document.getElementById('admin-vapid-key');
+  DOM.adminSaveVapid = document.getElementById('admin-save-vapid');
   DOM.adminMessagesPanel = document.getElementById('admin-messages-panel');
   DOM.adminMain = document.querySelector('#screen-admin .app-main');
   DOM.adminTrophyPanel = document.getElementById('admin-trophy-panel');
@@ -2405,6 +2426,18 @@ async function startParticipantSubscriptions() {
     subscribeAndWait(
       (cb, err) => data.subscribeInbox(pid, cb, err),
       messages => {
+        const ids = new Set((messages || []).map(m => m.message_id));
+        if (knownInboxIds.size) {
+          const fresh = (messages || []).filter(m => m.message_id && !knownInboxIds.has(m.message_id));
+          if (fresh.length) {
+            showLocalPushNotification(
+              '你有新嘅匿名留言',
+              '入 Inbox 睇下對方寫咗咩。',
+              'tnit-message-local'
+            );
+          }
+        }
+        knownInboxIds = ids;
         state.inboxMessages = messages;
         renderInbox();
         renderProfile();
@@ -2425,9 +2458,15 @@ async function startParticipantSubscriptions() {
       config => {
         const prevStatus = state.votingConfig.voting_status;
         state.votingConfig = config;
-        // Admin global changes clear every group override — drop stale local ones too.
         if (prevStatus !== config.voting_status) {
           clearLocalGroupVotingOverrides();
+        }
+        if (prevStatus !== 'PUBLISHED' && config.voting_status === 'PUBLISHED') {
+          showLocalPushNotification(
+            '獎項結果出咗喇',
+            '入獎項頁睇你嘅結果。',
+            'tnit-trophy-local'
+          );
         }
         applyEffectiveVotingToTrophyState();
       },
@@ -2634,6 +2673,9 @@ async function enterParticipantDashboard() {
     recalcTrophyProgress();
     renderTrophyTeammates();
     renderProfile();
+    renderPushStatus();
+    applyLaunchDeepLink();
+    setupPushAfterLogin().catch(() => {});
   } catch (err) {
     showToast('載入資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
@@ -2674,6 +2716,7 @@ function renderProfile() {
     <div class="profile-stat"><div class="profile-stat-value">${escapeHtml(formatGroupLabel(p.group_id || '—'))}</div><div class="profile-stat-label">分組</div></div>
     <div class="profile-stat"><div class="profile-stat-value">${votingLabel}</div><div class="profile-stat-label">投票狀態</div></div>
   `;
+  renderPushStatus();
   renderStaffFacilitatorPanel();
 }
 
@@ -4140,8 +4183,156 @@ function initAddToHome() {
     if (isAddToHomeOpen()) closeAddToHomePrompt({ resumeOnboarding: false });
   });
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .then(reg => { serviceWorkerRegistration = reg; })
+      .catch(() => {});
   }
+}
+
+function pushStatusLabel() {
+  const perm = data.getNotificationPermission();
+  if (perm === 'unsupported') return '此裝置／瀏覽器唔支援推送通知';
+  if (perm === 'denied') return '狀態：已封鎖（請到系統設定重新允許）';
+  if (pushEnabledLocally && perm === 'granted') return '狀態：已開啟';
+  if (perm === 'granted') return '狀態：已允許，但未註冊（可再撳開啟）';
+  return '狀態：未開啟';
+}
+
+function renderPushStatus() {
+  if (DOM.profilePushStatus) DOM.profilePushStatus.textContent = pushStatusLabel();
+  const canUse = data.getNotificationPermission() !== 'unsupported';
+  if (DOM.profilePushEnable) DOM.profilePushEnable.disabled = !canUse;
+  if (DOM.profilePushDisable) DOM.profilePushDisable.disabled = !canUse;
+}
+
+function showLocalPushNotification(title, body, tag = 'tnit-local') {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  if (document.visibilityState === 'visible') return;
+  try {
+    const n = new Notification(title, {
+      body,
+      icon: 'assets/heart.png',
+      tag,
+      renotify: true
+    });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch (_) { /* ignore */ }
+}
+
+async function setupPushAfterLogin() {
+  renderPushStatus();
+  if (!(await data.isPushSupported())) return;
+  if (data.getNotificationPermission() !== 'granted') return;
+  try {
+    const result = await data.enablePushNotifications(
+      state.participantId,
+      serviceWorkerRegistration || await navigator.serviceWorker.ready
+    );
+    pushEnabledLocally = !!result.ok;
+    if (result.ok) {
+      if (pushForegroundUnsub) {
+        try { pushForegroundUnsub(); } catch (_) { /* ignore */ }
+      }
+      pushForegroundUnsub = await data.listenForegroundPush(payload => {
+        const title = payload.notification?.title || payload.data?.title || 'TNIT';
+        const body = payload.notification?.body || payload.data?.body || '';
+        showToast(body ? `${title}：${body}` : title, 'info');
+        const type = payload.data?.type || '';
+        if (type === 'new_message') switchParticipantView('inbox');
+        if (type === 'trophy_published') switchParticipantView('trophy');
+      });
+    }
+  } catch (_) {
+    pushEnabledLocally = false;
+  }
+  renderPushStatus();
+}
+
+async function handleEnablePush() {
+  if (!DOM.profilePushEnable) return;
+  await runProgressButton(DOM.profilePushEnable, (async () => {
+    try {
+      const result = await data.enablePushNotifications(
+        state.participantId,
+        serviceWorkerRegistration || await navigator.serviceWorker.ready
+      );
+      if (result.ok) {
+        pushEnabledLocally = true;
+        showToast('推送通知已開啟', 'success');
+        await setupPushAfterLogin();
+      } else if (result.reason === 'missing-vapid') {
+        showToast('管理員尚未設定推送金鑰（Settings → 推送通知）', 'error');
+      } else if (result.reason === 'denied') {
+        showToast('通知已被封鎖，請到系統設定開啟', 'error');
+      } else if (result.reason === 'unsupported') {
+        showToast('此裝置唔支援推送通知', 'info');
+      } else {
+        showToast('未能開啟通知', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || data.describeFirestoreError(err), 'error');
+    } finally {
+      renderPushStatus();
+    }
+  })());
+}
+
+async function handleDisablePush() {
+  if (!DOM.profilePushDisable) return;
+  await runProgressButton(DOM.profilePushDisable, (async () => {
+    try {
+      await data.disablePushNotifications(state.participantId);
+      pushEnabledLocally = false;
+      if (pushForegroundUnsub) {
+        try { pushForegroundUnsub(); } catch (_) { /* ignore */ }
+        pushForegroundUnsub = null;
+      }
+      showToast('已關閉推送通知', 'info');
+    } catch (err) {
+      showToast(err.message || data.describeFirestoreError(err), 'error');
+    } finally {
+      renderPushStatus();
+    }
+  })());
+}
+
+async function loadAdminPushConfig() {
+  if (!DOM.adminVapidKey) return;
+  try {
+    const key = await data.fetchPushVapidKey();
+    if (document.activeElement !== DOM.adminVapidKey) {
+      DOM.adminVapidKey.value = key || '';
+    }
+  } catch (_) { /* ignore */ }
+}
+
+async function handleAdminSaveVapid() {
+  if (!DOM.adminSaveVapid || !DOM.adminVapidKey) return;
+  const key = String(DOM.adminVapidKey.value || '').trim();
+  if (!key) {
+    showToast('請貼上 VAPID 金鑰', 'error');
+    return;
+  }
+  await runProgressButton(DOM.adminSaveVapid, (async () => {
+    try {
+      await data.setPushVapidKey(key);
+      showToast('推送金鑰已儲存', 'success');
+    } catch (err) {
+      showToast(err.message || data.describeFirestoreError(err), 'error');
+    }
+  })());
+}
+
+function applyLaunchDeepLink() {
+  const hash = String(location.hash || '').replace(/^#/, '').toLowerCase();
+  if (!hash) return;
+  if (hash === 'inbox') switchParticipantView('inbox');
+  else if (hash === 'trophy' || hash === 'trophy-results') switchParticipantView('trophy');
+  else if (hash === 'profile') switchParticipantView('profile');
+  else if (hash === 'send') switchParticipantView('send');
 }
 
 function maybeShowPageOnboarding({ force = false } = {}) {
@@ -7110,6 +7301,7 @@ function switchAdminTab(tabName) {
     refreshAdminTrophyViews();
   } else if (tabName === 'settings') {
     initAdminParticipantsPanel();
+    loadAdminPushConfig();
     if (DOM.adminParticipantCount) {
       DOM.adminParticipantCount.textContent = String(state.participants.length);
     }
@@ -7317,6 +7509,12 @@ function bindEvents() {
   if (DOM.profileSavePassword) {
     DOM.profileSavePassword.addEventListener('click', handleSavePassword);
   }
+  if (DOM.profilePushEnable) {
+    DOM.profilePushEnable.addEventListener('click', handleEnablePush);
+  }
+  if (DOM.profilePushDisable) {
+    DOM.profilePushDisable.addEventListener('click', handleDisablePush);
+  }
   document.querySelectorAll('.staff-result-tab').forEach(btn => {
     btn.addEventListener('click', () => switchStaffResultTab(btn.dataset.staffResultTab));
   });
@@ -7383,6 +7581,9 @@ function bindEvents() {
 
   DOM.adminEnableMsg.addEventListener('click', () => handleSetMessagingStatus('OPEN', DOM.adminEnableMsg));
   DOM.adminDisableMsg.addEventListener('click', () => handleSetMessagingStatus('CLOSE', DOM.adminDisableMsg));
+  if (DOM.adminSaveVapid) {
+    DOM.adminSaveVapid.addEventListener('click', handleAdminSaveVapid);
+  }
 
   DOM.adminOpenVoting.addEventListener('click', () => handleAdminVotingAction('VOTING_OPEN', DOM.adminOpenVoting));
   DOM.adminCloseVoting.addEventListener('click', () => handleAdminVotingAction('VOTING_CLOSED', DOM.adminCloseVoting));

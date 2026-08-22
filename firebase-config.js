@@ -13,6 +13,13 @@ export const firebaseConfig = {
   appId: '1:649245917670:web:dce565a213bade09fc1627',
 };
 
+/**
+ * Web Push VAPID key from Firebase Console → Project settings → Cloud Messaging
+ * → Web Push certificates. Also overridable via Firestore config/push.vapidKey.
+ * Leave empty until generated; client will refuse to register tokens without it.
+ */
+export const FCM_VAPID_KEY = '';
+
 // Participants log in as 1A / 1A, which maps to 1a@tnit.org (and still
 // 1a@tnit.local for accounts created before the domain switch).
 export const EMAIL_DOMAIN = 'tnit.org';
