@@ -229,6 +229,7 @@
             <label for="send-content">留言內容 <span id="char-counter" class="char-counter">0/300</span></label>
             <textarea id="send-content" class="input-field" maxlength="300" rows="6" placeholder="例如：今日你……令我好記得，因為……我學到／感受到……"></textarea>
             <p id="bad-words-warning" class="form-hint form-hint-danger hidden">內容包含不適當用語，請修改後再發送</p>
+            <p id="emoji-warning" class="form-hint form-hint-danger hidden">內容不可包含 emoji，請刪除後才可發送</p>
           </div>
           <button type="submit" id="send-submit" class="btn btn-primary btn-lg btn-progress" data-tour="send-submit">
             <span class="btn-label">發送留言</span>
@@ -359,6 +360,7 @@
           <div class="form-group">
             <label for="profile-display-name">我的名稱</label>
             <input type="text" id="profile-display-name" class="input-field" maxlength="40" autocomplete="nickname" placeholder="例如：小明">
+            <p id="profile-emoji-warning" class="form-hint form-hint-danger hidden">內容不可包含 emoji，請刪除後才可提交</p>
           </div>
           <button type="button" id="profile-save-name" class="btn btn-primary btn-sm btn-progress">
             <span class="btn-label">儲存名稱</span>
@@ -436,6 +438,7 @@
               <div class="form-group">
                 <label for="staff-group-name">組別名稱</label>
                 <input type="text" id="staff-group-name" class="input-field" maxlength="40" placeholder="例如：火熱第一組">
+                <p id="staff-group-emoji-warning" class="form-hint form-hint-danger hidden">內容不可包含 emoji，請刪除後才可提交</p>
               </div>
               <button type="button" id="staff-save-group-name" class="btn btn-primary btn-sm btn-progress">
                 <span class="btn-label">儲存組名</span>
@@ -700,6 +703,7 @@
       <div class="form-group">
         <label for="group-rename-input">顯示名稱</label>
         <input type="text" id="group-rename-input" class="input-field" maxlength="40" autocomplete="off" placeholder="例如：火熱第一組（留空還原預設）">
+        <p id="group-rename-emoji-warning" class="form-hint form-hint-danger hidden">內容不可包含 emoji，請刪除後才可提交</p>
       </div>
       <div class="onboarding-actions roster-edit-actions">
         <button type="button" id="group-rename-cancel" class="btn btn-secondary btn-sm">取消</button>
@@ -722,6 +726,7 @@
       <div class="form-group">
         <label for="roster-edit-name">顯示名稱</label>
         <input type="text" id="roster-edit-name" class="input-field" maxlength="40" autocomplete="off" placeholder="可留空">
+        <p id="roster-edit-emoji-warning" class="form-hint form-hint-danger hidden">內容不可包含 emoji，請刪除後才可提交</p>
       </div>
       <div class="form-group">
         <label for="roster-edit-password">密碼</label>
@@ -760,6 +765,7 @@
       <div class="form-group">
         <label for="roster-add-name">顯示名稱</label>
         <input type="text" id="roster-add-name" class="input-field" maxlength="40" autocomplete="off" placeholder="可留空">
+        <p id="roster-add-emoji-warning" class="form-hint form-hint-danger hidden">內容不可包含 emoji，請刪除後才可提交</p>
       </div>
       <div class="form-group">
         <label for="roster-add-password">密碼</label>

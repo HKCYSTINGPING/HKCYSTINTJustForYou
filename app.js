@@ -731,6 +731,7 @@ function cacheDOM() {
   DOM.sendClosedState = document.getElementById('send-closed-state');
   DOM.charCounter = document.getElementById('char-counter');
   DOM.badWordsWarning = document.getElementById('bad-words-warning');
+  DOM.emojiWarning = document.getElementById('emoji-warning');
 
   DOM.inboxList = document.getElementById('inbox-list');
   DOM.inboxEmpty = document.getElementById('inbox-empty');
@@ -812,6 +813,7 @@ function cacheDOM() {
   DOM.profileGroup = document.getElementById('profile-group');
   DOM.profileLoginId = document.getElementById('profile-login-id');
   DOM.profileDisplayName = document.getElementById('profile-display-name');
+  DOM.profileEmojiWarning = document.getElementById('profile-emoji-warning');
   DOM.profileSaveName = document.getElementById('profile-save-name');
   DOM.profilePassword = document.getElementById('profile-password');
   DOM.profileSavePassword = document.getElementById('profile-save-password');
@@ -825,6 +827,7 @@ function cacheDOM() {
   DOM.staffGroupTitle = document.getElementById('staff-group-title');
   DOM.staffGroupStatus = document.getElementById('staff-group-status');
   DOM.staffGroupNameInput = document.getElementById('staff-group-name');
+  DOM.staffGroupEmojiWarning = document.getElementById('staff-group-emoji-warning');
   DOM.staffSaveGroupName = document.getElementById('staff-save-group-name');
   DOM.staffEnableMsg = document.getElementById('staff-enable-msg');
   DOM.staffDisableMsg = document.getElementById('staff-disable-msg');
@@ -861,12 +864,14 @@ function cacheDOM() {
   DOM.groupRenameSubtitle = document.getElementById('group-rename-subtitle');
   DOM.groupRenameInput = document.getElementById('group-rename-input');
   DOM.groupRenameCancel = document.getElementById('group-rename-cancel');
+  DOM.groupRenameEmojiWarning = document.getElementById('group-rename-emoji-warning');
   DOM.groupRenameSave = document.getElementById('group-rename-save');
   DOM.rosterEditModal = document.getElementById('roster-edit-modal');
   DOM.rosterEditTitle = document.getElementById('roster-edit-title');
   DOM.rosterEditSubtitle = document.getElementById('roster-edit-subtitle');
   DOM.rosterEditId = document.getElementById('roster-edit-id');
   DOM.rosterEditName = document.getElementById('roster-edit-name');
+  DOM.rosterEditEmojiWarning = document.getElementById('roster-edit-emoji-warning');
   DOM.rosterEditPassword = document.getElementById('roster-edit-password');
   DOM.rosterEditGroup = document.getElementById('roster-edit-group');
   DOM.rosterEditSave = document.getElementById('roster-edit-save');
@@ -877,6 +882,7 @@ function cacheDOM() {
   DOM.rosterAddIdWrap = document.getElementById('roster-add-id-wrap');
   DOM.rosterAddId = document.getElementById('roster-add-id');
   DOM.rosterAddName = document.getElementById('roster-add-name');
+  DOM.rosterAddEmojiWarning = document.getElementById('roster-add-emoji-warning');
   DOM.rosterAddPassword = document.getElementById('roster-add-password');
   DOM.rosterAddGroup = document.getElementById('roster-add-group');
   DOM.rosterAddSave = document.getElementById('roster-add-save');
@@ -1305,57 +1311,95 @@ function containsBadWords(text) {
   return BAD_WORDS.some(word => lower.includes(word.toLowerCase()));
 }
 
-function containsEmoji(text) {
-  return /\p{Extended_Pictographic}/u.test(String(text || ''));
+function onBeforeEmojiInput(e) {
+  const chunk = e.data;
+  if (chunk && data.containsEmoji(chunk)) e.preventDefault();
 }
 
-function stripEmojis(text) {
-  return String(text || '')
-    .replace(/\p{Extended_Pictographic}/gu, '')
-    .replace(/\u200D/g, '')
-    .replace(/\uFE0F/g, '');
-}
-
-function blockIfEmoji(text, label = '內容') {
-  if (!containsEmoji(text)) return false;
-  showToast(`${label}不可包含 emoji`, 'error');
-  return true;
-}
-
-function bindEmojiFreeInput(el) {
-  if (!el || el.dataset.emojiFreeBound === '1') return;
-  el.dataset.emojiFreeBound = '1';
-  const scrub = () => {
-    const raw = el.value;
-    const cleaned = stripEmojis(raw);
-    if (cleaned === raw) return;
-    const pos = el.selectionStart;
-    el.value = cleaned;
-    if (typeof pos === 'number') {
-      const next = Math.max(0, pos - (raw.length - cleaned.length));
-      try { el.setSelectionRange(next, next); } catch (_) {}
-    }
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+function installEmojiGuard(input, { warningEl, onBlockedChange } = {}) {
+  if (!input || input.dataset.emojiGuard) return;
+  input.dataset.emojiGuard = '1';
+  const sync = () => {
+    const blocked = data.containsEmoji(input.value);
+    if (warningEl) warningEl.classList.toggle('hidden', !blocked);
+    if (onBlockedChange) onBlockedChange(blocked);
+    return blocked;
   };
-  el.addEventListener('input', scrub);
-  el.addEventListener('paste', (e) => {
-    e.preventDefault();
-    const paste = stripEmojis(e.clipboardData?.getData('text') || '');
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    let nextValue = el.value.slice(0, start) + paste + el.value.slice(end);
-    if (el.maxLength > 0) nextValue = nextValue.slice(0, el.maxLength);
-    el.value = nextValue;
-    const cursor = Math.min(start + paste.length, el.value.length);
-    try { el.setSelectionRange(cursor, cursor); } catch (_) {}
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+  input.addEventListener('beforeinput', onBeforeEmojiInput);
+  input.addEventListener('input', sync);
+  sync();
+}
+
+function attachSummaryEmojiGuards(container) {
+  if (!container) return;
+  container.querySelectorAll('.summary-rename').forEach(block => {
+    const nameInput = block.querySelector('.summary-rename-input');
+    const descInput = block.querySelector('.summary-desc-input');
+    const saveBtn = block.querySelector('.summary-rename-save');
+    let warning = block.querySelector('.summary-emoji-warning');
+    if (!warning) {
+      warning = document.createElement('p');
+      warning.className = 'form-hint form-hint-danger summary-emoji-warning hidden';
+      warning.textContent = data.EMOJI_NOT_ALLOWED_MESSAGE;
+      block.querySelector('.summary-rename-actions')?.before(warning);
+    }
+    const sync = () => {
+      const blocked = data.containsEmoji(nameInput?.value) || data.containsEmoji(descInput?.value);
+      warning.classList.toggle('hidden', !blocked);
+      if (saveBtn) saveBtn.disabled = blocked;
+    };
+    [nameInput, descInput].forEach(el => {
+      if (!el || el.dataset.emojiGuard) return;
+      el.dataset.emojiGuard = '1';
+      el.addEventListener('beforeinput', onBeforeEmojiInput);
+      el.addEventListener('input', sync);
+    });
+    sync();
   });
 }
 
-function bindAllEmojiFreeInputs(root = document) {
-  root.querySelectorAll(
-    'textarea.input-field, input.input-field[type="text"], input.input-field[type="search"], input.input-field[type="password"]'
-  ).forEach(bindEmojiFreeInput);
+function initEmojiGuards() {
+  installEmojiGuard(DOM.sendContent, { warningEl: DOM.emojiWarning });
+  installEmojiGuard(DOM.profileDisplayName, {
+    warningEl: DOM.profileEmojiWarning,
+    onBlockedChange: (blocked) => {
+      if (DOM.profileSaveName) DOM.profileSaveName.disabled = blocked;
+    }
+  });
+  installEmojiGuard(DOM.groupRenameInput, {
+    warningEl: DOM.groupRenameEmojiWarning,
+    onBlockedChange: (blocked) => {
+      if (DOM.groupRenameSave) DOM.groupRenameSave.disabled = blocked;
+    }
+  });
+  installEmojiGuard(DOM.staffGroupNameInput, {
+    warningEl: DOM.staffGroupEmojiWarning,
+    onBlockedChange: (blocked) => {
+      if (DOM.staffSaveGroupName) DOM.staffSaveGroupName.disabled = blocked;
+    }
+  });
+  installEmojiGuard(DOM.rosterEditName, {
+    warningEl: DOM.rosterEditEmojiWarning,
+    onBlockedChange: (blocked) => {
+      if (DOM.rosterEditSave) DOM.rosterEditSave.disabled = blocked;
+    }
+  });
+  installEmojiGuard(DOM.rosterAddName, {
+    warningEl: DOM.rosterAddEmojiWarning,
+    onBlockedChange: (blocked) => {
+      if (DOM.rosterAddSave) DOM.rosterAddSave.disabled = blocked;
+    }
+  });
+}
+
+function rejectEmojiFields(entries) {
+  for (const [value, label] of entries) {
+    if (data.containsEmoji(value)) {
+      showToast(label ? `${label}不可包含 emoji，請刪除後才可提交` : data.EMOJI_NOT_ALLOWED_MESSAGE, 'error');
+      return true;
+    }
+  }
+  return false;
 }
 
 function runProgressButton(btn, promise) {
@@ -1567,7 +1611,7 @@ async function handleGroupRenameSave() {
     showToast('組名最多 40 字', 'error');
     return;
   }
-  if (blockIfEmoji(name, '組名')) return;
+  if (rejectEmojiFields([[name, '組名']])) return;
   await runProgressButton(DOM.groupRenameSave, (async () => {
     try {
       await data.setGroupDisplayName(groupId, name);
@@ -3188,15 +3232,9 @@ function updateCharCounter() {
   DOM.charCounter.classList.toggle('over', len > CONFIG.MAX_MESSAGE_LENGTH);
 
   const hasBad = containsBadWords(DOM.sendContent.value);
-  const hasEmoji = containsEmoji(DOM.sendContent.value);
-  if (DOM.badWordsWarning) {
-    DOM.badWordsWarning.classList.toggle('hidden', !hasBad && !hasEmoji);
-    if (hasBad) {
-      DOM.badWordsWarning.textContent = '內容包含不適當用語，請修改後再發送';
-    } else if (hasEmoji) {
-      DOM.badWordsWarning.textContent = '內容不可包含 emoji，請修改後再發送';
-    }
-  }
+  const hasEmoji = data.containsEmoji(DOM.sendContent.value);
+  DOM.badWordsWarning.classList.toggle('hidden', !hasBad);
+  if (DOM.emojiWarning) DOM.emojiWarning.classList.toggle('hidden', !hasEmoji);
   const empty = !DOM.sendContent.value.trim();
   const messagingOpen = isMessagingOpenForMe();
   DOM.sendSubmit.disabled = hasBad || hasEmoji || !messagingOpen || empty;
@@ -3214,8 +3252,8 @@ async function handleSendMessage(e) {
 
   if (!receiverId) { showToast('請選擇接收者', 'error'); return; }
   if (!content) { showToast('請輸入留言內容', 'error'); return; }
+  if (data.containsEmoji(content)) { showToast(data.EMOJI_NOT_ALLOWED_MESSAGE, 'error'); return; }
   if (containsBadWords(content)) { showToast('內容包含不適當用語', 'error'); return; }
-  if (containsEmoji(content)) { showToast('留言不可包含 emoji', 'error'); return; }
 
   const sender = findParticipantById(state.participantId);
   const receiver = findParticipantById(receiverId);
@@ -6207,7 +6245,7 @@ function renderTrophySummaryInto(container, items, options = {}) {
     container.querySelectorAll('.summary-rename-save').forEach(btn => {
       btn.addEventListener('click', () => onRename(btn));
     });
-    container.querySelectorAll('.summary-rename-input, .summary-desc-input').forEach(bindEmojiFreeInput);
+    attachSummaryEmojiGuards(container);
   }
 }
 
@@ -6261,6 +6299,7 @@ async function handleAdminSaveTrophyMeta(btn) {
   );
   const nextName = String(nameInput?.value || '').trim();
   const nextDesc = String(descInput?.value || '').trim();
+  if (rejectEmojiFields([[nextName, '獎項名稱'], [nextDesc, '獎項描述']])) return;
   const current = (state.adminTrophy.trophies || state.trophy.trophies || [])
     .find(t => t.trophy_id === trophyId);
   const currentDesc = resolveTrophyDescription(current || { trophy_id: trophyId, description: '' }, nextName);
@@ -6272,8 +6311,6 @@ async function handleAdminSaveTrophyMeta(btn) {
     showToast('獎項描述不可空白', 'error');
     return;
   }
-  if (blockIfEmoji(nextName, '獎項名稱')) return;
-  if (blockIfEmoji(nextDesc, '獎項描述')) return;
   if (current && current.trophy_name === nextName && currentDesc === nextDesc) {
     showToast('沒有變更', 'info');
     return;
@@ -6410,7 +6447,7 @@ async function handleSaveDisplayName() {
     showToast('顯示名稱最多 40 字', 'error');
     return;
   }
-  if (blockIfEmoji(name, '顯示名稱')) return;
+  if (rejectEmojiFields([[name, '顯示名稱']])) return;
   await runProgressButton(DOM.profileSaveName, (async () => {
     try {
       await data.updateParticipantDisplayName(pid, name);
@@ -6434,7 +6471,6 @@ async function handleSavePassword() {
     showToast('請輸入新密碼', 'error');
     return;
   }
-  if (blockIfEmoji(newPassword, '密碼')) return;
   await runProgressButton(DOM.profileSavePassword, (async () => {
     try {
       await data.updateMyPassword(newPassword);
@@ -6797,7 +6833,7 @@ async function handleStaffSaveGroupName() {
     showToast('組名最多 40 字', 'error');
     return;
   }
-  if (blockIfEmoji(name, '組名')) return;
+  if (rejectEmojiFields([[name, '組名']])) return;
   await runProgressButton(DOM.staffSaveGroupName, (async () => {
     try {
       await data.setGroupDisplayName(groupId, name);
@@ -7381,9 +7417,7 @@ async function handleRosterEditSave() {
   const name = (DOM.rosterEditName?.value || '').trim();
   const password = (DOM.rosterEditPassword?.value || '').trim();
   const groupId = (DOM.rosterEditGroup?.value || '').trim() || data.GROUP_UNASSIGNED;
-  if (blockIfEmoji(newId, '編號')) return;
-  if (blockIfEmoji(name, '名稱')) return;
-  if (blockIfEmoji(password, '密碼')) return;
+  if (rejectEmojiFields([[name, '顯示名稱']])) return;
 
   await runProgressButton(DOM.rosterEditSave, (async () => {
     try {
@@ -7453,6 +7487,7 @@ async function handleRosterAddSave() {
   const groupId = (DOM.rosterAddGroup?.value || '').trim() || data.GROUP_UNASSIGNED;
   const password = (DOM.rosterAddPassword?.value || '').trim();
   const name = (DOM.rosterAddName?.value || '').trim();
+  if (rejectEmojiFields([[name, '顯示名稱']])) return;
   let pid = '';
 
   if (kind === 'staff') {
@@ -7479,9 +7514,6 @@ async function handleRosterAddSave() {
     showToast('請輸入密碼', 'error');
     return;
   }
-  if (blockIfEmoji(name, '名稱')) return;
-  if (blockIfEmoji(password, '密碼')) return;
-  if (kind === 'staff' && blockIfEmoji(pid, '編號')) return;
 
   await runProgressButton(DOM.rosterAddSave, (async () => {
     try {
@@ -7537,7 +7569,6 @@ async function handleAdminSaveParticipant() {
   const groupId = DOM.adminEditGroup.value.trim();
   if (!groupId) { showToast('分組不能為空', 'error'); return; }
   const newPassword = (DOM.adminEditPhone?.value || '').trim();
-  if (blockIfEmoji(newPassword, '密碼')) return;
 
   await runProgressButton(DOM.adminSaveParticipant, (async () => {
     try {
@@ -8235,7 +8266,7 @@ function initPreventDoubleTapZoom() {
 
 function init() {
   cacheDOM();
-  bindAllEmojiFreeInputs();
+  initEmojiGuards();
   bindEvents();
   initAddToHome();
   initPreventDoubleTapZoom();

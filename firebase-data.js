@@ -277,6 +277,22 @@ function newestFirst(a, b) {
   return String(b.created_at || '').localeCompare(String(a.created_at || ''));
 }
 
+export const EMOJI_NOT_ALLOWED_MESSAGE = '內容不可包含 emoji，請刪除後才可提交';
+
+export function containsEmoji(text) {
+  try {
+    return /\p{Extended_Pictographic}/u.test(String(text || ''));
+  } catch (_) {
+    return false;
+  }
+}
+
+function assertNoEmoji(text, label = '內容') {
+  if (containsEmoji(text)) {
+    throw new Error(`${label}不可包含 emoji，請刪除後才可提交`);
+  }
+}
+
 function messageFromDoc(snapshot) {
   // An estimated timestamp keeps a just-sent message in the right order while
   // the server value is still in flight.
@@ -411,10 +427,7 @@ export function subscribeAllMessages(onData, onError) {
 }
 
 export function sendMessage(senderId, receiverId, content, groupMeta = {}) {
-  const body = String(content || '');
-  if (/\p{Extended_Pictographic}/u.test(body)) {
-    return Promise.reject(Object.assign(new Error('留言不可包含 emoji'), { code: 'invalid-argument' }));
-  }
+  assertNoEmoji(content, '留言');
   const ref = doc(collection(db, 'messages'));
   const senderGroupId = String(groupMeta.senderGroupId || '').trim();
   const receiverGroupId = String(groupMeta.receiverGroupId || '').trim();
@@ -553,9 +566,11 @@ export function subscribeGroups(onData, onError) {
 }
 
 export function setGroupDisplayName(groupId, displayName) {
+  const name = String(displayName || '').trim();
+  assertNoEmoji(name, '組名');
   return setDoc(doc(db, 'groups', groupId), {
     group_id: groupId,
-    display_name: String(displayName || '').trim()
+    display_name: name
   }, { merge: true });
 }
 
@@ -630,6 +645,8 @@ export async function updateTrophyMeta(trophyId, { trophyName, description } = {
   if (!name) throw new Error('獎項名稱不可空白');
   if (name.length > 40) throw new Error('獎項名稱最多 40 字');
   if (hasDescription && desc.length > 160) throw new Error('獎項描述最多 160 字');
+  assertNoEmoji(name, '獎項名稱');
+  if (hasDescription) assertNoEmoji(desc, '獎項描述');
 
   const payload = {
     trophy_id: id,
@@ -949,9 +966,11 @@ export function subscribeParticipants(onData, onError) {
 }
 
 export function updateParticipantDisplayName(participantId, displayName) {
+  const name = String(displayName || '').trim();
+  assertNoEmoji(name, '顯示名稱');
   // Only touch display_name so security rules can require hasOnly(['display_name']).
   return updateDoc(doc(db, 'participants', participantId), {
-    display_name: String(displayName || '').trim()
+    display_name: name
   });
 }
 
@@ -1405,6 +1424,7 @@ export async function createParticipant({ participantId, groupId, password, disp
   const phone = String(password || '').trim();
   if (!pid) throw new Error('請輸入參加者編號');
   if (!phone) throw new Error('請輸入密碼');
+  assertNoEmoji(String(displayName || '').trim(), '顯示名稱');
 
   const existing = await getDoc(doc(db, 'participants', pid));
   if (existing.exists()) throw new Error(`編號 ${pid} 已存在`);
