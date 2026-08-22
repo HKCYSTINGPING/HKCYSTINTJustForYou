@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v1';
+import * as data from './firebase-data.js?v=20260822v2';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -3584,7 +3584,7 @@ const TROPHY_META = {
     en: 'Stalker',
     color: '#3A3A3A',
     colorLabel: '黑色',
-    description: '紀錄全組的活動，用手機影相'
+    description: '最觀察入微的人'
   },
   T08: {
     en: 'Head Head Is Road',
@@ -3626,12 +3626,27 @@ function getTrophyMeta(trophyId, trophyName = '') {
   };
 }
 
+/** Old built-in copy superseded by TROPHY_META — ignore if still stored in Firestore. */
+const LEGACY_TROPHY_DESCRIPTIONS = {
+  T07: ['紀錄全組的活動，用手機影相']
+};
+
+function isLegacyTrophyDescription(trophyId, description) {
+  const id = normalizeTrophyId(trophyId);
+  const text = String(description || '').trim();
+  if (!text) return true;
+  const legacy = LEGACY_TROPHY_DESCRIPTIONS[id];
+  return Array.isArray(legacy) && legacy.includes(text);
+}
+
 /** Prefer Firestore description; fall back to built-in guide copy. */
 function resolveTrophyDescription(trophyOrId, trophyName = '') {
   if (trophyOrId && typeof trophyOrId === 'object') {
     const stored = String(trophyOrId.description || '').trim();
-    if (stored) return stored;
     const meta = getTrophyMeta(trophyOrId.trophy_id, trophyOrId.trophy_name || trophyName);
+    if (stored && !isLegacyTrophyDescription(meta.id || trophyOrId.trophy_id, stored)) {
+      return stored;
+    }
     return meta.description || '';
   }
   const id = trophyOrId;
@@ -3644,7 +3659,7 @@ function resolveTrophyDescription(trophyOrId, trophyName = '') {
     const hit = (list || []).find(t => t && t.trophy_id === id);
     if (hit) {
       const stored = String(hit.description || '').trim();
-      if (stored) return stored;
+      if (stored && !isLegacyTrophyDescription(id, stored)) return stored;
       break;
     }
   }
