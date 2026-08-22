@@ -335,7 +335,7 @@ const ONBOARDING_STEPS = {
       prepare: 'staff',
       staffSection: 'dashboard',
       title: 'Staff 頁面',
-      body: '同 Admin 控制台類似：上面切換 Dashboard、Messages、Voting、Results，只係範圍限於你負責嗰組。'
+      body: '同 Admin 控制台類似：上面切換 Dashboard、Messages、Voting、Results，只係範圍限於你負責嗰組。右上角書本圖示可開啟《解鎖成就》活動手冊。'
     },
     {
       target: '[data-tour="staff-group-card"]',

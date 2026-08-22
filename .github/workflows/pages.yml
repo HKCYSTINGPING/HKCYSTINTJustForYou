@@ -27,6 +27,7 @@ jobs:
           cp index.html app.js firebase-data.js firebase-config.js styles.css participants.json manifest.json sw.js .nojekyll _site/
           cp fonts/CanvaHandwritingStyleTC.woff2 _site/fonts/
           cp assets/*.png _site/assets/
+          cp assets/*.pdf _site/assets/ 2>/dev/null || true
           cp assets/trophies/*.png _site/assets/trophies/ 2>/dev/null || true
           # Bust browser / CDN caches on every Pages deploy (incl. font).
           SHA="$(git rev-parse --short HEAD)"
@@ -57,7 +58,7 @@ jobs:
           PY
           grep -q "styles.css?v=${SHA}" _site/index.html
           grep -q "app.js?v=${SHA}" _site/index.html
-          for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json manifest.json sw.js fonts/CanvaHandwritingStyleTC.woff2 assets/trophy.png assets/heart.png assets/trophies/t01.png; do
+          for f in index.html app.js firebase-data.js firebase-config.js styles.css participants.json manifest.json sw.js fonts/CanvaHandwritingStyleTC.woff2 assets/trophy.png assets/heart.png assets/trophies/t01.png assets/achievement-handbook.pdf; do
             test -s "_site/$f" || { echo "缺少 $f"; exit 1; }
           done
           test "$(ls _site/assets/trophies/t0*.png 2>/dev/null | wc -l | tr -d ' ')" -ge 8 || { echo "獎項貼圖不足 8 張"; exit 1; }

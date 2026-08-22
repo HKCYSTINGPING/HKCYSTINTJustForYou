@@ -443,6 +443,25 @@ html.keyboard-open .bottom-nav {
   flex: 1;
 }
 
+.staff-handbook-btn {
+  color: var(--secondary);
+  background: var(--primary-light);
+  border: 1.5px solid var(--primary);
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.staff-handbook-btn svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.staff-handbook-btn:hover,
+.staff-handbook-btn:focus-visible {
+  color: var(--text);
+  background: var(--primary);
+}
+
 /* ─── Home Cards ────────────────────────────────────────────────────────── */
 
 .home-cards {
