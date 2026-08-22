@@ -1870,6 +1870,20 @@ textarea.input-field {
   text-align: left;
 }
 
+/* Edit / add sheets sit above regular overlays; confirm must stay above them
+   (and above the handbook viewer) so delete / force-logout prompts remain usable. */
+#roster-edit-modal,
+#roster-add-modal,
+#group-rename-modal {
+  z-index: 340;
+}
+
+#confirm-modal,
+#force-logout-modal,
+#force-logout-all-modal {
+  z-index: 520;
+}
+
 .a2hs-modal-card {
   max-width: 340px;
 }
