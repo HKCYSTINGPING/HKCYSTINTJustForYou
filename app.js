@@ -1161,6 +1161,11 @@ function setHandbookModalProgress(percent) {
   if (bar) bar.style.width = value + '%';
 }
 
+function setHandbookModalBody(text) {
+  const body = document.getElementById('handbook-modal-body');
+  if (body) body.textContent = text;
+}
+
 function fetchHandbookWithProgress(onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -1205,18 +1210,17 @@ function closeHandbookModal() {
   handbookRequestId += 1;
   handbookLoading = false;
   const modal = document.getElementById('handbook-modal');
-  const frame = document.getElementById('handbook-frame');
   const loading = document.getElementById('handbook-loading');
+  const openTab = document.getElementById('handbook-open-tab');
   if (modal) modal.classList.add('hidden');
-  document.body.classList.remove('modal-open');
-  if (frame) {
-    frame.onload = null;
-    frame.onerror = null;
-    frame.classList.add('hidden');
-    frame.removeAttribute('src');
-  }
   if (loading) loading.classList.remove('hidden');
+  if (openTab) {
+    openTab.classList.add('hidden');
+    openTab.href = CONFIG.HANDBOOK_URL;
+  }
   setHandbookModalProgress(0);
+  setHandbookModalBody('準備開啟活動手冊…');
+  syncBodyModalOpen();
 }
 
 async function handleOpenHandbook(event) {
@@ -1230,10 +1234,9 @@ async function handleOpenHandbook(event) {
   }
 
   const modal = document.getElementById('handbook-modal');
-  const frame = document.getElementById('handbook-frame');
   const loading = document.getElementById('handbook-loading');
   const openTab = document.getElementById('handbook-open-tab');
-  if (!modal || !frame || !loading) {
+  if (!modal) {
     window.open(CONFIG.HANDBOOK_URL, '_blank', 'noopener,noreferrer');
     return;
   }
@@ -1241,37 +1244,29 @@ async function handleOpenHandbook(event) {
   const requestId = ++handbookRequestId;
   handbookLoading = true;
   modal.classList.remove('hidden');
-  document.body.classList.add('modal-open');
-  loading.classList.remove('hidden');
-  frame.classList.add('hidden');
-  frame.removeAttribute('src');
+  syncBodyModalOpen();
+  if (loading) loading.classList.remove('hidden');
+  if (openTab) openTab.classList.add('hidden');
   setHandbookModalProgress(0);
-  if (openTab) openTab.href = CONFIG.HANDBOOK_URL;
+  setHandbookModalBody('正在載入活動手冊，請稍候…\n檔案較大，首次可能需要一點時間。');
 
   try {
     const url = await ensureHandbookBlobUrl(setHandbookModalProgress);
     if (requestId !== handbookRequestId) return;
-    if (openTab) openTab.href = url;
 
-    const reveal = () => {
-      if (requestId !== handbookRequestId) return;
-      loading.classList.add('hidden');
-      frame.classList.remove('hidden');
-      handbookLoading = false;
-    };
-
-    frame.onload = reveal;
-    frame.onerror = () => {
-      reveal();
-      showToast('預覽失敗，請用「新分頁開啟」', 'error');
-    };
-    frame.src = url;
-    // Some mobile browsers never fire iframe load for PDFs.
-    setTimeout(reveal, 2500);
+    setHandbookModalBody('手冊已準備好，撳「開啟手冊」閱讀。');
+    if (loading) loading.classList.add('hidden');
+    if (openTab) {
+      openTab.href = url;
+      openTab.classList.remove('hidden');
+      openTab.focus();
+    }
+    handbookLoading = false;
   } catch (err) {
     if (requestId !== handbookRequestId) return;
     handbookLoading = false;
-    loading.classList.add('hidden');
+    if (loading) loading.classList.add('hidden');
+    setHandbookModalBody(err?.message || '無法載入活動手冊');
     showToast(err?.message || '無法開啟活動手冊', 'error');
   }
 }
@@ -4046,7 +4041,8 @@ function syncBodyModalOpen() {
     DOM.groupRenameModal,
     DOM.rosterEditModal,
     DOM.rosterAddModal,
-    DOM.trophyGuideModal
+    DOM.trophyGuideModal,
+    document.getElementById('handbook-modal')
   ].some(el => el && !el.classList.contains('hidden'));
   document.body.classList.toggle('modal-open', anyOpen);
 }
@@ -8090,6 +8086,12 @@ function bindEvents() {
   const handbookClose = document.getElementById('handbook-modal-close');
   if (handbookClose) {
     handbookClose.addEventListener('click', closeHandbookModal);
+  }
+  const handbookOpenTab = document.getElementById('handbook-open-tab');
+  if (handbookOpenTab) {
+    handbookOpenTab.addEventListener('click', () => {
+      setTimeout(closeHandbookModal, 120);
+    });
   }
   const handbookModal = document.getElementById('handbook-modal');
   if (handbookModal) {
