@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260822v4">
+  <link rel="stylesheet" href="styles.css?v=20260822v5">
 </head>
 <body>
 
@@ -372,7 +372,7 @@
         </div>
         <div class="card" data-tour="profile-push">
           <h3 class="section-title">推送通知</h3>
-          <p class="form-hint">開啟後，收到新匿名留言或獎項結果公布時會收到通知（iPhone 請先加到主畫面）。</p>
+          <p class="form-hint">免費方案：App／分頁要開住（可以收埋去背景）。新留言同公布獎項會彈通知。完全關閉瀏覽器就收唔到。iPhone 請先加到主畫面。</p>
           <p id="profile-push-status" class="form-hint">狀態：檢查中…</p>
           <div class="toggle-group">
             <button type="button" id="profile-push-enable" class="btn btn-primary btn-sm btn-progress">
@@ -977,7 +977,7 @@
 
         <div class="card" data-tour="admin-push-config">
           <h3 class="section-title">推送通知（Web Push）</h3>
-          <p class="form-hint">到 Firebase Console → Project settings → Cloud Messaging → Web Push certificates 產生金鑰，貼上後儲存。部署 Cloud Functions 後，新留言同公布結果會推送。</p>
+          <p class="form-hint">免費方案唔使填。只有升級 Blaze 並部署 Cloud Functions 之後，先至可以喺 App 完全關閉時仍然推送。</p>
           <div class="form-group">
             <label for="admin-vapid-key">VAPID 金鑰</label>
             <input type="text" id="admin-vapid-key" class="input-field" autocomplete="off" placeholder="BPxxxxxxxx…">
@@ -1076,6 +1076,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260822v4"></script>
+  <script type="module" src="app.js?v=20260822v5"></script>
 </body>
 </html>

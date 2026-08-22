@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v4';
+import * as data from './firebase-data.js?v=20260822v5';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -316,7 +316,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="profile-push"]',
       prepare: 'profile',
       title: '推送通知',
-      body: '開啟後，收到新匿名留言或獎項結果公布時會收到通知。iPhone 請先加到主畫面。'
+      body: '開啟後，收到新匿名留言或獎項結果公布時，只要 App／分頁仲開住（可以收埋去背景）就會彈通知。完全關閉瀏覽器就收唔到。iPhone 請先加到主畫面。'
     },
     {
       target: '[data-tour="profile-stats"]',
@@ -633,7 +633,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-push-config"]',
       prepare: 'settings',
       title: '推送通知設定',
-      body: '貼上 Firebase Web Push VAPID 金鑰並儲存；另需部署 Cloud Functions，先至可以喺 App 關閉時推送新留言同獎項結果。'
+      body: '免費方案唔使填。只有升級 Blaze 並部署 Cloud Functions 之後，先至可以喺 App 完全關閉時仍然推送。'
     },
     {
       target: '[data-tour="admin-group-overrides"]',
@@ -1375,6 +1375,11 @@ function maybeNotifyVotingStatusChange() {
   notifyVotingStatusChange(next);
   if (next === 'PUBLISHED') {
     maybeShowPublishedModal(true);
+    showLocalPushNotification(
+      '獎項結果出咗喇',
+      '入獎項頁睇你嘅結果。',
+      'tnit-trophy-local'
+    );
   }
 }
 
@@ -2460,13 +2465,6 @@ async function startParticipantSubscriptions() {
         state.votingConfig = config;
         if (prevStatus !== config.voting_status) {
           clearLocalGroupVotingOverrides();
-        }
-        if (prevStatus !== 'PUBLISHED' && config.voting_status === 'PUBLISHED') {
-          showLocalPushNotification(
-            '獎項結果出咗喇',
-            '入獎項頁睇你嘅結果。',
-            'tnit-trophy-local'
-          );
         }
         applyEffectiveVotingToTrophyState();
       },
@@ -4212,6 +4210,7 @@ function renderPushStatus() {
 }
 
 function showLocalPushNotification(title, body, tag = 'tnit-local') {
+  if (hasPushOptOut()) return;
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   if (document.visibilityState === 'visible') return;
   try {
@@ -4223,6 +4222,8 @@ function showLocalPushNotification(title, body, tag = 'tnit-local') {
     });
     n.onclick = () => {
       window.focus();
+      if (String(tag).includes('message')) switchParticipantView('inbox');
+      else if (String(tag).includes('trophy')) switchParticipantView('trophy');
       n.close();
     };
   } catch (_) { /* ignore */ }
@@ -4258,9 +4259,7 @@ async function applyPushEnableResult(result, { toast = true } = {}) {
   }
   pushEnabledLocally = false;
   if (!toast) return false;
-  if (result.reason === 'missing-vapid') {
-    showToast('管理員尚未設定推送金鑰（Settings → 推送通知）', 'error');
-  } else if (result.reason === 'denied') {
+  if (result.reason === 'denied') {
     showToast('通知已被封鎖，請到系統設定開啟', 'error');
   } else if (result.reason === 'unsupported') {
     showToast('此裝置唔支援推送通知', 'info');
@@ -4283,7 +4282,7 @@ async function requestEnablePush({ toast = true } = {}) {
 
 async function maybePromptPushOnLogin() {
   if (!state.participantId || state.isAdmin) return;
-  if (!(await data.isPushSupported())) {
+  if (!data.isNotificationApiSupported()) {
     renderPushStatus();
     return;
   }
@@ -4295,7 +4294,7 @@ async function maybePromptPushOnLogin() {
 
   const ok = await showConfirmCard({
     title: '開啟推送通知',
-    body: '預設建議開啟：收到新匿名留言，或者獎項結果公布時，即使離開 App 都會收到通知。iPhone 請先加到主畫面。',
+    body: '建議開啟：收到新匿名留言或獎項結果公布時，只要 App／分頁仲開住（收埋去背景都可以）就會彈通知。完全關閉就收唔到。iPhone 請先加到主畫面。',
     confirmLabel: '開啟',
     cancelLabel: '稍後'
   });
@@ -4305,12 +4304,12 @@ async function maybePromptPushOnLogin() {
 
 async function setupPushAfterLogin() {
   renderPushStatus();
-  if (!(await data.isPushSupported())) return;
+  if (!data.isNotificationApiSupported()) return;
   if (data.getNotificationPermission() !== 'granted') return;
   try {
     const result = await data.enablePushNotifications(
       state.participantId,
-      serviceWorkerRegistration || await navigator.serviceWorker.ready
+      serviceWorkerRegistration || (navigator.serviceWorker && await navigator.serviceWorker.ready)
     );
     pushEnabledLocally = !!result.ok;
     if (result.ok) {

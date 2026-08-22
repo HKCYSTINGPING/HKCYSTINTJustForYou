@@ -1604,10 +1604,14 @@ async function getMessagingSafe() {
   return messagingInitPromise;
 }
 
+export function isNotificationApiSupported() {
+  return typeof window !== 'undefined' && typeof Notification !== 'undefined';
+}
+
+/** FCM token registration (needs VAPID). Spark/free local alerts do not require this. */
 export async function isPushSupported() {
   try {
-    if (typeof window === 'undefined') return false;
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) return false;
+    if (!isNotificationApiSupported() || !('serviceWorker' in navigator)) return false;
     return await isSupported();
   } catch (_) {
     return false;
@@ -1655,16 +1659,14 @@ export async function removePushToken(participantId, token) {
 }
 
 /**
- * Ask for notification permission, register FCM token, store under push_tokens/{id}.
+ * Ask for notification permission. FCM token is optional (Blaze Functions only).
+ * Spark/free: permission + Firestore listeners while the PWA/tab stays open.
  * Returns { ok, token, reason }.
  */
 export async function enablePushNotifications(participantId, serviceWorkerRegistration) {
   const id = String(participantId || '').trim().toUpperCase();
   if (!id) return { ok: false, reason: 'missing-id' };
-  if (!(await isPushSupported())) return { ok: false, reason: 'unsupported' };
-
-  const vapidKey = await fetchPushVapidKey();
-  if (!vapidKey) return { ok: false, reason: 'missing-vapid' };
+  if (!isNotificationApiSupported()) return { ok: false, reason: 'unsupported' };
 
   if (Notification.permission === 'denied') return { ok: false, reason: 'denied' };
   if (Notification.permission !== 'granted') {
@@ -1672,17 +1674,23 @@ export async function enablePushNotifications(participantId, serviceWorkerRegist
     if (perm !== 'granted') return { ok: false, reason: perm === 'denied' ? 'denied' : 'dismissed' };
   }
 
-  const messaging = await getMessagingSafe();
-  if (!messaging) return { ok: false, reason: 'unsupported' };
+  let token = '';
+  try {
+    const vapidKey = await fetchPushVapidKey();
+    if (vapidKey && await isPushSupported()) {
+      const messaging = await getMessagingSafe();
+      if (messaging) {
+        const registration = serviceWorkerRegistration
+          || await navigator.serviceWorker.ready;
+        token = await getToken(messaging, {
+          vapidKey,
+          serviceWorkerRegistration: registration
+        }) || '';
+        if (token) await savePushToken(id, token);
+      }
+    }
+  } catch (_) { /* local notifications still work without FCM */ }
 
-  const registration = serviceWorkerRegistration
-    || await navigator.serviceWorker.ready;
-  const token = await getToken(messaging, {
-    vapidKey,
-    serviceWorkerRegistration: registration
-  });
-  if (!token) return { ok: false, reason: 'no-token' };
-  await savePushToken(id, token);
   return { ok: true, token };
 }
 
