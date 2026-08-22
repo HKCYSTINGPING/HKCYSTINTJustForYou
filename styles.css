@@ -377,7 +377,8 @@ html.keyboard-open .bottom-nav {
   flex-shrink: 0;
 }
 
-.page-help-btn {
+.page-help-btn,
+.handbook-btn {
   width: 3.25rem;
   height: 3.25rem;
   color: var(--secondary);
@@ -385,16 +386,20 @@ html.keyboard-open .bottom-nav {
   border: 1.5px solid var(--primary);
   flex-shrink: 0;
   align-self: flex-start;
+  text-decoration: none;
 }
 
-.page-help-btn svg {
+.page-help-btn svg,
+.handbook-btn svg {
   width: 1.75rem;
   height: 1.75rem;
   stroke-width: 2.5;
 }
 
 .page-help-btn:hover,
-.page-help-btn:focus-visible {
+.page-help-btn:focus-visible,
+.handbook-btn:hover,
+.handbook-btn:focus-visible {
   color: var(--text);
   background: var(--primary);
   border-color: var(--primary-dark);
@@ -441,25 +446,6 @@ html.keyboard-open .bottom-nav {
   font-weight: 700;
   margin: 0;
   flex: 1;
-}
-
-.staff-handbook-btn {
-  color: var(--secondary);
-  background: var(--primary-light);
-  border: 1.5px solid var(--primary);
-  flex-shrink: 0;
-  text-decoration: none;
-}
-
-.staff-handbook-btn svg {
-  width: 1.35rem;
-  height: 1.35rem;
-}
-
-.staff-handbook-btn:hover,
-.staff-handbook-btn:focus-visible {
-  color: var(--text);
-  background: var(--primary);
 }
 
 /* ─── Home Cards ────────────────────────────────────────────────────────── */
@@ -3479,7 +3465,8 @@ button.group-voter-header:hover {
   animation: listItemIn 0.2s var(--ease-out);
 }
 
-.page-help-btn:active {
+.page-help-btn:active,
+.handbook-btn:active {
   transform: scale(0.92);
 }
 

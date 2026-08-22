@@ -335,7 +335,14 @@ const ONBOARDING_STEPS = {
       prepare: 'staff',
       staffSection: 'dashboard',
       title: 'Staff 頁面',
-      body: '同 Admin 控制台類似：上面切換 Dashboard、Messages、Voting、Results，只係範圍限於你負責嗰組。右上角書本圖示可開啟《解鎖成就》活動手冊。'
+      body: '同 Admin 控制台類似：上面切換 Dashboard、Messages、Voting、Results，只係範圍限於你負責嗰組。'
+    },
+    {
+      target: '#participant-handbook-btn',
+      prepare: 'home',
+      skipIfStaff: false,
+      title: '活動手冊',
+      body: '右上角書本圖示（問號左邊）可開啟《解鎖成就》活動手冊。'
     },
     {
       target: '[data-tour="staff-group-card"]',
@@ -459,7 +466,13 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-header"]',
       prepare: 'dashboard',
       title: '管理員控制台',
-      body: '呢度係現場控制室：分組、監控留言、推動投票、睇結果同改設定。右上角「？」可重睇本頁說明。'
+      body: '呢度係現場控制室：分組、監控留言、推動投票、睇結果同改設定。右上角書本可開啟活動手冊，「？」可重睇本頁說明。'
+    },
+    {
+      target: '#admin-handbook-btn',
+      prepare: 'dashboard',
+      title: '活動手冊',
+      body: '書本圖示（問號左邊）可開啟《解鎖成就》活動手冊。'
     },
     {
       target: '[data-tour="admin-live-badge"]',
@@ -1650,6 +1663,10 @@ function applyStaffParticipantChrome() {
   });
   if (DOM.screenParticipant) {
     DOM.screenParticipant.classList.toggle('is-staff-facilitator', hideForStaff);
+  }
+  const handbookBtn = document.getElementById('participant-handbook-btn');
+  if (handbookBtn) {
+    handbookBtn.classList.toggle('hidden', !hideForStaff);
   }
 }
 
