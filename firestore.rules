@@ -212,28 +212,43 @@ service cloud.firestore {
         )
       ));
 
-      allow create: if isParticipant()
-        && messagingOpenFor(participantDoc(pid()).data.group_id)
-        && request.resource.data.sender_id == pid()
-        && request.resource.data.receiver_id is string
-        && request.resource.data.receiver_id != pid()
-        && request.resource.data.status == 'active'
-        && request.resource.data.content is string
-        && request.resource.data.content.size() > 0
-        // The real 300 character limit is enforced in the UI. This is a wider
-        // abuse guard so that emoji, which the two engines count differently,
-        // can never trigger a confusing server-side rejection.
-        && request.resource.data.content.size() <= 500
-        && request.resource.data.sender_group_id == participantDoc(pid()).data.group_id
-        // Messages are intra-group only: receiver must be in the sender's group.
-        && participantDoc(request.resource.data.receiver_id).data.group_id
-          == participantDoc(pid()).data.group_id
-        && (
-          request.resource.data.thread_group_id == ''
+      function messageCreateCommon() {
+        return request.resource.data.sender_id == pid()
+          && request.resource.data.receiver_id is string
+          && request.resource.data.receiver_id != pid()
+          && request.resource.data.status == 'active'
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 500
+          && request.resource.data.sender_group_id == participantDoc(pid()).data.group_id;
+      }
+
+      function messageThreadGroupValid(senderGroup, receiverGroup) {
+        return request.resource.data.thread_group_id == ''
           || (
-            request.resource.data.thread_group_id == request.resource.data.sender_group_id
-            && request.resource.data.thread_group_id
-              == participantDoc(request.resource.data.receiver_id).data.group_id
+            request.resource.data.thread_group_id == senderGroup
+            && request.resource.data.thread_group_id == receiverGroup
+          );
+      }
+
+      allow create: if isParticipant()
+        && messageCreateCommon()
+        && (
+          (
+            isSeatId(pid())
+            && messagingOpenFor(participantDoc(pid()).data.group_id)
+            && participantDoc(request.resource.data.receiver_id).data.group_id
+              == participantDoc(pid()).data.group_id
+            && messageThreadGroupValid(
+              participantDoc(pid()).data.group_id,
+              participantDoc(request.resource.data.receiver_id).data.group_id
+            )
+          )
+          || (
+            isStaffPerson()
+            && messagingOpenGlobal()
+            && isParticipatingGroup(participantDoc(request.resource.data.receiver_id).data.group_id)
+            && request.resource.data.thread_group_id == ''
           )
         );
 

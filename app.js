@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v11';
+import * as data from './firebase-data.js?v=20260822v12';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1615,9 +1615,25 @@ function isMessagingOpenForGroup(groupId) {
 }
 
 function isMessagingOpenForMe() {
+  if (isStaffPerson(state.participantId)) return !!state.messagingOpen;
   const groupId = myGroupId();
   if (data.isUnassignedGroup(groupId) || !data.isNumberedGroupId(groupId)) return false;
   return isMessagingOpenForGroup(groupId);
+}
+
+function getSendRecipientLabel(p) {
+  const label = displayLabelOf(p);
+  if (isStaffPerson(state.participantId) && data.isNumberedGroupId(p.group_id)) {
+    return `${label} · ${formatGroupLabel(p.group_id)}`;
+  }
+  return label;
+}
+
+function updateSendReceiverPlaceholder() {
+  if (!DOM.sendReceiver) return;
+  DOM.sendReceiver.placeholder = isStaffPerson(state.participantId)
+    ? '搜尋全域接收者'
+    : '搜尋同組接收者';
 }
 
 function effectiveVotingConfigForGroup(groupId) {
@@ -2015,10 +2031,10 @@ function initSendCombobox() {
     toggle: DOM.sendComboboxToggle,
     items: recipients,
     excludeIds: exclude,
-    getLabel: (item) => displayLabelOf(item),
+    getLabel: (item) => getSendRecipientLabel(item),
     onSelect: (item) => {
       selectedReceiverId = item.participant_id;
-      DOM.sendReceiver.value = displayLabelOf(item);
+      DOM.sendReceiver.value = getSendRecipientLabel(item);
     }
   });
 }
@@ -3092,8 +3108,10 @@ async function handleLogout() {
 // ─── Messaging — Send ─────────────────────────────────────────────────────────
 
 function updateSendFormState() {
+  const staffGlobal = isStaffPerson(state.participantId);
   const closed = !isMessagingOpenForMe();
-  const groupClosed = state.messagingOpen && !groupMessagingOpen(myGroupId());
+  const groupClosed = !staffGlobal && state.messagingOpen && !groupMessagingOpen(myGroupId());
+  updateSendReceiverPlaceholder();
   if (DOM.sendClosedBanner) {
     DOM.sendClosedBanner.textContent = groupClosed
       ? '本組留言功能目前已關閉，請稍後再試'
@@ -3141,7 +3159,10 @@ async function handleSendMessage(e) {
   const allowed = data.getMessageRecipients(state.participantId, state.participants)
     .some(p => p.participant_id === receiverId);
   if (!receiver || !allowed) {
-    showToast('只可以留言俾自己組嘅隊友', 'error');
+    showToast(
+      isStaffPerson(state.participantId) ? '請選擇有效接收者' : '只可以留言俾自己組嘅隊友',
+      'error'
+    );
     return;
   }
 

@@ -344,15 +344,36 @@ export function getTeammates(participantId, allParticipants) {
   );
 }
 
-/** Same-group recipients for anonymous messaging (seats + staff in that group). */
+export function isStaffParticipantId(participantId) {
+  const id = String(participantId || '').trim().toUpperCase();
+  return !!id && !isSeatParticipantId(id) && id !== 'ADMIN';
+}
+
+/** Same-group recipients for seats; Staff may message anyone in a numbered group (全域). */
 export function getMessageRecipients(participantId, allParticipants) {
   const me = (allParticipants || []).find(p => p.participant_id === participantId);
   if (!me) return [];
+  const selfId = String(participantId || '').trim().toUpperCase();
+
+  if (isStaffParticipantId(participantId)) {
+    return (allParticipants || [])
+      .filter(p => {
+        const id = String(p.participant_id || '').trim().toUpperCase();
+        if (!id || id === selfId || id === 'ADMIN') return false;
+        return isNumberedGroupId(normalizeGroupId(p.group_id));
+      })
+      .sort((a, b) => {
+        const ga = groupNumberFromId(a.group_id) - groupNumberFromId(b.group_id);
+        if (ga !== 0) return ga;
+        return String(a.participant_id || '').localeCompare(String(b.participant_id || ''), 'en');
+      });
+  }
+
   const group = normalizeGroupId(me.group_id);
   if (!group || isUnassignedGroup(group) || !isNumberedGroupId(group)) return [];
   return (allParticipants || []).filter(p => {
     const id = String(p.participant_id || '').trim().toUpperCase();
-    if (!id || id === String(participantId || '').trim().toUpperCase()) return false;
+    if (!id || id === selfId) return false;
     if (id === 'ADMIN') return false;
     return normalizeGroupId(p.group_id) === group;
   });
