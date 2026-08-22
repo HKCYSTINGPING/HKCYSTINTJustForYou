@@ -3017,6 +3017,12 @@ async function handleLogout() {
   state.isAdmin = false;
   state.inboxMessages = [];
   state.sentMessages = [];
+  knownInboxIds = new Set();
+  pushEnabledLocally = false;
+  if (pushForegroundUnsub) {
+    try { pushForegroundUnsub(); } catch (_) { /* ignore */ }
+    pushForegroundUnsub = null;
+  }
   state.monitorMessages = [];
   state.staffMonitorMessages = [];
   state.staffMonitorBootstrapped = false;
