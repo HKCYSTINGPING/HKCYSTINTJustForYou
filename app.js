@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v3';
+import * as data from './firebase-data.js?v=20260822v4';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -2675,12 +2675,12 @@ async function enterParticipantDashboard() {
     renderProfile();
     renderPushStatus();
     applyLaunchDeepLink();
-    setupPushAfterLogin().catch(() => {});
   } catch (err) {
     showToast('載入資料失敗：' + data.describeFirestoreError(err, '請稍後再試'), 'error');
   } finally {
     finishLoading();
   }
+  maybePromptPushOnLogin().catch(() => {});
 }
 
 function updateParticipantGreeting() {
@@ -4228,6 +4228,81 @@ function showLocalPushNotification(title, body, tag = 'tnit-local') {
   } catch (_) { /* ignore */ }
 }
 
+function pushOptOutKey() {
+  return 'tnit_push_opt_out:' + String(state.participantId || '').toUpperCase();
+}
+
+function hasPushOptOut() {
+  try {
+    return localStorage.getItem(pushOptOutKey()) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function setPushOptOut(off) {
+  try {
+    if (off) localStorage.setItem(pushOptOutKey(), '1');
+    else localStorage.removeItem(pushOptOutKey());
+  } catch (_) { /* ignore */ }
+}
+
+async function applyPushEnableResult(result, { toast = true } = {}) {
+  if (result.ok) {
+    setPushOptOut(false);
+    pushEnabledLocally = true;
+    if (toast) showToast('推送通知已開啟', 'success');
+    await setupPushAfterLogin();
+    renderPushStatus();
+    return true;
+  }
+  pushEnabledLocally = false;
+  if (!toast) return false;
+  if (result.reason === 'missing-vapid') {
+    showToast('管理員尚未設定推送金鑰（Settings → 推送通知）', 'error');
+  } else if (result.reason === 'denied') {
+    showToast('通知已被封鎖，請到系統設定開啟', 'error');
+  } else if (result.reason === 'unsupported') {
+    showToast('此裝置唔支援推送通知', 'info');
+  } else if (result.reason === 'dismissed') {
+    showToast('未開啟通知，可稍後喺「我的」再開', 'info');
+  } else {
+    showToast('未能開啟通知', 'error');
+  }
+  renderPushStatus();
+  return false;
+}
+
+async function requestEnablePush({ toast = true } = {}) {
+  const result = await data.enablePushNotifications(
+    state.participantId,
+    serviceWorkerRegistration || (navigator.serviceWorker && await navigator.serviceWorker.ready)
+  );
+  return applyPushEnableResult(result, { toast });
+}
+
+async function maybePromptPushOnLogin() {
+  if (!state.participantId || state.isAdmin) return;
+  if (!(await data.isPushSupported())) {
+    renderPushStatus();
+    return;
+  }
+  await setupPushAfterLogin();
+  if (pushEnabledLocally) return;
+  const perm = data.getNotificationPermission();
+  if (perm === 'denied' || perm === 'unsupported') return;
+  if (hasPushOptOut()) return;
+
+  const ok = await showConfirmCard({
+    title: '開啟推送通知',
+    body: '預設建議開啟：收到新匿名留言，或者獎項結果公布時，即使離開 App 都會收到通知。iPhone 請先加到主畫面。',
+    confirmLabel: '開啟',
+    cancelLabel: '稍後'
+  });
+  if (!ok) return;
+  await requestEnablePush({ toast: true });
+}
+
 async function setupPushAfterLogin() {
   renderPushStatus();
   if (!(await data.isPushSupported())) return;
@@ -4261,26 +4336,9 @@ async function handleEnablePush() {
   if (!DOM.profilePushEnable) return;
   await runProgressButton(DOM.profilePushEnable, (async () => {
     try {
-      const result = await data.enablePushNotifications(
-        state.participantId,
-        serviceWorkerRegistration || await navigator.serviceWorker.ready
-      );
-      if (result.ok) {
-        pushEnabledLocally = true;
-        showToast('推送通知已開啟', 'success');
-        await setupPushAfterLogin();
-      } else if (result.reason === 'missing-vapid') {
-        showToast('管理員尚未設定推送金鑰（Settings → 推送通知）', 'error');
-      } else if (result.reason === 'denied') {
-        showToast('通知已被封鎖，請到系統設定開啟', 'error');
-      } else if (result.reason === 'unsupported') {
-        showToast('此裝置唔支援推送通知', 'info');
-      } else {
-        showToast('未能開啟通知', 'error');
-      }
+      await requestEnablePush({ toast: true });
     } catch (err) {
       showToast(err.message || data.describeFirestoreError(err), 'error');
-    } finally {
       renderPushStatus();
     }
   })());
@@ -4292,6 +4350,7 @@ async function handleDisablePush() {
     try {
       await data.disablePushNotifications(state.participantId);
       pushEnabledLocally = false;
+      setPushOptOut(true);
       if (pushForegroundUnsub) {
         try { pushForegroundUnsub(); } catch (_) { /* ignore */ }
         pushForegroundUnsub = null;
