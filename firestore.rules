@@ -39,6 +39,12 @@ service cloud.firestore {
       return isParticipant() && !isSeatId(pid());
     }
 
+    function isStaffReceiverId(receiverId) {
+      return receiverId is string
+        && receiverId != 'ADMIN'
+        && !isSeatId(receiverId);
+    }
+
     function participantDoc(id) {
       return get(/databases/$(database)/documents/participants/$(id));
     }
@@ -254,8 +260,14 @@ service cloud.firestore {
           || (
             isStaffPerson()
             && messagingOpenGlobal()
-            && isParticipatingGroup(participantDoc(request.resource.data.receiver_id).data.group_id)
-            && request.resource.data.thread_group_id == ''
+            && messageThreadGroupValid(
+              participantDoc(pid()).data.group_id,
+              participantDoc(request.resource.data.receiver_id).data.group_id
+            )
+            && (
+              isParticipatingGroup(participantDoc(request.resource.data.receiver_id).data.group_id)
+              || isStaffReceiverId(request.resource.data.receiver_id)
+            )
           )
         );
 
