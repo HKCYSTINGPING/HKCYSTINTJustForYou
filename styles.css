@@ -2482,7 +2482,7 @@ html.keyboard-open body.admin-active .toast-container {
 
 .admin-msg-body {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
 }
@@ -2491,10 +2491,11 @@ html.keyboard-open body.admin-active .toast-container {
   flex: 1;
   min-width: 0;
   font-size: var(--fs-body);
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   margin: 0;
 }
 
