@@ -1734,15 +1734,14 @@ function openGroupRenameModal(groupId) {
   const g = normalizeRosterGroupId(groupId);
   if (!canRenameGroup(g) || !DOM.groupRenameModal) return;
   DOM.groupRenameModal.dataset.groupId = g;
-  if (DOM.groupRenameSubtitle) {
-    DOM.groupRenameSubtitle.textContent = `${g} · 預設顯示「${defaultGroupLabel(g)}」`;
-  }
   if (DOM.groupRenameInput) {
-    const meta = state.groupMeta[g] || {};
-    DOM.groupRenameInput.value = meta.display_name || '';
+    DOM.groupRenameInput.value = formatGroupLabel(g);
   }
   DOM.groupRenameModal.classList.remove('hidden');
-  setTimeout(() => DOM.groupRenameInput?.focus(), 0);
+  setTimeout(() => {
+    DOM.groupRenameInput?.focus();
+    DOM.groupRenameInput?.select();
+  }, 0);
 }
 
 function closeGroupRenameModal() {
@@ -6673,7 +6672,7 @@ function renderStaffFacilitatorPanel() {
     DOM.staffGroupTitle.textContent = formatGroupLabel(groupId);
   }
   if (DOM.staffGroupNameInput && document.activeElement !== DOM.staffGroupNameInput) {
-    DOM.staffGroupNameInput.value = meta.display_name || '';
+    DOM.staffGroupNameInput.value = formatGroupLabel(groupId);
   }
   if (DOM.staffGroupStatus) {
     DOM.staffGroupStatus.innerHTML = `
