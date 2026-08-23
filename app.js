@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260822v14';
+import * as data from './firebase-data.js?v=20260823v2';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -380,14 +380,14 @@ const ONBOARDING_STEPS = {
       prepare: 'staff',
       staffSection: 'messages',
       title: '本組留言控制',
-      body: '只會影響你負責嗰組；Admin 全域關閉時仍然會全部停用。'
+      body: '只影響你負責組別嘅參加者留言；Staff 自己發送跟 Admin 全域開關。'
     },
     {
       target: '[data-tour="staff-monitor"]',
       prepare: 'staff',
       staffSection: 'messages',
-      title: '組內留言監控',
-      body: '即時睇同組成員之間嘅留言（含發送／接收者），亦可撤回或取消撤回。參加者自己嘅收件箱仍然匿名。'
+      title: '留言監控',
+      body: '即時睇本組成員同 Staff 之間嘅留言（含全域 Staff 發送），亦可撤回或取消撤回。參加者自己嘅收件箱仍然匿名。'
     },
     {
       target: '[data-tour="staff-voting-controls"]',
@@ -1869,10 +1869,16 @@ function getSendRecipientLabel(p) {
   if (data.isNumberedGroupId(p.group_id)) {
     return `${label} · ${formatGroupLabel(p.group_id)}`;
   }
-  if (data.isStaffParticipantId(p.participant_id)) {
+  if (data.isStaffParticipantId(p.participant_id) || isStaffPerson(p)) {
     return `${label} · Staff`;
   }
   return label;
+}
+
+function staffMessageRouteLabel(participantId) {
+  const label = displayLabelOf(participantId);
+  if (!isStaffPerson(participantId)) return escapeHtml(label);
+  return `${escapeHtml(label)} <span class="chip chip-secondary staff-route-chip">Staff</span>`;
 }
 
 function updateSendReceiverPlaceholder() {
@@ -2803,7 +2809,7 @@ async function startParticipantSubscriptions() {
     const memberIds = () => getFacilitatorGroupMembers(facilitateGroup).map(p => p.participant_id);
     const voterIds = () => getVotingParticipants(getFacilitatorGroupMembers(facilitateGroup))
       .map(p => p.participant_id);
-    track(data.subscribeGroupThreadMessages(
+    track(data.subscribeFacilitatorGroupMessages(
       facilitateGroup,
       messages => {
         state.staffMonitorMessages = messages;
@@ -6946,7 +6952,7 @@ function renderStaffGroupMessages() {
     card.innerHTML = `
       <div class="admin-msg-header">
         <time datetime="${escapeHtml(msg.created_at || '')}">${formatMessageTime(msg.created_at)}</time>
-        <span class="admin-msg-route">${escapeHtml(displayLabelOf(msg.sender_id))}<span class="arrow">→</span>${escapeHtml(displayLabelOf(msg.receiver_id))}</span>
+        <span class="admin-msg-route">${staffMessageRouteLabel(msg.sender_id)}<span class="arrow">→</span>${staffMessageRouteLabel(msg.receiver_id)}</span>
         ${isDeleted ? '<span class="badge badge-deleted">已撤回</span>' : ''}
       </div>
       <div class="admin-msg-body">

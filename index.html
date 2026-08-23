@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260822v14">
+  <link rel="stylesheet" href="styles.css?v=20260823v2">
 </head>
 <body>
 
@@ -466,7 +466,7 @@
           <div id="staff-section-messages" class="staff-section hidden" data-staff-section="messages">
             <div class="card" data-tour="staff-message-controls">
               <h3 class="section-title">本組留言</h3>
-              <p class="form-hint">只影響你負責嘅組；Admin 全域關閉仍然會停用全部組。</p>
+              <p class="form-hint">控制你負責組別嘅參加者能否留言；Staff 自己發送跟 Admin 全域開關。全域關閉時全部停用。</p>
               <div class="toggle-group">
                 <button type="button" id="staff-enable-msg" class="btn btn-success btn-sm btn-progress">
                   <span class="btn-label">開啟</span>
@@ -481,15 +481,15 @@
 
             <div class="card" data-tour="staff-monitor">
               <div class="admin-controls">
-                <h3 class="section-title">組內留言監控</h3>
+                <h3 class="section-title">留言監控</h3>
                 <span id="staff-msg-count" class="form-hint">共 0 則</span>
               </div>
-              <p class="form-hint">即時顯示同組成員之間嘅留言，連發送者同接收者姓名。參加者自己嘅收件箱仍然匿名。</p>
+              <p class="form-hint">即時顯示本組成員同 Staff 之間嘅留言（含 Staff 全域發送），連發送者同接收者姓名。參加者自己嘅收件箱仍然匿名。</p>
               <div id="staff-message-list" class="admin-message-list"></div>
               <div id="staff-msg-empty" class="empty-state empty-illustration">
                 <div class="illustration-circle"><span class="app-icon app-icon-chat" aria-hidden="true"></span></div>
-                <h3>暫無組內留言</h3>
-                <p>組員互傳留言後會即時顯示發送者同接收者</p>
+                <h3>暫無留言</h3>
+                <p>組員或 Staff 互傳留言後會即時顯示發送者同接收者</p>
               </div>
             </div>
           </div>
@@ -1129,6 +1129,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260823v1"></script>
+  <script type="module" src="app.js?v=20260823v2"></script>
 </body>
 </html>

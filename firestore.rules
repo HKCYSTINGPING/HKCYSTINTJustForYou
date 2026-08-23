@@ -214,15 +214,21 @@ service cloud.firestore {
 
     match /messages/{messageId} {
       // Inbox / sent queries filter on receiver_id or sender_id. Staff
-      // facilitators query thread_group_id == their group for intra-group mail.
+      // facilitators query thread / sender / receiver group for monitoring.
+      function facilitatorMonitorsMessage() {
+        return (resource.data.thread_group_id is string
+            && resource.data.thread_group_id != ''
+            && isFacilitatorOf(resource.data.thread_group_id))
+          || ('receiver_group_id' in resource.data
+            && isFacilitatorOf(resource.data.receiver_group_id))
+          || ('sender_group_id' in resource.data
+            && isFacilitatorOf(resource.data.sender_group_id));
+      }
+
       allow read: if isAdmin() || (signedIn() && (
         resource.data.receiver_id == pid()
         || resource.data.sender_id == pid()
-        || (
-          resource.data.thread_group_id is string
-          && resource.data.thread_group_id != ''
-          && isFacilitatorOf(resource.data.thread_group_id)
-        )
+        || facilitatorMonitorsMessage()
       ));
 
       function messageCreateCommon() {
@@ -233,7 +239,9 @@ service cloud.firestore {
           && request.resource.data.content is string
           && request.resource.data.content.size() > 0
           && request.resource.data.content.size() <= 500
-          && request.resource.data.sender_group_id == participantDoc(pid()).data.group_id;
+          && request.resource.data.sender_group_id == participantDoc(pid()).data.group_id
+          && request.resource.data.receiver_group_id
+            == participantDoc(request.resource.data.receiver_id).data.group_id;
       }
 
       function messageThreadGroupValid(senderGroup, receiverGroup) {
@@ -271,11 +279,9 @@ service cloud.firestore {
           )
         );
 
-      // Retracting marks a message deleted so it stays auditable. Removing it
-      // outright is the admin's clean-up tool between rehearsal and the event.
-      // Facilitators may retract / restore intra-group threads they monitor.
+      // Facilitators may retract / restore messages they can monitor.
       allow update: if isAdmin() || (
-        isFacilitatorOf(resource.data.thread_group_id)
+        facilitatorMonitorsMessage()
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'deleted_at'])
         && request.resource.data.status in ['active', 'deleted']
