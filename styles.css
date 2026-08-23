@@ -1507,6 +1507,9 @@ textarea.input-field {
   line-height: 1.5;
   font-size: 0.95rem;
 }
+.trophy-deck-desc-line {
+  white-space: nowrap;
+}
 .trophy-deck-hint {
   text-align: center;
   font-size: 0.75rem;
@@ -1523,10 +1526,6 @@ textarea.input-field {
   font-weight: 700;
   font-size: 0.9rem;
   color: var(--text-secondary);
-}
-.trophy-deck-export {
-  width: 100%;
-  margin-top: 0.75rem;
 }
 
 .trophy-progress-label {
