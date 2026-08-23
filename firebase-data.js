@@ -368,7 +368,7 @@ export function isStaffParticipantId(participantId) {
   return !!id && !isSeatParticipantId(id) && id !== 'ADMIN';
 }
 
-/** Same-group recipients for seats; Staff may message anyone in a numbered group (全域). */
+/** Same-group recipients for seats; Staff may message any grouped participant or Staff (全域). */
 export function getMessageRecipients(participantId, allParticipants) {
   const me = (allParticipants || []).find(p => p.participant_id === participantId);
   if (!me) return [];
@@ -379,9 +379,15 @@ export function getMessageRecipients(participantId, allParticipants) {
       .filter(p => {
         const id = String(p.participant_id || '').trim().toUpperCase();
         if (!id || id === selfId || id === 'ADMIN') return false;
+        if (isStaffParticipantId(id)) return true;
         return isNumberedGroupId(normalizeGroupId(p.group_id));
       })
       .sort((a, b) => {
+        const aStaffOnly = isStaffParticipantId(a.participant_id)
+          && !isNumberedGroupId(normalizeGroupId(a.group_id));
+        const bStaffOnly = isStaffParticipantId(b.participant_id)
+          && !isNumberedGroupId(normalizeGroupId(b.group_id));
+        if (aStaffOnly !== bStaffOnly) return aStaffOnly ? 1 : -1;
         const ga = groupNumberFromId(a.group_id) - groupNumberFromId(b.group_id);
         if (ga !== 0) return ga;
         return String(a.participant_id || '').localeCompare(String(b.participant_id || ''), 'en');

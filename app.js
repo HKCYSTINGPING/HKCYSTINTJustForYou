@@ -1721,8 +1721,12 @@ function isMessagingOpenForMe() {
 
 function getSendRecipientLabel(p) {
   const label = displayLabelOf(p);
-  if (isStaffPerson(state.participantId) && data.isNumberedGroupId(p.group_id)) {
+  if (!isStaffPerson(state.participantId)) return label;
+  if (data.isNumberedGroupId(p.group_id)) {
     return `${label} · ${formatGroupLabel(p.group_id)}`;
+  }
+  if (data.isStaffParticipantId(p.participant_id)) {
+    return `${label} · Staff`;
   }
   return label;
 }
@@ -1730,7 +1734,7 @@ function getSendRecipientLabel(p) {
 function updateSendReceiverPlaceholder() {
   if (!DOM.sendReceiver) return;
   DOM.sendReceiver.placeholder = isStaffPerson(state.participantId)
-    ? '搜尋全域接收者'
+    ? '搜尋全域接收者（參加者或 Staff）'
     : '搜尋同組接收者';
 }
 
