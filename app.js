@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v14';
+import * as data from './firebase-data.js?v=20260823v15';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1801,7 +1801,8 @@ async function handleGroupRenameSave() {
 
 function getFacilitatorGroupMembers(groupId = getFacilitatorGroupId()) {
   if (!groupId) return [];
-  return state.participants.filter(p => p.group_id === groupId);
+  const target = data.normalizeGroupId(groupId);
+  return state.participants.filter(p => data.normalizeGroupId(p.group_id) === target);
 }
 
 function applyStaffParticipantChrome() {
@@ -2035,6 +2036,37 @@ function groupVotingOverrideInfo(groupId) {
  */
 function getVotingParticipants(list = state.participants) {
   return (list || []).filter(p => isSeatParticipantId(p.participant_id));
+}
+
+function isCalculatedVotingStatus(status) {
+  return status === 'CALCULATED' || status === 'PUBLISHED';
+}
+
+function profileFromStoredResult(result) {
+  const trophies = (result.awards || []).filter(
+    a => a && a.award_source !== 'fallback' && !data.isRetiredTrophy(a.trophy_id, a.trophy_name)
+  );
+  return {
+    participant_id: result.participant_id,
+    trophies,
+    vote_count: trophies.reduce((sum, a) => sum + (a.vote_count || 0), 0)
+  };
+}
+
+/** Official stored results when that group/global is calculated; otherwise live tally. Always fill seats the stored snapshot missed. */
+function profilesFromStoredOrProjection(storedResults, projection, useStored) {
+  const live = (projection.profiles || []).slice();
+  if (!useStored) {
+    return live.sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id));
+  }
+  const fromStored = (storedResults || []).map(profileFromStoredResult);
+  if (!fromStored.length) {
+    return live.sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id));
+  }
+  const storedIds = new Set(fromStored.map(p => p.participant_id));
+  const missing = live.filter(p => !storedIds.has(p.participant_id));
+  return [...fromStored, ...missing]
+    .sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id));
 }
 
 function buildTrophyOverview(submissions, trophies, participants = state.participants, votingStatus = state.votingConfig.voting_status) {
@@ -3066,21 +3098,14 @@ function refreshAdminTrophyViews() {
   const projection = data.computeResults(state.participants, trophies, submissions);
   state.adminTrophy.trophySummary = projection.trophySummary;
 
-  // Once results have been calculated the stored awards are what counts;
-  // before that, show what calculating now would produce.
+  // Official stored awards only after calculate/publish. Leftover results from
+  // other groups must not hide a group that has not been written yet.
   const stored = state.adminTrophy.results.filter(r => isSeatParticipantId(r.participant_id));
-  state.adminTrophy.profiles = stored.length > 0
-    ? stored
-      .map(r => {
-        const trophies = (r.awards || []).filter(a => a.award_source !== 'fallback' && !data.isRetiredTrophy(a.trophy_id, a.trophy_name));
-        return {
-          participant_id: r.participant_id,
-          trophies,
-          vote_count: trophies.reduce((sum, a) => sum + (a.vote_count || 0), 0)
-        };
-      })
-      .sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id))
-    : projection.profiles;
+  state.adminTrophy.profiles = profilesFromStoredOrProjection(
+    stored,
+    projection,
+    isCalculatedVotingStatus(state.votingConfig.voting_status)
+  );
 
   renderAdminTrophyStats();
   renderAdminPendingVoters();
@@ -3110,18 +3135,13 @@ function refreshStaffTrophyViews() {
   state.staffTrophy.trophySummary = projection.trophySummary;
 
   const stored = state.staffTrophy.results.filter(r => members.some(p => p.participant_id === r.participant_id));
-  state.staffTrophy.profiles = stored.length > 0
-    ? stored
-      .map(r => {
-        const awards = (r.awards || []).filter(a => a.award_source !== 'fallback');
-        return {
-          participant_id: r.participant_id,
-          trophies: awards,
-          vote_count: awards.reduce((sum, a) => sum + (a.vote_count || 0), 0)
-        };
-      })
-      .sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id))
-    : projection.profiles.filter(p => members.some(m => m.participant_id === p.participant_id));
+  state.staffTrophy.profiles = profilesFromStoredOrProjection(
+    stored,
+    {
+      profiles: projection.profiles.filter(p => members.some(m => m.participant_id === p.participant_id))
+    },
+    isCalculatedVotingStatus(voting.voting_status)
+  );
 
   renderStaffTrophyStats();
   renderStaffPendingVoters();
@@ -5848,12 +5868,20 @@ function buildGroupWinnersHtml(group) {
   const memberIds = group.members.map(m => m.participant_id);
   if (!memberIds.length) return '';
 
+  // Match the nomination grid: live per-group tally, not leftover stored results
+  // from other groups that already clicked 計算.
+  const idSet = new Set(memberIds.map(id => data.normalizeSeatId(id)));
+  const roster = getVotingParticipants(state.participants).filter(p =>
+    idSet.has(data.normalizeSeatId(p.participant_id))
+  );
+  const store = trophyStore();
+  const projection = data.computeResults(roster, store.trophies || [], store.submissions || []);
   const profilesById = new Map(
-    (trophyStore().profiles || []).map(p => [p.participant_id, p])
+    projection.profiles.map(p => [data.normalizeSeatId(p.participant_id), p])
   );
 
   const rows = memberIds.map(id => {
-    const awards = (profilesById.get(id)?.trophies || []).filter(a => (a.vote_count || 0) > 0);
+    const awards = (profilesById.get(data.normalizeSeatId(id))?.trophies || []).filter(a => (a.vote_count || 0) > 0);
     const trophiesHtml = awards.length
       ? awards.map(a => {
           const votes = a.vote_count || 0;
@@ -6932,9 +6960,7 @@ async function handleStaffCalculate(btn) {
   if (!groupId) return;
   await runProgressButton(btn, (async () => {
     try {
-      const members = getVotingParticipants(
-        state.participants.filter(p => p.group_id === groupId)
-      );
+      const members = getVotingParticipants(getFacilitatorGroupMembers(groupId));
       const memberIds = members.map(p => p.participant_id);
       const submissions = await data.fetchSubmissionsForParticipants(memberIds);
       const trophies = filterValidTrophies(

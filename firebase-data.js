@@ -896,16 +896,17 @@ export function computeResults(participants, trophies, submissions) {
     isSeatParticipantId(p.participant_id) && isNumberedGroupId(p.group_id)
   );
   trophies = (trophies || []).filter(t => !isRetiredTrophy(t.trophy_id, t.trophy_name));
-  const seatIds = new Set(roster.map(p => p.participant_id));
+  const seatIds = new Set(roster.map(p => normalizeSeatId(p.participant_id)));
   const voteCounts = new Map();
-  const key = (receiver, trophy) => receiver + '|' + trophy;
+  const key = (receiver, trophy) => normalizeSeatId(receiver) + '|' + trophy;
 
   submissions.forEach(submission => {
-    if (!seatIds.has(submission.participant_id)) return;
+    if (submission.status && submission.status !== 'submitted') return;
+    if (!seatIds.has(normalizeSeatId(submission.participant_id))) return;
     (submission.pairings || []).forEach(pair => {
       if (!pair || !pair.receiver_id || !pair.trophy_id) return;
       if (isRetiredTrophy(pair.trophy_id)) return;
-      if (!seatIds.has(pair.receiver_id)) return;
+      if (!seatIds.has(normalizeSeatId(pair.receiver_id))) return;
       const k = key(pair.receiver_id, pair.trophy_id);
       voteCounts.set(k, (voteCounts.get(k) || 0) + 1);
     });
