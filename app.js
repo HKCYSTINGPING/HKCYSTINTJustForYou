@@ -6162,8 +6162,10 @@ function buildLoginStatusGroups() {
   );
 
   const byGroup = new Map();
+  data.GROUP_LETTERS.forEach(letter => byGroup.set(letter, []));
   state.participants.forEach(p => {
     const group = data.normalizeGroupId(p.group_id);
+    if (!data.isNumberedGroupId(group)) return;
     if (!byGroup.has(group)) byGroup.set(group, []);
     const presence = presenceById.get(p.participant_id);
     const loggedIn = isPresenceCurrentlyLoggedIn(presence);
