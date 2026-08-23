@@ -32,7 +32,7 @@ service cloud.firestore {
 
     // Seat roster ids look like A1…D8 (letter = group). 1A leftover ids still match.
     function isSeatId(id) {
-      return id.matches('^[A-H][0-9]+$') || id.matches('^[0-9]+[A-H]$');
+      return id.matches('^[A-D][0-9]+$') || id.matches('^[0-9]+[A-D]$');
     }
 
     function isStaffPerson() {
@@ -55,7 +55,7 @@ service cloud.firestore {
 
     function isNumberedGroup(groupId) {
       return groupId is string && (
-        groupId.matches('^[A-H]$')
+        groupId.matches('^[A-D]$')
         || groupId.matches('^GROUP_[1-9][0-9]*$')
       );
     }

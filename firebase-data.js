@@ -55,19 +55,19 @@ setPersistence(secondaryAuth, inMemoryPersistence).catch(() => {});
 
 export const GROUP_UNASSIGNED = 'GROUP_UNASSIGNED';
 export const GROUP_STAFF = 'GROUP_STAFF';
-/** Letter groups A…F. Seat ids are letter + number (A1, A2… = Group A). */
-export const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+/** Letter groups A…D. Seat ids are letter + number (A1, A2… = Group A). */
+export const GROUP_LETTERS = ['A', 'B', 'C', 'D'];
 export const SEAT_MAX = 12;
 /** @deprecated use GROUP_LETTERS — kept so older admin capacity checks still resolve. */
 export const SEAT_LETTERS = GROUP_LETTERS;
 
-const SEAT_ID_RE = /^[A-H]\d+$/i;
-const LEGACY_SEAT_ID_RE = /^\d+[A-H]$/i;
+const SEAT_ID_RE = /^[A-D]\d+$/i;
+const LEGACY_SEAT_ID_RE = /^\d+[A-D]$/i;
 
 /** Flip leftover 1A-style ids to A1. Already-canonical ids are unchanged. */
 export function normalizeSeatId(participantId) {
   const raw = String(participantId || '').trim().toUpperCase();
-  const legacy = raw.match(/^(\d+)([A-H])$/);
+  const legacy = raw.match(/^(\d+)([A-D])$/);
   return legacy ? `${legacy[2]}${legacy[1]}` : raw;
 }
 
@@ -83,13 +83,13 @@ export function formatSeatId(groupLetter, seatNum) {
 
 export function seatGroupLetter(participantId) {
   const id = normalizeSeatId(participantId);
-  const m = id.match(/^([A-H])(\d+)$/);
+  const m = id.match(/^([A-D])(\d+)$/);
   return m ? m[1] : '';
 }
 
 export function seatNumberOf(participantId) {
   const id = normalizeSeatId(participantId);
-  const m = id.match(/^([A-H])(\d+)$/);
+  const m = id.match(/^([A-D])(\d+)$/);
   return m ? Number(m[2]) : 0;
 }
 
@@ -373,7 +373,7 @@ export function isUnassignedGroup(groupId) {
 
 export function groupLetterFromId(groupId) {
   const g = String(groupId || '').trim().toUpperCase();
-  if (/^[A-H]$/.test(g)) return g;
+  if (/^[A-D]$/.test(g)) return g;
   const m = g.match(/^GROUP_(\d+)$/);
   if (m) {
     const n = Number(m[1]);

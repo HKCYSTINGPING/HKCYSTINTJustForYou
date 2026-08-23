@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v4';
+import * as data from './firebase-data.js?v=20260823v5';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1685,7 +1685,7 @@ async function loadStaticParticipants() {
 
 // ─── Derived trophy views ───────────────────────────────────────────────────
 
-/** GROUP_UNASSIGNED first, then A…F, then GROUP_STAFF / everything else. */
+/** GROUP_UNASSIGNED first, then A…D, then GROUP_STAFF / everything else. */
 function compareGroupLabels(a, b) {
   const rank = label => {
     if (data.isUnassignedGroup(label) || label === data.GROUP_UNASSIGNED) return -1;
