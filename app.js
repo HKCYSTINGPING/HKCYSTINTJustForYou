@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v9';
+import * as data from './firebase-data.js?v=20260823v10';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -288,7 +288,7 @@ const ONBOARDING_STEPS = {
       prepare: 'trophy',
       skipIfStaff: true,
       title: '隊友清單',
-      body: '每位隊友下面有獎項掣，揀一個配對（每位至少一個；每個獎項只能配一位）。'
+      body: '每位隊友下面有獎項掣。每個獎項只能配一位；組員多過獎項時唔使每位都配到。'
     },
     {
       target: '[data-tour="trophy-actions"]',
@@ -5316,19 +5316,20 @@ async function handleTrophySubmitAll() {
   const teammates = state.trophy.teammates;
   const trophies = filterValidTrophies(state.trophy.trophies);
 
-  if (trophies.length < teammates.length) {
-    showToast('獎項數量少於隊友人數，無法為每位隊友各配至少一個', 'error');
+  const assignedTeammates = teammates.filter(t => (state.trophy.assignments[t.participant_id] || []).length > 0);
+  if (assignedTeammates.length === 0) {
+    showToast('請至少為一位隊友配對獎項', 'error');
     return;
   }
-
-  const incomplete = teammates.filter(t => {
-    const ids = state.trophy.assignments[t.participant_id];
-    return !ids || ids.length === 0;
-  });
-
-  if (incomplete.length > 0) {
-    showToast('請為每位隊友至少配對一個獎項', 'error');
-    return;
+  if (teammates.length <= trophies.length) {
+    const incomplete = teammates.filter(t => {
+      const ids = state.trophy.assignments[t.participant_id];
+      return !ids || ids.length === 0;
+    });
+    if (incomplete.length > 0) {
+      showToast('請為每位隊友至少配對一個獎項', 'error');
+      return;
+    }
   }
 
   const used = new Set();
@@ -7187,18 +7188,6 @@ async function confirmRosterPendingMoves() {
   pruneRosterPendingMoves();
   if (!rosterPendingMoves.size || rosterDraftApplying) return;
 
-  const draft = getRosterDraftParticipants();
-  for (const groupId of rosterBoardColumns()) {
-    if (!data.isNumberedGroupId(groupId)) continue;
-    const seats = draft.filter(p =>
-      normalizeRosterGroupId(p.group_id) === groupId && data.isSeatParticipantId(p.participant_id)
-    );
-    if (seats.length > data.SEAT_MAX) {
-      showToast(`${formatGroupLabel(groupId)} 超過 ${data.SEAT_MAX} 個座位，請先調整`, 'error');
-      return;
-    }
-  }
-
   const voting = state.votingConfig?.voting_status || '';
   if (voting === 'VOTING_OPEN' || voting === 'CALCULATED' || voting === 'PUBLISHED') {
     if (!(await showConfirmCard({
@@ -7467,7 +7456,7 @@ async function handleRosterAddSave() {
   } else if (data.isNumberedGroupId(groupId)) {
     pid = data.nextSeatIdForGroup(groupId, state.participants);
     if (!pid) {
-      showToast(formatGroupLabel(groupId) + ' 座位已滿', 'error');
+      showToast(formatGroupLabel(groupId) + ' 暫時無法分配座位編號', 'error');
       return;
     }
   } else {

@@ -57,7 +57,10 @@ export const GROUP_UNASSIGNED = 'GROUP_UNASSIGNED';
 export const GROUP_STAFF = 'GROUP_STAFF';
 /** Letter groups A…D. Seat ids are letter + number (A1, A2… = Group A). */
 export const GROUP_LETTERS = ['A', 'B', 'C', 'D'];
-export const SEAT_MAX = 12;
+/** No per-group member cap. This is only a search bound for unused seat ids. */
+const SEAT_ID_SEARCH_LIMIT = 9999;
+/** @deprecated Groups have no member cap; kept so older imports still resolve. */
+export const SEAT_MAX = SEAT_ID_SEARCH_LIMIT;
 /** @deprecated use GROUP_LETTERS — kept so older admin capacity checks still resolve. */
 export const SEAT_LETTERS = GROUP_LETTERS;
 
@@ -1205,7 +1208,7 @@ export function nextSeatIdForGroup(groupId, participants) {
       .map(p => normalizeSeatId(p.participant_id))
       .filter(id => isSeatParticipantId(id) && seatGroupLetter(id) === letter)
   );
-  for (let n = 1; n <= SEAT_MAX; n++) {
+  for (let n = 1; n <= SEAT_ID_SEARCH_LIMIT; n++) {
     const id = formatSeatId(letter, n);
     if (!taken.has(id)) return id;
   }
@@ -1217,8 +1220,8 @@ export function nextGlobalSeatId(participants) {
   const taken = new Set(
     (participants || []).map(p => normalizeSeatId(p.participant_id))
   );
-  for (const letter of GROUP_LETTERS) {
-    for (let n = 1; n <= SEAT_MAX; n++) {
+  for (let n = 1; n <= SEAT_ID_SEARCH_LIMIT; n++) {
+    for (const letter of GROUP_LETTERS) {
       const id = formatSeatId(letter, n);
       if (!taken.has(id)) return id;
     }
@@ -1376,7 +1379,12 @@ export async function compactGroupSeats(groupId, participants) {
   );
   const temps = [];
   const pickTemp = () => {
-    for (let n = 99; n >= 50; n--) {
+    let highest = 0;
+    taken.forEach(id => {
+      const n = seatNumberOf(id);
+      if (n > highest) highest = n;
+    });
+    for (let n = Math.max(1000, highest + 1); n <= SEAT_ID_SEARCH_LIMIT; n++) {
       for (const g of GROUP_LETTERS) {
         const id = formatSeatId(g, n);
         if (!taken.has(id) && !temps.some(t => t.temp === id)) return id;
@@ -1437,7 +1445,7 @@ export async function assignParticipantToGroup(participantId, targetGroupId, par
     const alreadyCorrect = seatBelongsToGroup(pid, target) && sourceGroup === target;
     if (!alreadyCorrect) {
       const nextId = nextSeatIdForGroup(target, roster.filter(p => String(p.participant_id).toUpperCase() !== pid));
-      if (!nextId) throw new Error(`${target} 座位已滿（最多 ${SEAT_MAX} 人）`);
+      if (!nextId) throw new Error(`${target} 暫時無法分配座位編號`);
       if (nextId !== pid) {
         finalId = await renameParticipantId(pid, nextId, { groupId: target });
       } else {
