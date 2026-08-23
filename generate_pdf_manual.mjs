@@ -417,7 +417,7 @@ const htmlContent = `<!DOCTYPE html>
     <ul class="step-list">
       <li class="step-item">
         <div class="step-num">1</div>
-        <strong>輸入參加者編號</strong>：在「參加者編號」欄位輸入你的專屬編號（例如 <code>1A</code>、<code>2B</code>、<code>3C</code> 等）。支援手動輸入或直接點擊下拉選單快速選取。
+        <strong>輸入參加者編號</strong>：在「參加者編號」欄位輸入你的專屬編號（例如 <code>A1</code>、<code>B2</code>、<code>C3</code> 等）。支援手動輸入或直接點擊下拉選單快速選取。
       </li>
       <li class="step-item">
         <div class="step-num">2</div>
@@ -477,7 +477,7 @@ const htmlContent = `<!DOCTYPE html>
     <ul class="step-list">
       <li class="step-item">
         <div class="step-num">1</div>
-        <strong>檢視隊友卡片</strong>：系統會自動列出同組的所有隊友（例如組員 1B, 1C, 1D, 1E, 1F 等）。
+        <strong>檢視隊友卡片</strong>：系統會自動列出同組的所有隊友（例如組員 B1, C1, D1, E1, F1 等）。
       </li>
       <li class="step-item">
         <div class="step-num">2</div>

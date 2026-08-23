@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v2';
+import * as data from './firebase-data.js?v=20260823v3';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1797,9 +1797,9 @@ function applyStaffParticipantChrome() {
   }
 }
 
-/** Seat ids are 1A…6H. Named people (WILL, …) are Staff. */
+/** Seat ids are A1…H6. Named people (WILL, …) are Staff. */
 function isSeatParticipantId(participantId) {
-  return /^[0-9][A-H]$/i.test(String(participantId || '').trim());
+  return data.isSeatParticipantId(participantId);
 }
 
 function isStaffPerson(pOrId) {
@@ -1831,7 +1831,7 @@ function displayNameOf(pOrId) {
   return (p.display_name || '').trim() || p.participant_id || '';
 }
 
-/** Shown in lists: "小明（1A）" so login ids stay discoverable. */
+/** Shown in lists: "小明（A1）" so login ids stay discoverable. */
 function displayLabelOf(pOrId) {
   const p = typeof pOrId === 'string' ? findParticipantById(pOrId) : pOrId;
   if (!p) return typeof pOrId === 'string' ? pOrId : '';
@@ -7584,7 +7584,7 @@ async function handleRosterEditSave() {
       let finalId = oldId;
       if (newId && newId !== oldId) {
         if (!(isSeatParticipantId(oldId) && isSeatParticipantId(newId))) {
-          throw new Error('只支援座位編號重命名（例如 3E → 1F）');
+          throw new Error('只支援座位編號重命名（例如 E3 → F1）');
         }
         finalId = await data.renameParticipantId(oldId, newId, {
           groupId,
@@ -8514,7 +8514,7 @@ document.addEventListener('DOMContentLoaded', init);
  * results, groups, config/messaging, config/voting.
  *
  * Participants log in with their id and phone number, which maps to
- * 1A -> 1a@tnit.local. Access is enforced by firestore.rules, not by this file.
+ * A1 -> a1@tnit.local. Access is enforced by firestore.rules, not by this file.
  *
  * Scripts, all run from the repo root with the service account key:
  *   migrate_to_firestore.py    push the sheet roster into Firebase

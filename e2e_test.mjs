@@ -96,26 +96,26 @@ async function run() {
     });
 
     console.log('參加者流程：');
-    await login(page1, '1A', '1a');
+    await login(page1, 'A1', 'a1');
     await page1.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
     await dismissOnboarding(page1);
     const greeting = await page1.textContent('#participant-greeting');
-    check('用 1A 登入後進入參加者版面', true);
-    check('顯示正確稱呼', greeting.includes('1A'), greeting.trim());
+    check('用 A1 登入後進入參加者版面', true);
+    check('顯示正確稱呼', greeting.includes('A1'), greeting.trim());
 
     // Sending: the message must show up without a page reload.
     const body = '自動測試留言 ' + Date.now();
     await page1.click('.home-card[data-nav="send"]');
     await page1.waitForSelector('#view-send:not(.hidden)', { timeout: 15000 });
     await page1.waitForSelector('#send-content', { state: 'visible', timeout: 10000 });
-    await page1.fill('#send-receiver', '1C');
+    await page1.fill('#send-receiver', 'C1');
     await page1.fill('#send-content', body);
     await page1.click('#send-submit');
     await page1.waitForSelector(`text=${body}`, { timeout: 20000 });
     check('留言即時出現喺已發送列表', true);
 
     // Whoever received it should see it arrive live, with no refresh at all.
-    await login(page2, '1C', await phoneFor('1C'));
+    await login(page2, 'C1', await phoneFor('C1'));
     await page2.waitForSelector('#screen-participant:not(.hidden)', { timeout: 30000 });
     await dismissOnboarding(page2);
     await page2.click('.bottom-nav-item[data-tab="inbox"]');
@@ -124,7 +124,7 @@ async function run() {
 
     // Anonymity is the whole promise of the app.
     const inboxHtml = await page2.innerHTML('#inbox-list');
-    check('收件箱唔會洩露寄件者身分', !inboxHtml.includes('1A'));
+    check('收件箱唔會洩露寄件者身分', !inboxHtml.includes('A1'));
 
     console.log('\n管理員流程：');
     await login(admin, 'admin', '23082026');
@@ -140,7 +140,7 @@ async function run() {
     check('儀表板有統計數字', /\d/.test(stats));
 
     console.log('\n錯誤登入：');
-    await login(stranger, '1B', 'WRONG_PASS');
+    await login(stranger, 'B1', 'WRONG_PASS');
     await stranger.waitForSelector('.toast', { timeout: 20000 });
     const toast = await stranger.textContent('.toast');
     check('錯密碼被拒絕', toast.includes('不正確') || toast.includes('錯誤'), toast.trim());

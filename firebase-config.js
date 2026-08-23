@@ -20,7 +20,7 @@ export const firebaseConfig = {
  */
 export const FCM_VAPID_KEY = '';
 
-// Participants log in as 1A / 1A, which maps to 1a@tnit.org (and still
+// Participants log in as A1 / A1, which maps to a1@tnit.org (and still
 // 1a@tnit.local for accounts created before the domain switch).
 export const EMAIL_DOMAIN = 'tnit.org';
 export const LEGACY_EMAIL_DOMAIN = 'tnit.local';

@@ -6,7 +6,7 @@ Firebase only lets a signed-in user change their own password, so the admin
 page in the browser cannot do this for someone else. This script can, because
 it runs with the service account.
 
-    python3 set_participant_phone.py 1A 91234567 \
+    python3 set_participant_phone.py A1 91234567 \
         --credentials ~/Downloads/service-account.json
 
 Takes effect immediately; the participant simply logs in with the new number.
@@ -19,7 +19,7 @@ from migrate_to_firestore import ADMIN_EMAIL, participant_email
 
 def main():
     parser = argparse.ArgumentParser(description="修改參加者電話號碼（等同登入密碼）")
-    parser.add_argument("participant_id", help="參加者編號，例如 1A")
+    parser.add_argument("participant_id", help="參加者編號，例如 A1")
     parser.add_argument("phone", help="新電話號碼")
     parser.add_argument("--credentials", required=True, help="服務帳戶 JSON 路徑")
     args = parser.parse_args()

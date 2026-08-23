@@ -7,7 +7,7 @@ rules have a verified identity to work with. The address is derived from the
 participant id and the password is the phone number, which keeps the login
 screen unchanged while moving enforcement from the frontend to Google:
 
-    1A / 98765432  ->  1a@tnit.local  with password 98765432
+    A1 / 98765432  ->  a1@tnit.local  with password 98765432
 
 Safe to run more than once: documents are overwritten and existing accounts
 have their password reset rather than causing an error.

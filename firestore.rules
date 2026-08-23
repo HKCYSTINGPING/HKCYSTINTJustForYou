@@ -3,7 +3,7 @@ rules_version = '2';
 // Access control for HKCYS TNIT Just For You.
 //
 // Participants sign in with Firebase Email/Password where the address is
-// derived from the participant id (1A -> 1a@tnit.local) and the password is
+// derived from the participant id (A1 -> a1@tnit.local) and the password is
 // their phone number. That gives every request a verified identity without
 // needing Cloud Functions, so these rules can be enforced by Google rather
 // than trusted to the frontend.
@@ -30,9 +30,9 @@ service cloud.firestore {
       return request.auth.token.email.split('@')[0].upper();
     }
 
-    // Seat roster ids look like 1A…6H. Everyone else (WILL, PHOEBE, …) is Staff.
+    // Seat roster ids look like A1…H6. Everyone else (WILL, PHOEBE, …) is Staff.
     function isSeatId(id) {
-      return id.matches('^[0-9][A-H]$');
+      return id.matches('^[A-H][0-9]+$');
     }
 
     function isStaffPerson() {

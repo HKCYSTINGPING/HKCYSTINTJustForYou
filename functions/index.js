@@ -20,7 +20,7 @@ const db = getFirestore();
 const messaging = getMessaging();
 
 function isSeatId(id) {
-  return /^[0-9][A-H]$/i.test(String(id || '').trim());
+  return /^[A-H]\d+$/i.test(String(id || '').trim());
 }
 
 async function tokensForParticipant(participantId) {
