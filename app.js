@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v12';
+import * as data from './firebase-data.js?v=20260823v13';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ const ONBOARDING_STEPS = {
       prepare: 'home',
       skipIfStaff: true,
       title: '獎項配對',
-      body: '投票開放後，喺呢度為每位隊友配對獎項；亦可睇「獎項摘要」了解每個獎嘅意思。'
+      body: '投票開放後，喺呢度為隊友配對獎項。每個獎只能配一位，要用晒所有獎；人數多過獎時唔使每位都有。'
     },
     {
       target: '#screen-participant .home-card[data-nav="sent"]',
@@ -281,14 +281,14 @@ const ONBOARDING_STEPS = {
       prepare: 'trophy',
       skipIfStaff: true,
       title: '配對進度',
-      body: '顯示你已經為幾多位隊友配咗獎項。'
+      body: '顯示已配咗幾多個獎項。全部獎都配出去先可以提交。'
     },
     {
       target: '[data-tour="trophy-teammates"]',
       prepare: 'trophy',
       skipIfStaff: true,
       title: '隊友清單',
-      body: '每位隊友下面有獎項掣。每個獎項只能配一位；組員多過獎項時唔使每位都配到。'
+      body: '每位隊友下面有獎項掣。每個獎只能配一位，要用晒所有獎；唔使每位隊友都有獎。'
     },
     {
       target: '[data-tour="trophy-actions"]',
@@ -5169,13 +5169,14 @@ function updateTrophyProgress() {
 }
 
 function recalcTrophyProgress() {
-  const teammates = state.trophy.teammates;
-  let assigned = 0;
-  teammates.forEach(t => {
-    const ids = state.trophy.assignments[t.participant_id];
-    if (ids && ids.length > 0) assigned++;
+  const trophies = filterValidTrophies(state.trophy.trophies);
+  const used = new Set();
+  Object.values(state.trophy.assignments || {}).forEach(ids => {
+    (ids || []).forEach(id => {
+      if (id && !data.isRetiredTrophy(id)) used.add(id);
+    });
   });
-  state.trophy.progress = { assigned, total: teammates.length };
+  state.trophy.progress = { assigned: used.size, total: trophies.length };
   updateTrophyProgress();
 }
 
@@ -5344,31 +5345,29 @@ async function handleTrophySubmitAll() {
   const teammates = state.trophy.teammates;
   const trophies = filterValidTrophies(state.trophy.trophies);
 
-  const assignedTeammates = teammates.filter(t => (state.trophy.assignments[t.participant_id] || []).length > 0);
-  if (assignedTeammates.length === 0) {
-    showToast('請至少為一位隊友配對獎項', 'error');
+  if (!trophies.length) {
+    showToast('尚未載入獎項清單，請稍後再試', 'error');
     return;
   }
-  if (teammates.length <= trophies.length) {
-    const incomplete = teammates.filter(t => {
-      const ids = state.trophy.assignments[t.participant_id];
-      return !ids || ids.length === 0;
-    });
-    if (incomplete.length > 0) {
-      showToast('請為每位隊友至少配對一個獎項', 'error');
-      return;
-    }
+  if (!teammates.length) {
+    showToast('暫無隊友可以配對', 'error');
+    return;
   }
 
   const used = new Set();
   for (const ids of Object.values(state.trophy.assignments)) {
     for (const trophyId of ids || []) {
+      if (!trophyId || data.isRetiredTrophy(trophyId)) continue;
       if (used.has(trophyId)) {
         showToast('每個獎項只能配對一位隊友', 'error');
         return;
       }
       used.add(trophyId);
     }
+  }
+  if (used.size < trophies.length) {
+    showToast('請用晒所有獎項再提交（而家 ' + used.size + '/' + trophies.length + '）', 'error');
+    return;
   }
 
   if (!(await showConfirmCard({
