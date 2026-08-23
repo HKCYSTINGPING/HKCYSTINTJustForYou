@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v10';
+import * as data from './firebase-data.js?v=20260823v11';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1865,9 +1865,15 @@ function displayLabelOf(pOrId) {
   return name && name !== id ? `${name}（${id}）` : id;
 }
 
+function inferredGroupIdFromSeat(participantId = state.participantId) {
+  return data.seatGroupLetter(participantId) || '';
+}
+
 function myGroupId() {
   const p = findParticipantById(state.participantId);
-  return (p && p.group_id) || '';
+  if (p && p.group_id) return p.group_id;
+  // Newly added seats (B10, A13…) may not be in the static login roster yet.
+  return inferredGroupIdFromSeat(state.participantId);
 }
 
 function groupMessagingOpen(groupId) {
@@ -2713,6 +2719,8 @@ async function startParticipantSubscriptions() {
         state.trophy.teammates = data.getTeammates(pid, state.participants);
         refreshComboboxItems();
         updateParticipantGreeting();
+        applyStaffParticipantChrome();
+        applyUnassignedChrome();
         renderProfile();
         renderStaffFacilitatorPanel();
         renderTrophyTeammates();
@@ -2973,6 +2981,8 @@ async function enterParticipantDashboard() {
     await startParticipantSubscriptions();
     setLoadingPercent(95);
     await startPresenceHeartbeat();
+    applyStaffParticipantChrome();
+    applyUnassignedChrome();
     recalcTrophyProgress();
     renderTrophyTeammates();
     renderProfile();
