@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v13';
+import * as data from './firebase-data.js?v=20260823v14';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ const ONBOARDING_STEPS = {
       prepare: 'home',
       skipIfStaff: true,
       title: '獎項配對',
-      body: '投票開放後，喺呢度為隊友配對獎項。每個獎只能配一位，要用晒所有獎；人數多過獎時唔使每位都有。'
+      body: '投票開放後，喺呢度為隊友配對獎項。每個獎最多配兩位，要用晒所有獎；人數多過獎時唔使每位都有。'
     },
     {
       target: '#screen-participant .home-card[data-nav="sent"]',
@@ -288,7 +288,7 @@ const ONBOARDING_STEPS = {
       prepare: 'trophy',
       skipIfStaff: true,
       title: '隊友清單',
-      body: '每位隊友下面有獎項掣。每個獎只能配一位，要用晒所有獎；唔使每位隊友都有獎。'
+      body: '每位隊友下面有獎項掣。每個獎最多配兩位，要用晒所有獎；唔使每位隊友都有獎。'
     },
     {
       target: '[data-tour="trophy-actions"]',
@@ -2804,7 +2804,7 @@ async function startParticipantSubscriptions() {
       (cb, err) => data.subscribeMySubmission(pid, cb, err),
       submission => {
         state.trophy.submissionStatus = submission ? submission.status : '';
-        state.trophy.assignments = enforceUniqueTrophyAssignments(
+        state.trophy.assignments = enforceTrophyAssignmentLimits(
           submission ? data.pairingsToAssignments(submission.pairings) : {}
         );
         state.trophy.loaded = true;
@@ -5180,24 +5180,29 @@ function recalcTrophyProgress() {
   updateTrophyProgress();
 }
 
-/** Each trophy may be paired to at most one teammate. */
-function findTrophyHolder(trophyId, exceptTeammateId) {
+const TROPHY_ASSIGN_MAX = 2;
+
+function trophyAssignmentReceivers(trophyId, exceptTeammateId) {
   const assignments = state.trophy.assignments || {};
-  for (const [receiverId, ids] of Object.entries(assignments)) {
-    if (exceptTeammateId && receiverId === exceptTeammateId) continue;
-    if ((ids || []).includes(trophyId)) return receiverId;
-  }
-  return null;
+  const holders = [];
+  Object.entries(assignments).forEach(([receiverId, ids]) => {
+    if (exceptTeammateId && receiverId === exceptTeammateId) return;
+    if ((ids || []).includes(trophyId)) holders.push(receiverId);
+  });
+  return holders;
 }
 
-function enforceUniqueTrophyAssignments(assignments) {
+function enforceTrophyAssignmentLimits(assignments) {
   const cleaned = {};
-  const seen = new Set();
+  const used = new Map();
   Object.keys(assignments || {}).sort().forEach(receiverId => {
     cleaned[receiverId] = [];
     (assignments[receiverId] || []).forEach(trophyId => {
-      if (!trophyId || seen.has(trophyId)) return;
-      seen.add(trophyId);
+      if (!trophyId || data.isRetiredTrophy(trophyId)) return;
+      if (cleaned[receiverId].includes(trophyId)) return;
+      const n = used.get(trophyId) || 0;
+      if (n >= TROPHY_ASSIGN_MAX) return;
+      used.set(trophyId, n + 1);
       cleaned[receiverId].push(trophyId);
     });
   });
@@ -5218,10 +5223,12 @@ function toggleTrophyAssignment(teammateId, trophyId) {
   if (idx >= 0) {
     assignments[teammateId].splice(idx, 1);
   } else {
-    const holder = findTrophyHolder(trophyId, teammateId);
-    if (holder) {
+    const holders = trophyAssignmentReceivers(trophyId, teammateId);
+    if (holders.length >= TROPHY_ASSIGN_MAX) {
       showToast(
-        '「' + trophyNameById(trophyId) + '」已配對畀 ' + displayLabelOf(holder) + '，請先取消再改',
+        '「' + trophyNameById(trophyId) + '」最多配兩位，而家已配畀 '
+          + holders.map(displayLabelOf).join('、')
+          + '，請先取消再改',
         'error'
       );
       return;
@@ -5247,15 +5254,17 @@ function renderTrophyTeammates() {
 
     const chips = validTrophies.map(trophy => {
       const isSelected = selected.includes(trophy.trophy_id);
-      const holder = findTrophyHolder(trophy.trophy_id, tid);
-      const isTaken = !!holder && !isSelected;
+      const holders = trophyAssignmentReceivers(trophy.trophy_id, tid);
+      const isTaken = holders.length >= TROPHY_ASSIGN_MAX && !isSelected;
       const classes = 'trophy-chip'
         + (isSelected ? ' selected' : '')
         + (isTaken ? ' taken' : '');
       const disabled = !editable || isTaken;
       const title = isTaken
-        ? ('已配對畀 ' + displayLabelOf(holder))
-        : escapeHtml(trophy.trophy_name);
+        ? ('已配兩位：' + holders.map(id => escapeHtml(displayLabelOf(id))).join('、'))
+        : (holders.length
+          ? (escapeHtml(trophy.trophy_name) + '（已配 ' + holders.length + '/2）')
+          : escapeHtml(trophy.trophy_name));
       return `<button type="button" class="${classes}"
         data-teammate="${escapeHtml(tid)}" data-trophy="${escapeHtml(trophy.trophy_id)}"
         title="${title}"
@@ -5354,15 +5363,16 @@ async function handleTrophySubmitAll() {
     return;
   }
 
-  const used = new Set();
+  const used = new Map();
   for (const ids of Object.values(state.trophy.assignments)) {
     for (const trophyId of ids || []) {
       if (!trophyId || data.isRetiredTrophy(trophyId)) continue;
-      if (used.has(trophyId)) {
-        showToast('每個獎項只能配對一位隊友', 'error');
+      const n = (used.get(trophyId) || 0) + 1;
+      if (n > TROPHY_ASSIGN_MAX) {
+        showToast('每個獎項最多配對兩位隊友', 'error');
         return;
       }
-      used.add(trophyId);
+      used.set(trophyId, n);
     }
   }
   if (used.size < trophies.length) {
