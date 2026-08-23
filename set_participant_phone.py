@@ -25,10 +25,13 @@ def main():
     args = parser.parse_args()
 
     participant_id = args.participant_id.strip().upper()
-    phone = "".join(ch for ch in args.phone if ch.isdigit())
+    phone = str(args.phone or "").strip()
+    if not phone:
+        raise SystemExit("請輸入新密碼")
 
-    if len(phone) < 6:
-        raise SystemExit("Firebase 要求密碼至少 6 個字元，電話號碼太短")
+    auth_password = phone
+    while len(auth_password) < 6:
+        auth_password += phone
 
     try:
         import firebase_admin
@@ -45,7 +48,7 @@ def main():
     except auth.UserNotFoundError:
         raise SystemExit(f"搵唔到 {participant_id} 呢個帳戶，請確認編號")
 
-    auth.update_user(user.uid, password=phone)
+    auth.update_user(user.uid, password=auth_password)
     db.collection("contacts").document(participant_id).set(
         {"participant_id": participant_id, "phone_number": phone}, merge=True
     )

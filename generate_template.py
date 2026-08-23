@@ -23,7 +23,7 @@ def build_participants():
     for n in range(1, 7):
         for i, letter in enumerate("ABCDEF"):
             pid = f"{letter}{n}"
-            rows.append([pid, str(base + (n - 1) * 6 + i), f"GROUP_{n}"])
+            rows.append([pid, str(base + (n - 1) * 6 + i), letter])
     staff_phones = {
         "WILL": "11111111", "PHOEBE": "22222222", "RIGHT": "33333333",
         "RENAE": "44444444", "CHUNJAI": "55555555", "IRENE": "66666666",
@@ -65,7 +65,7 @@ def build_workbook():
     for r, row in enumerate(samples, 2):
         for c, val in enumerate(row, 1):
             ws.cell(row=r, column=c, value=val).border = THIN_BORDER
-    add_note(ws, 52, "說明：group_id 必須相同才能成為 Trophy 隊友。A1-F1 用 GROUP_1，A2-F2 用 GROUP_2… 工作人員用 GROUP_STAFF。勿將電話號碼填入 group_id！")
+    add_note(ws, 52, "說明：group_id 必須相同才能成為 Trophy 隊友。A1-A8 用 A，B1-B8 用 B… 工作人員用 GROUP_STAFF。勿將電話號碼填入 group_id！")
 
     # ── Messages ──
     ws = wb.create_sheet("Messages")

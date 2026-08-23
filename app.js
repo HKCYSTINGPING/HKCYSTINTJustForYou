@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v3';
+import * as data from './firebase-data.js?v=20260823v4';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -13,7 +13,7 @@ const CONFIG = {
   // round trip. It carries ids and groups only; phone numbers are passwords
   // and live in Firebase Authentication.
   PARTICIPANTS_URL: 'participants.json',
-  PARTICIPANTS_CACHE_KEY: 'hkcy_participants',
+  PARTICIPANTS_CACHE_KEY: 'hkcy_participants_a1',
   PARTICIPANTS_CACHE_TTL: 30 * 60 * 1000,
   // Tab-scoped login identity: survives reload, cleared on logout / tab close.
   SESSION_KEY: 'hkcy_session',
@@ -655,7 +655,7 @@ const ONBOARDING_STEPS = {
       target: '[data-tour="admin-group-overrides"]',
       prepare: 'settings',
       title: '各組狀態',
-      body: '改組名、查看 Staff 覆寫，並可獨立控制該組留言／投票。將 Staff 分到 GROUP_1…6 後，對方即可監控同控場。'
+      body: '改組名、查看 Staff 覆寫，並可獨立控制該組留言／投票。將 Staff 分到 Group A…D 後，對方即可監控同控場。'
     },
     {
       target: '[data-tour="admin-bulk-actions"]',
@@ -959,7 +959,8 @@ function cacheDOM() {
 function normalizeId(id) {
   if (!id) return '';
   const s = String(id).trim().toUpperCase();
-  return s === 'ADMIN' ? CONFIG.ADMIN_ID : s;
+  if (s === 'ADMIN') return CONFIG.ADMIN_ID;
+  return data.normalizeSeatId(s);
 }
 
 function isAdminLogin(participantId) {
@@ -1672,21 +1673,27 @@ function reportSubscriptionError(what) {
 async function loadStaticParticipants() {
   const res = await fetch(CONFIG.PARTICIPANTS_URL, { cache: 'no-cache' });
   if (!res.ok) throw new Error('網路錯誤：' + res.status);
-  const data = await res.json();
-  if (!Array.isArray(data.participants) || data.participants.length === 0) {
+  const payload = await res.json();
+  if (!Array.isArray(payload.participants) || payload.participants.length === 0) {
     throw new Error('參加者名單是空的');
   }
-  return data.participants;
+  return payload.participants.map(p => ({
+    participant_id: data.normalizeSeatId(p.participant_id),
+    group_id: data.normalizeGroupId(p.group_id || '')
+  }));
 }
 
 // ─── Derived trophy views ───────────────────────────────────────────────────
 
-/** GROUP_UNASSIGNED first, then GROUP_1… then GROUP_STAFF / everything else. */
+/** GROUP_UNASSIGNED first, then A…F, then GROUP_STAFF / everything else. */
 function compareGroupLabels(a, b) {
   const rank = label => {
     if (data.isUnassignedGroup(label) || label === data.GROUP_UNASSIGNED) return -1;
-    const m = String(label).match(/^GROUP_(\d+)$/i);
-    if (m) return Number(m[1]);
+    const letter = data.groupLetterFromId(label);
+    if (letter) {
+      const idx = data.GROUP_LETTERS.indexOf(letter);
+      return idx >= 0 ? idx : 100;
+    }
     if (/STAFF/i.test(label)) return 1000;
     return 2000;
   };
@@ -1698,10 +1705,12 @@ function compareGroupLabels(a, b) {
 
 function formatGroupLabel(label) {
   if (data.isUnassignedGroup(label) || label === data.GROUP_UNASSIGNED) return '未分配';
-  const meta = state.groupMeta[label];
-  if (meta && meta.display_name) return meta.display_name;
-  const m = String(label || '').match(/^GROUP_(\d+)$/i);
-  if (m) return 'Group ' + m[1];
+  const normalized = data.normalizeGroupId(label);
+  const meta = state.groupMeta[normalized] || state.groupMeta[label];
+  const custom = typeof meta?.display_name === 'string' ? meta.display_name.trim() : '';
+  if (custom && custom !== '[object Object]') return custom;
+  const letter = data.groupLetterFromId(label);
+  if (letter) return 'Group ' + letter;
   if (/STAFF/i.test(label)) return 'Staff';
   return label || '未分配';
 }
@@ -1715,8 +1724,8 @@ function canRenameGroup(groupId) {
 function defaultGroupLabel(groupId) {
   const g = String(groupId || '').trim();
   if (data.isUnassignedGroup(g) || g === data.GROUP_UNASSIGNED) return '未分配';
-  const m = g.match(/^GROUP_(\d+)$/i);
-  if (m) return 'Group ' + m[1];
+  const letter = data.groupLetterFromId(g);
+  if (letter) return 'Group ' + letter;
   if (/STAFF/i.test(g)) return 'Staff';
   return g || '未分配';
 }
@@ -1797,7 +1806,7 @@ function applyStaffParticipantChrome() {
   }
 }
 
-/** Seat ids are A1…H6. Named people (WILL, …) are Staff. */
+/** Seat ids are A1…D8. Named people (WILL, …) are Staff. */
 function isSeatParticipantId(participantId) {
   return data.isSeatParticipantId(participantId);
 }
@@ -1810,7 +1819,7 @@ function isStaffPerson(pOrId) {
 }
 
 function isNumberedGroupId(groupId) {
-  return /^GROUP_\d+$/i.test(String(groupId || '').trim());
+  return data.isNumberedGroupId(groupId);
 }
 
 /** Staff who have been moved into a numbered group facilitate that group. */
@@ -1827,8 +1836,12 @@ function isGroupFacilitator(participantId = state.participantId) {
 
 function displayNameOf(pOrId) {
   const p = typeof pOrId === 'string' ? findParticipantById(pOrId) : pOrId;
-  if (!p) return typeof pOrId === 'string' ? pOrId : '';
-  return (p.display_name || '').trim() || p.participant_id || '';
+  const fallback = typeof pOrId === 'string' ? data.normalizeSeatId(pOrId) : '';
+  if (!p) return fallback;
+  const id = data.normalizeSeatId(p.participant_id || '');
+  const name = (p.display_name || '').trim();
+  if (!name || data.isSeatParticipantId(name)) return id;
+  return name;
 }
 
 /** Shown in lists: "小明（A1）" so login ids stay discoverable. */
@@ -2220,7 +2233,7 @@ function isStaffGroup(groupId) {
 
 function isStaffParticipant(p) {
   // Prefer identity (named Staff) over current group, so facilitators moved
-  // into GROUP_1…6 still type their id at login instead of appearing in the list.
+  // into Group A…D still type their id at login instead of appearing in the list.
   return !!(p && (isStaffPerson(p) || isStaffGroup(p.group_id)));
 }
 
@@ -7252,7 +7265,7 @@ async function refreshAdminParticipantDetail() {
 function rosterBoardColumns() {
   return [
     data.GROUP_UNASSIGNED,
-    'GROUP_1', 'GROUP_2', 'GROUP_3', 'GROUP_4', 'GROUP_5', 'GROUP_6',
+    ...data.GROUP_LETTERS,
     data.GROUP_STAFF
   ];
 }
@@ -7384,8 +7397,8 @@ async function confirmRosterPendingMoves() {
     const seats = draft.filter(p =>
       normalizeRosterGroupId(p.group_id) === groupId && data.isSeatParticipantId(p.participant_id)
     );
-    if (seats.length > data.SEAT_LETTERS.length) {
-      showToast(`${formatGroupLabel(groupId)} 超過 ${data.SEAT_LETTERS.length} 個座位，請先調整`, 'error');
+    if (seats.length > data.SEAT_MAX) {
+      showToast(`${formatGroupLabel(groupId)} 超過 ${data.SEAT_MAX} 個座位，請先調整`, 'error');
       return;
     }
   }
@@ -7584,7 +7597,7 @@ async function handleRosterEditSave() {
       let finalId = oldId;
       if (newId && newId !== oldId) {
         if (!(isSeatParticipantId(oldId) && isSeatParticipantId(newId))) {
-          throw new Error('只支援座位編號重命名（例如 E3 → F1）');
+          throw new Error('只支援座位編號重命名（例如 B3 → A7）');
         }
         finalId = await data.renameParticipantId(oldId, newId, {
           groupId,
@@ -7695,7 +7708,8 @@ async function handleRosterAddSave() {
 function listEditableGroupIds(selectedId) {
   const groups = new Set([
     data.GROUP_UNASSIGNED,
-    'GROUP_1', 'GROUP_2', 'GROUP_3', 'GROUP_4', 'GROUP_5', 'GROUP_6', data.GROUP_STAFF
+    ...data.GROUP_LETTERS,
+    data.GROUP_STAFF
   ]);
   state.participants.forEach(p => {
     if (p.group_id) groups.add(normalizeRosterGroupId(p.group_id));

@@ -41,7 +41,7 @@ import {
   writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 
-import { ADMIN_EMAIL, FCM_VAPID_KEY, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260822v3';
+import { ADMIN_EMAIL, FCM_VAPID_KEY, firebaseConfig, participantEmail, participantEmails } from './firebase-config.js?v=20260823v4';
 import { getMessaging, getToken, deleteToken, isSupported, onMessage } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-messaging.js';
 
 const app = initializeApp(firebaseConfig);
@@ -55,39 +55,60 @@ setPersistence(secondaryAuth, inMemoryPersistence).catch(() => {});
 
 export const GROUP_UNASSIGNED = 'GROUP_UNASSIGNED';
 export const GROUP_STAFF = 'GROUP_STAFF';
-export const SEAT_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+/** Letter groups A…F. Seat ids are letter + number (A1, A2… = Group A). */
+export const GROUP_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
+export const SEAT_MAX = 12;
+/** @deprecated use GROUP_LETTERS — kept so older admin capacity checks still resolve. */
+export const SEAT_LETTERS = GROUP_LETTERS;
 
 const SEAT_ID_RE = /^[A-H]\d+$/i;
+const LEGACY_SEAT_ID_RE = /^\d+[A-H]$/i;
 
-/** Seat roster ids: letter + group number (A1…H6). Staff use named ids (WILL, …). */
+/** Flip leftover 1A-style ids to A1. Already-canonical ids are unchanged. */
+export function normalizeSeatId(participantId) {
+  const raw = String(participantId || '').trim().toUpperCase();
+  const legacy = raw.match(/^(\d+)([A-H])$/);
+  return legacy ? `${legacy[2]}${legacy[1]}` : raw;
+}
+
+/** Seat roster ids: group letter + seat number (A1…D8). Staff use named ids. */
 export function isSeatParticipantId(participantId) {
-  return SEAT_ID_RE.test(String(participantId || '').trim());
-}
-
-export function formatSeatId(groupNum, letter) {
-  return `${String(letter || '').toUpperCase()}${groupNum}`;
-}
-
-export function seatGroupNumber(participantId) {
   const id = String(participantId || '').trim().toUpperCase();
-  const m = id.match(/^[A-H](\d+)$/);
-  return m ? Number(m[1]) : 0;
+  return SEAT_ID_RE.test(id) || LEGACY_SEAT_ID_RE.test(id);
+}
+
+export function formatSeatId(groupLetter, seatNum) {
+  return `${String(groupLetter || '').toUpperCase()}${seatNum}`;
+}
+
+export function seatGroupLetter(participantId) {
+  const id = normalizeSeatId(participantId);
+  const m = id.match(/^([A-H])(\d+)$/);
+  return m ? m[1] : '';
+}
+
+export function seatNumberOf(participantId) {
+  const id = normalizeSeatId(participantId);
+  const m = id.match(/^([A-H])(\d+)$/);
+  return m ? Number(m[2]) : 0;
 }
 
 export function seatLetterOf(participantId) {
-  const id = String(participantId || '').trim().toUpperCase();
-  return SEAT_ID_RE.test(id) ? id.charAt(0) : '';
+  return seatGroupLetter(participantId);
+}
+
+export function seatGroupNumber(participantId) {
+  return seatNumberOf(participantId);
 }
 
 export function seatBelongsToGroup(participantId, groupId) {
-  const n = groupNumberFromId(groupId);
-  return n > 0 && seatGroupNumber(participantId) === n;
+  const letter = groupLetterFromId(groupId);
+  return !!letter && seatGroupLetter(participantId) === letter;
 }
 
-function seatLetterSortIndex(participantId) {
-  const letter = seatLetterOf(participantId);
-  const idx = SEAT_LETTERS.indexOf(letter);
-  return idx >= 0 ? idx : 999;
+function seatNumberSortIndex(participantId) {
+  const n = seatNumberOf(participantId);
+  return n > 0 ? n : 999;
 }
 
 // Firestore caps a batch at 500 operations.
@@ -223,7 +244,7 @@ export function identityFromUser(user) {
   }
   const local = email.split('@')[0] || '';
   if (!local) return null;
-  return { participantId: local.toUpperCase(), isAdmin: false };
+  return { participantId: normalizeSeatId(local.toUpperCase()), isAdmin: false };
 }
 
 /** Resolves once Firebase has restored (or ruled out) a previous session. */
@@ -350,29 +371,44 @@ export function isUnassignedGroup(groupId) {
     || g === '未分配';
 }
 
+export function groupLetterFromId(groupId) {
+  const g = String(groupId || '').trim().toUpperCase();
+  if (/^[A-H]$/.test(g)) return g;
+  const m = g.match(/^GROUP_(\d+)$/);
+  if (m) {
+    const n = Number(m[1]);
+    return GROUP_LETTERS[n - 1] || '';
+  }
+  return '';
+}
+
 export function normalizeGroupId(groupId) {
   const g = String(groupId || '').trim();
   if (isUnassignedGroup(g)) return GROUP_UNASSIGNED;
+  const letter = groupLetterFromId(g);
+  if (letter) return letter;
   return g;
 }
 
 export function isNumberedGroupId(groupId) {
-  return /^GROUP_[1-9]\d*$/i.test(String(groupId || '').trim());
+  return !!groupLetterFromId(groupId);
 }
 
 export function groupNumberFromId(groupId) {
-  const m = String(groupId || '').trim().match(/^GROUP_(\d+)$/i);
-  return m ? Number(m[1]) : 0;
+  const letter = groupLetterFromId(groupId);
+  if (!letter) return 0;
+  const idx = GROUP_LETTERS.indexOf(letter);
+  return idx >= 0 ? idx + 1 : 0;
 }
 
 export function getTeammates(participantId, allParticipants) {
   const me = (allParticipants || []).find(p => p.participant_id === participantId);
   if (!me) return [];
-  const group = String(me.group_id || '').trim();
+  const group = normalizeGroupId(me.group_id);
   if (!group || isUnassignedGroup(group) || !isNumberedGroupId(group)) return [];
   return allParticipants.filter(
     p => p.participant_id !== participantId
-      && String(p.group_id || '').trim() === group
+      && normalizeGroupId(p.group_id) === group
       && isSeatParticipantId(p.participant_id)
   );
 }
@@ -597,7 +633,7 @@ export function subscribeGroups(onData, onError) {
       const raw = d.data() || {};
       map[d.id] = {
         group_id: raw.group_id || d.id,
-        display_name: String(raw.display_name || '').trim(),
+        display_name: (typeof raw.display_name === 'string' ? raw.display_name : '').trim(),
         messaging_status: raw.messaging_status === 'CLOSE' ? 'CLOSE' : 'OPEN',
         voting_status: raw.voting_status || '',
         allow_resubmit: !!raw.allow_resubmit,
@@ -847,7 +883,7 @@ export function computeResults(participants, trophies, submissions) {
 
   const byGroup = new Map();
   roster.forEach(p => {
-    const group = isUnassignedGroup(p.group_id) ? GROUP_UNASSIGNED : (p.group_id || GROUP_UNASSIGNED);
+    const group = isUnassignedGroup(p.group_id) ? GROUP_UNASSIGNED : (normalizeGroupId(p.group_id) || GROUP_UNASSIGNED);
     if (!byGroup.has(group)) byGroup.set(group, []);
     byGroup.get(group).push(p);
   });
@@ -993,15 +1029,21 @@ export async function fetchPresenceForParticipants(participantIds) {
 
 export function subscribeParticipants(onData, onError) {
   return onSnapshot(collection(db, 'participants'), snapshot => {
-    onData(snapshot.docs.map(d => {
+    const byId = new Map();
+    snapshot.docs.forEach(d => {
       const raw = d.data() || {};
-      return {
-        participant_id: raw.participant_id || d.id,
-        group_id: raw.group_id || '',
+      const id = normalizeSeatId(raw.participant_id || d.id);
+      const row = {
+        participant_id: id,
+        group_id: normalizeGroupId(raw.group_id || ''),
         display_name: String(raw.display_name || '').trim(),
         force_logout_rev: Number(raw.force_logout_rev || 0) || 0
       };
-    }).sort((a, b) => a.participant_id.localeCompare(b.participant_id)));
+      const existing = byId.get(id);
+      const canonical = SEAT_ID_RE.test(String(d.id || '').toUpperCase());
+      if (!existing || canonical) byId.set(id, row);
+    });
+    onData([...byId.values()].sort((a, b) => a.participant_id.localeCompare(b.participant_id)));
   }, onError);
 }
 
@@ -1139,17 +1181,17 @@ async function deleteAuthAccount(participantId, passwordHint) {
   });
 }
 
-/** Next free seat id for a numbered group (e.g. GROUP_1 → A1…H1). */
+/** Next free seat id for a letter group (e.g. A → A1, A2…). */
 export function nextSeatIdForGroup(groupId, participants) {
-  const n = groupNumberFromId(groupId);
-  if (!n) return '';
+  const letter = groupLetterFromId(groupId);
+  if (!letter) return '';
   const taken = new Set(
     (participants || [])
-      .map(p => String(p.participant_id || '').toUpperCase())
-      .filter(id => isSeatParticipantId(id) && seatGroupNumber(id) === n)
+      .map(p => normalizeSeatId(p.participant_id))
+      .filter(id => isSeatParticipantId(id) && seatGroupLetter(id) === letter)
   );
-  for (const letter of SEAT_LETTERS) {
-    const id = formatSeatId(n, letter);
+  for (let n = 1; n <= SEAT_MAX; n++) {
+    const id = formatSeatId(letter, n);
     if (!taken.has(id)) return id;
   }
   return '';
@@ -1158,11 +1200,11 @@ export function nextSeatIdForGroup(groupId, participants) {
 /** Any globally unused seat id (used when creating unassigned people). */
 export function nextGlobalSeatId(participants) {
   const taken = new Set(
-    (participants || []).map(p => String(p.participant_id || '').toUpperCase())
+    (participants || []).map(p => normalizeSeatId(p.participant_id))
   );
-  for (let n = 1; n <= 9; n++) {
-    for (const letter of SEAT_LETTERS) {
-      const id = formatSeatId(n, letter);
+  for (const letter of GROUP_LETTERS) {
+    for (let n = 1; n <= SEAT_MAX; n++) {
+      const id = formatSeatId(letter, n);
       if (!taken.has(id)) return id;
     }
   }
@@ -1226,8 +1268,8 @@ async function rewriteParticipantIdReferences(oldId, newId, newGroupId) {
  * Returns the new id.
  */
 export async function renameParticipantId(oldId, newId, { groupId, displayName, password } = {}) {
-  const from = String(oldId || '').trim().toUpperCase();
-  const to = String(newId || '').trim().toUpperCase();
+  const from = normalizeSeatId(oldId);
+  const to = normalizeSeatId(newId);
   if (!from || !to) throw new Error('編號不能為空');
   if (from === to) {
     if (groupId) await updateParticipantGroup(from, groupId);
@@ -1298,30 +1340,30 @@ export async function renameParticipantId(oldId, newId, { groupId, displayName, 
   return to;
 }
 
-/** Compact seat letters inside a numbered group to consecutive A,B,C… */
+/** Compact seat numbers inside a letter group to consecutive A1, A2, A3… */
 export async function compactGroupSeats(groupId, participants) {
   if (!isNumberedGroupId(groupId)) return [];
-  const n = groupNumberFromId(groupId);
+  const letter = groupLetterFromId(groupId);
   const members = (participants || [])
-    .filter(p => String(p.group_id || '').trim() === groupId && isSeatParticipantId(p.participant_id))
-    .sort((a, b) => seatLetterSortIndex(a.participant_id) - seatLetterSortIndex(b.participant_id));
+    .filter(p => normalizeGroupId(p.group_id) === normalizeGroupId(groupId) && isSeatParticipantId(p.participant_id))
+    .sort((a, b) => seatNumberSortIndex(a.participant_id) - seatNumberSortIndex(b.participant_id));
 
   const plan = members.map((p, i) => ({
-    from: String(p.participant_id).toUpperCase(),
-    to: formatSeatId(n, SEAT_LETTERS[i])
+    from: normalizeSeatId(p.participant_id),
+    to: formatSeatId(letter, i + 1)
   })).filter(row => row.from !== row.to);
 
   if (!plan.length) return [];
 
   // Two-phase rename via temporary free seats to avoid collisions.
   const taken = new Set(
-    (participants || []).map(p => String(p.participant_id || '').toUpperCase())
+    (participants || []).map(p => normalizeSeatId(p.participant_id))
   );
   const temps = [];
   const pickTemp = () => {
-    for (let n = 9; n >= 0; n--) {
-      for (const letter of SEAT_LETTERS) {
-        const id = formatSeatId(n, letter);
+    for (let n = 99; n >= 50; n--) {
+      for (const g of GROUP_LETTERS) {
+        const id = formatSeatId(g, n);
         if (!taken.has(id) && !temps.some(t => t.temp === id)) return id;
       }
     }
@@ -1356,12 +1398,12 @@ export async function compactGroupSeats(groupId, participants) {
 }
 
 /**
- * Assign a person to a group. Seat members in numbered groups get auto-renumbered
- * (e.g. E3 → Group 1 becomes next free Ax). Source numbered groups are compacted.
+ * Assign a person to a group. Seat members in letter groups get auto-renumbered
+ * (e.g. B3 → Group A becomes next free Ax). Source groups are compacted.
  */
 export async function assignParticipantToGroup(participantId, targetGroupId, participants) {
-  const pid = String(participantId || '').trim().toUpperCase();
-  const target = String(targetGroupId || '').trim() || GROUP_UNASSIGNED;
+  const pid = normalizeSeatId(participantId);
+  const target = normalizeGroupId(targetGroupId) || GROUP_UNASSIGNED;
   const roster = participants || [];
   const person = roster.find(p => String(p.participant_id).toUpperCase() === pid);
   if (!person) throw new Error('搵唔到呢位參加者');
@@ -1380,7 +1422,7 @@ export async function assignParticipantToGroup(participantId, targetGroupId, par
     const alreadyCorrect = seatBelongsToGroup(pid, target) && sourceGroup === target;
     if (!alreadyCorrect) {
       const nextId = nextSeatIdForGroup(target, roster.filter(p => String(p.participant_id).toUpperCase() !== pid));
-      if (!nextId) throw new Error(`${target} 座位已滿（最多 ${SEAT_LETTERS.length} 人）`);
+      if (!nextId) throw new Error(`${target} 座位已滿（最多 ${SEAT_MAX} 人）`);
       if (nextId !== pid) {
         finalId = await renameParticipantId(pid, nextId, { groupId: target });
       } else {
@@ -1459,8 +1501,8 @@ export async function applyRosterGroupDraft(desiredById, participants) {
 }
 
 export async function createParticipant({ participantId, groupId, password, displayName }) {
-  const pid = String(participantId || '').trim().toUpperCase();
-  const group = String(groupId || '').trim() || GROUP_UNASSIGNED;
+  const pid = normalizeSeatId(participantId);
+  const group = normalizeGroupId(groupId) || GROUP_UNASSIGNED;
   const phone = String(password || '').trim();
   if (!pid) throw new Error('請輸入參加者編號');
   if (!phone) throw new Error('請輸入密碼');

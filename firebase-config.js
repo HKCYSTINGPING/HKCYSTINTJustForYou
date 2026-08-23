@@ -20,8 +20,8 @@ export const firebaseConfig = {
  */
 export const FCM_VAPID_KEY = '';
 
-// Participants log in as A1 / A1, which maps to a1@tnit.org (and still
-// 1a@tnit.local for accounts created before the domain switch).
+// Participants log in as A1 / 4-digit password, which maps to a1@tnit.org
+// (and still 1a@tnit.local / a1@tnit.local for leftover accounts).
 export const EMAIL_DOMAIN = 'tnit.org';
 export const LEGACY_EMAIL_DOMAIN = 'tnit.local';
 export const ADMIN_EMAIL = 'admin@tnit.local';
@@ -30,12 +30,27 @@ export function participantEmail(participantId, domain = EMAIL_DOMAIN) {
   return `${String(participantId || '').trim().toLowerCase()}@${domain}`;
 }
 
+function flippedLegacyLocal(participantId) {
+  const raw = String(participantId || '').trim().toLowerCase();
+  const fromNew = raw.match(/^([a-h])(\d+)$/);
+  if (fromNew) return `${fromNew[2]}${fromNew[1]}`;
+  const fromOld = raw.match(/^(\d+)([a-h])$/);
+  if (fromOld) return `${fromOld[2]}${fromOld[1]}`;
+  return '';
+}
+
 export function participantEmails(participantId) {
   const local = String(participantId || '').trim().toLowerCase();
   if (!local) return [];
-  const emails = [participantEmail(local, EMAIL_DOMAIN)];
-  if (LEGACY_EMAIL_DOMAIN && LEGACY_EMAIL_DOMAIN !== EMAIL_DOMAIN) {
-    emails.push(participantEmail(local, LEGACY_EMAIL_DOMAIN));
-  }
+  const locals = [local];
+  const flipped = flippedLegacyLocal(local);
+  if (flipped && flipped !== local) locals.push(flipped);
+  const emails = [];
+  locals.forEach(part => {
+    emails.push(participantEmail(part, EMAIL_DOMAIN));
+    if (LEGACY_EMAIL_DOMAIN && LEGACY_EMAIL_DOMAIN !== EMAIL_DOMAIN) {
+      emails.push(participantEmail(part, LEGACY_EMAIL_DOMAIN));
+    }
+  });
   return emails;
 }
