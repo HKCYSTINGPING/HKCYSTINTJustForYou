@@ -15,7 +15,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/heart.png">
   <link rel="preload" href="fonts/CanvaHandwritingStyleTC.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=20260823v7">
+  <link rel="stylesheet" href="styles.css?v=20260823v8">
 </head>
 <body>
 
@@ -371,6 +371,18 @@
           </div>
           <button type="button" id="profile-save-name" class="btn btn-primary btn-sm btn-progress">
             <span class="btn-label">儲存名稱</span>
+            <span class="btn-progress-bar" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="profile-group-rename-card" class="card profile-group-rename-card hidden" data-tour="profile-group-rename">
+          <h3 class="section-title">組別名稱</h3>
+          <p class="form-hint">改呢個組喺 App 入面顯示嘅名稱。直接改而家個名就可以。</p>
+          <div class="form-group">
+            <label for="profile-group-name">組別名稱</label>
+            <input type="text" id="profile-group-name" class="input-field" maxlength="40" autocomplete="off">
+          </div>
+          <button type="button" id="profile-save-group-name" class="btn btn-primary btn-sm btn-progress">
+            <span class="btn-label">儲存組名</span>
             <span class="btn-progress-bar" aria-hidden="true"></span>
           </button>
         </div>
@@ -1129,6 +1141,6 @@
     </div>
   </section>
 
-  <script type="module" src="app.js?v=20260823v7"></script>
+  <script type="module" src="app.js?v=20260823v8"></script>
 </body>
 </html>

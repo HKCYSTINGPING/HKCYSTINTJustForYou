@@ -310,6 +310,13 @@ const ONBOARDING_STEPS = {
       body: '改名會出現喺名單同留言顯示；登入仍然用原本編號。'
     },
     {
+      target: '[data-tour="profile-group-rename"]',
+      prepare: 'profile',
+      skipUnlessFacilitator: true,
+      title: '改組名',
+      body: '負責組別可以喺「我的」直接改組名，改完即時套用到成個 App。'
+    },
+    {
       target: '[data-tour="profile-password"]',
       prepare: 'profile',
       title: '修改密碼',
@@ -831,6 +838,9 @@ function cacheDOM() {
   DOM.profileLoginId = document.getElementById('profile-login-id');
   DOM.profileDisplayName = document.getElementById('profile-display-name');
   DOM.profileSaveName = document.getElementById('profile-save-name');
+  DOM.profileGroupRenameCard = document.getElementById('profile-group-rename-card');
+  DOM.profileGroupNameInput = document.getElementById('profile-group-name');
+  DOM.profileSaveGroupName = document.getElementById('profile-save-group-name');
   DOM.profilePassword = document.getElementById('profile-password');
   DOM.profileSavePassword = document.getElementById('profile-save-password');
   DOM.profilePushStatus = document.getElementById('profile-push-status');
@@ -1531,6 +1541,9 @@ function initStaticTextInputGuards() {
   }
   if (DOM.staffGroupNameInput && DOM.staffSaveGroupName) {
     attachTextInputGuard(DOM.staffGroupNameInput, { submitBtn: DOM.staffSaveGroupName });
+  }
+  if (DOM.profileGroupNameInput && DOM.profileSaveGroupName) {
+    attachTextInputGuard(DOM.profileGroupNameInput, { submitBtn: DOM.profileSaveGroupName });
   }
   if (DOM.groupRenameInput && DOM.groupRenameSave) {
     attachTextInputGuard(DOM.groupRenameInput, { submitBtn: DOM.groupRenameSave });
@@ -2992,6 +3005,7 @@ function renderProfile() {
   if (DOM.profileDisplayName && document.activeElement !== DOM.profileDisplayName) {
     DOM.profileDisplayName.value = (p.display_name || '').trim();
   }
+  syncProfileGroupRenameCard();
 
   const sentCount = state.sentMessages.filter(m => m.status === 'active').length;
   const receivedCount = state.inboxMessages.length;
@@ -4181,6 +4195,7 @@ function getOnboardingStepsForPage(role, page) {
   return (ONBOARDING_STEPS[role] || []).filter(step => {
     if (!stepMatchesOnboardingPage(step, page)) return false;
     if (step.skipIfStaff && isStaffPerson(state.participantId)) return false;
+    if (step.skipUnlessFacilitator && !isGroupFacilitator()) return false;
     return true;
   });
 }
@@ -6673,9 +6688,7 @@ function renderStaffFacilitatorPanel() {
   if (DOM.staffGroupTitle) {
     DOM.staffGroupTitle.textContent = formatGroupLabel(groupId);
   }
-  if (DOM.staffGroupNameInput && document.activeElement !== DOM.staffGroupNameInput) {
-    DOM.staffGroupNameInput.value = formatGroupLabel(groupId);
-  }
+  fillGroupNameInputs(groupId);
   if (DOM.staffGroupStatus) {
     DOM.staffGroupStatus.innerHTML = `
       <div class="status-item"><span>本組留言</span><span>${msgOpen ? appIcon('dot-green') + ' 開啟' : appIcon('dot-red') + ' 關閉'}</span></div>
@@ -6999,20 +7012,43 @@ function renderStaffGroupMessages() {
   });
 }
 
-async function handleStaffSaveGroupName() {
+function fillGroupNameInputs(groupId) {
+  const current = formatGroupLabel(groupId);
+  [DOM.staffGroupNameInput, DOM.profileGroupNameInput].forEach(input => {
+    if (input && document.activeElement !== input) input.value = current;
+  });
+}
+
+function syncProfileGroupRenameCard() {
+  const groupId = getFacilitatorGroupId();
+  const show = !!groupId;
+  if (DOM.profileGroupRenameCard) {
+    DOM.profileGroupRenameCard.classList.toggle('hidden', !show);
+  }
+  if (show) fillGroupNameInputs(groupId);
+}
+
+async function handleStaffSaveGroupName(e) {
   const groupId = getFacilitatorGroupId();
   if (!groupId) return;
-  const name = String(DOM.staffGroupNameInput?.value || '').trim();
+  const btn = e && e.currentTarget;
+  const input = btn === DOM.profileSaveGroupName
+    ? DOM.profileGroupNameInput
+    : btn === DOM.staffSaveGroupName
+      ? DOM.staffGroupNameInput
+      : (DOM.profileGroupNameInput || DOM.staffGroupNameInput);
+  const name = String(input?.value || '').trim();
   if (name.length > 40) {
     showToast('組名最多 40 字', 'error');
     return;
   }
   if (rejectIfTextBlocked(name)) return;
-  await runProgressButton(DOM.staffSaveGroupName, (async () => {
+  await runProgressButton(btn || DOM.profileSaveGroupName || DOM.staffSaveGroupName, (async () => {
     try {
       await data.setGroupDisplayName(groupId, name);
       showToast(name ? '組名已更新' : '已清除自訂組名', 'success');
-      renderStaffFacilitatorPanel();
+      fillGroupNameInputs(groupId);
+      renderProfile();
     } catch (err) {
       showToast(data.describeFirestoreError(err), 'error');
     }
@@ -8261,6 +8297,9 @@ function bindEvents() {
 
   if (DOM.staffSaveGroupName) {
     DOM.staffSaveGroupName.addEventListener('click', handleStaffSaveGroupName);
+  }
+  if (DOM.profileSaveGroupName) {
+    DOM.profileSaveGroupName.addEventListener('click', handleStaffSaveGroupName);
   }
   if (DOM.staffEnableMsg) {
     DOM.staffEnableMsg.addEventListener('click', () => handleStaffMessaging('OPEN', DOM.staffEnableMsg));
