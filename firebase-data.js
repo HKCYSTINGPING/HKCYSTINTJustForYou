@@ -699,6 +699,14 @@ export async function clearGroupAllOverrides(groupId) {
 
 // ─── Trophies ───────────────────────────────────────────────────────────────
 
+export function isRetiredTrophy(trophyId, trophyName = '') {
+  const raw = String(trophyId || '').trim().toUpperCase();
+  const m = raw.match(/^T0*(\d+)$/);
+  const id = m ? 'T' + String(m[1]).padStart(2, '0') : raw;
+  const name = String(trophyName || '').trim();
+  return id === 'T05' || name === '組爸媽繼承人';
+}
+
 export async function fetchTrophies() {
   const snapshot = await getDocs(collection(db, 'trophies'));
   return snapshot.docs
@@ -710,6 +718,7 @@ export async function fetchTrophies() {
         description: typeof raw.description === 'string' ? raw.description : ''
       };
     })
+    .filter(t => !isRetiredTrophy(t.trophy_id, t.trophy_name))
     .sort((a, b) => a.trophy_id.localeCompare(b.trophy_id));
 }
 
@@ -720,6 +729,7 @@ export async function updateTrophyMeta(trophyId, { trophyName, description } = {
   const hasDescription = description !== undefined;
   const desc = hasDescription ? String(description ?? '').trim() : null;
   if (!id) throw new Error('缺少獎項編號');
+  if (isRetiredTrophy(id, name)) throw new Error('此獎項已停用');
   if (!name) throw new Error('獎項名稱不可空白');
   if (name.length > 40) throw new Error('獎項名稱最多 40 字');
   if (hasDescription && desc.length > 160) throw new Error('獎項描述最多 160 字');
@@ -775,6 +785,7 @@ export function pairingsToAssignments(pairings) {
   const assignments = {};
   (pairings || []).forEach(pair => {
     if (!pair || !pair.receiver_id || !pair.trophy_id) return;
+    if (isRetiredTrophy(pair.trophy_id)) return;
     if (!assignments[pair.receiver_id]) assignments[pair.receiver_id] = [];
     if (!assignments[pair.receiver_id].includes(pair.trophy_id)) {
       assignments[pair.receiver_id].push(pair.trophy_id);
@@ -805,7 +816,7 @@ export async function saveSubmission(participantId, pairings, submitted = true, 
   }
   const payload = {
     participant_id: participantId,
-    pairings: pairings || [],
+    pairings: (pairings || []).filter(p => p && !isRetiredTrophy(p.trophy_id)),
     status: 'submitted',
     updated_at: serverTimestamp(),
     submitted_at: serverTimestamp()
@@ -831,7 +842,9 @@ function resultFromDoc(snapshot) {
   const data = snapshot.data() || {};
   return {
     participant_id: data.participant_id || snapshot.id,
-    awards: Array.isArray(data.awards) ? data.awards : [],
+    awards: (Array.isArray(data.awards) ? data.awards : []).filter(
+      a => a && !isRetiredTrophy(a.trophy_id, a.trophy_name)
+    ),
     calculated_at: toIso(data.calculated_at)
   };
 }
@@ -864,6 +877,7 @@ export function computeResults(participants, trophies, submissions) {
   const roster = (participants || []).filter(p =>
     isSeatParticipantId(p.participant_id) && isNumberedGroupId(p.group_id)
   );
+  trophies = (trophies || []).filter(t => !isRetiredTrophy(t.trophy_id, t.trophy_name));
   const seatIds = new Set(roster.map(p => p.participant_id));
   const voteCounts = new Map();
   const key = (receiver, trophy) => receiver + '|' + trophy;
@@ -872,6 +886,7 @@ export function computeResults(participants, trophies, submissions) {
     if (!seatIds.has(submission.participant_id)) return;
     (submission.pairings || []).forEach(pair => {
       if (!pair || !pair.receiver_id || !pair.trophy_id) return;
+      if (isRetiredTrophy(pair.trophy_id)) return;
       if (!seatIds.has(pair.receiver_id)) return;
       const k = key(pair.receiver_id, pair.trophy_id);
       voteCounts.set(k, (voteCounts.get(k) || 0) + 1);

@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v5';
+import * as data from './firebase-data.js?v=20260823v8';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -1588,6 +1588,7 @@ function buildPairingsFromAssignments(assignments) {
   const pairings = [];
   Object.entries(assignments).forEach(([receiverId, trophyIds]) => {
     (trophyIds || []).forEach(trophyId => {
+      if (data.isRetiredTrophy(trophyId)) return;
       pairings.push({ receiver_id: receiverId, trophy_id: trophyId });
     });
   });
@@ -2041,7 +2042,7 @@ function buildTrophyOverview(submissions, trophies, participants = state.partici
   );
   const totalVotes = submissions
     .filter(s => s.status === 'submitted' && rosterIds.has(s.participant_id))
-    .reduce((sum, s) => sum + s.pairings.length, 0);
+    .reduce((sum, s) => sum + (s.pairings || []).filter(p => p && !data.isRetiredTrophy(p.trophy_id)).length, 0);
 
   const byGroup = new Map();
   roster.forEach(p => {
@@ -2081,6 +2082,7 @@ function buildAuditVotes(submissions, trophies) {
     if (submission.status !== 'submitted') return;
     if (!isSeatParticipantId(submission.participant_id)) return;
     submission.pairings.forEach(pair => {
+      if (!pair || data.isRetiredTrophy(pair.trophy_id)) return;
       if (!isSeatParticipantId(pair.receiver_id)) return;
       rows.push({
         sender_id: submission.participant_id,
@@ -3043,7 +3045,7 @@ function refreshAdminTrophyViews() {
   state.adminTrophy.profiles = stored.length > 0
     ? stored
       .map(r => {
-        const trophies = (r.awards || []).filter(a => a.award_source !== 'fallback');
+        const trophies = (r.awards || []).filter(a => a.award_source !== 'fallback' && !data.isRetiredTrophy(a.trophy_id, a.trophy_name));
         return {
           participant_id: r.participant_id,
           trophies,
@@ -3901,7 +3903,10 @@ function votingStatusToneClass(status) {
 }
 
 function filterValidTrophies(trophies) {
-  return (trophies || []).filter(t => /^T\d+$/i.test(String(t.trophy_id || '').trim()));
+  return (trophies || []).filter(t => {
+    if (!t || data.isRetiredTrophy(t.trophy_id, t.trophy_name)) return false;
+    return /^T\d+$/i.test(String(t.trophy_id || '').trim());
+  });
 }
 
 /** Fixed defaults for award guide (Admin can override name/description in Firestore). */
@@ -3929,12 +3934,6 @@ const TROPHY_META = {
     color: '#5BAF7A',
     colorLabel: '綠色',
     description: '樂於助人 — 經常幫助隊友'
-  },
-  T05: {
-    en: 'Senior Jojo',
-    color: '#8B6BCF',
-    colorLabel: '紫色',
-    description: '數人數，唔比其他人漏底，幫助組爸媽 — 團體意識'
   },
   T06: {
     en: 'Very Important People',
@@ -3972,7 +3971,6 @@ function getTrophyMeta(trophyId, trophyName = '') {
     '破冰人': 'T02',
     '和事佬': 'T03',
     '真好人': 'T04',
-    '組爸媽繼承人': 'T05',
     '關鍵人物': 'T06',
     '潛行者': 'T07',
     '頭頭是道': 'T08'
@@ -4040,6 +4038,7 @@ function trophyIconHtml(trophyId, trophyName = '', className = 'trophy-icon') {
 }
 
 function buildAwardsHtml(awards) {
+  awards = (awards || []).filter(a => a && !data.isRetiredTrophy(a.trophy_id, a.trophy_name));
   if (!awards || awards.length === 0) {
     return '<p class="trophy-results-empty">暫未獲得獎項，請稍後再查看</p>';
   }
@@ -5004,7 +5003,7 @@ function getTrophyGuideItems() {
     const meta = TROPHY_META[id];
     const nameMap = {
       T01: '氣球人', T02: '破冰人', T03: '和事佬', T04: '真好人',
-      T05: '組爸媽繼承人', T06: '關鍵人物', T07: '潛行者', T08: '頭頭是道'
+      T06: '關鍵人物', T07: '潛行者', T08: '頭頭是道'
     };
     return {
       trophy_id: id,
@@ -5897,6 +5896,7 @@ function buildNominationCountMap(memberIds) {
   trophyStore().submissions.forEach(submission => {
     if (submission.status !== 'submitted') return;
     (submission.pairings || []).forEach(pair => {
+      if (!pair || data.isRetiredTrophy(pair.trophy_id)) return;
       if (!members.has(pair.receiver_id)) return;
       const key = pair.trophy_id + '\0' + pair.receiver_id;
       counts.set(key, (counts.get(key) || 0) + 1);
@@ -5914,6 +5914,7 @@ function buildBallotMap(memberIds) {
     const sender = submission.participant_id;
     if (!members.has(sender)) return;
     (submission.pairings || []).forEach(pair => {
+      if (!pair || data.isRetiredTrophy(pair.trophy_id)) return;
       if (!members.has(pair.receiver_id)) return;
       if (!map.has(sender)) map.set(sender, new Map());
       map.get(sender).set(pair.receiver_id, pair.trophy_id);
@@ -6350,7 +6351,7 @@ function renderProfiles() {
 function renderTrophySummaryInto(container, items, options = {}) {
   if (!container) return;
   const { allowRename = false, idPrefix = 'summary', onRename = null } = options;
-  const list = items || [];
+  const list = (items || []).filter(item => item && !data.isRetiredTrophy(item.trophy_id, item.trophy_name));
   const openIds = new Set(
     [...container.querySelectorAll('.summary-item.open')]
       .map(el => el.dataset.trophyId)
@@ -7247,7 +7248,9 @@ function buildParticipantDetail(participantId, phoneNumber) {
       received_active: state.monitorMessages.filter(
         m => m.receiver_id === participantId && m.status === 'active'
       ).length,
-      trophy_votes: submission ? submission.pairings.length : 0,
+      trophy_votes: submission
+        ? (submission.pairings || []).filter(p => p && !data.isRetiredTrophy(p.trophy_id)).length
+        : 0,
       submission_status: submission && submission.status === 'submitted' ? 'submitted' : 'none',
       trophy_awards: result
         ? (result.awards || []).filter(a => a.award_source !== 'fallback').length
