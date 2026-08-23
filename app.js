@@ -4,7 +4,7 @@
              Messaging, Admin Monitor, 獎項, Init
    ═══════════════════════════════════════════════════════════════════════════ */
 
-import * as data from './firebase-data.js?v=20260823v11';
+import * as data from './firebase-data.js?v=20260823v12';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -13,7 +13,7 @@ const CONFIG = {
   // round trip. It carries ids and groups only; phone numbers are passwords
   // and live in Firebase Authentication.
   PARTICIPANTS_URL: 'participants.json',
-  PARTICIPANTS_CACHE_KEY: 'hkcy_participants_a1',
+  PARTICIPANTS_CACHE_KEY: 'hkcy_participants_v12',
   PARTICIPANTS_CACHE_TTL: 30 * 60 * 1000,
   // Tab-scoped login identity: survives reload, cleared on logout / tab close.
   SESSION_KEY: 'hkcy_session',
@@ -2258,7 +2258,24 @@ function isStaffParticipant(p) {
 
 /** Login dropdown: seat roster only. Staff type their own id. */
 function getLoginMenuParticipants() {
-  return state.participants.filter(p => !isStaffParticipant(p));
+  return state.participants
+    .filter(p => !isStaffParticipant(p))
+    .slice()
+    .sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id));
+}
+
+function ensureLoggedInSeatOnRoster() {
+  const id = normalizeId(state.participantId);
+  if (!id || isStaffPerson(id) || isAdminLogin(id)) return;
+  if (findParticipantById(id)) return;
+  state.participants = [
+    ...state.participants,
+    {
+      participant_id: id,
+      group_id: inferredGroupIdFromSeat(id) || data.GROUP_UNASSIGNED,
+      display_name: ''
+    }
+  ];
 }
 
 function findParticipantById(participantId) {
@@ -2970,6 +2987,7 @@ async function enterParticipantDashboard() {
   updateSendFormState();
   updateCharCounter();
   applyStaffParticipantChrome();
+  ensureLoggedInSeatOnRoster();
   applyUnassignedChrome();
   switchParticipantView('home');
 
@@ -3061,7 +3079,7 @@ function refreshAdminTrophyViews() {
           vote_count: trophies.reduce((sum, a) => sum + (a.vote_count || 0), 0)
         };
       })
-      .sort((a, b) => a.participant_id.localeCompare(b.participant_id))
+      .sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id))
     : projection.profiles;
 
   renderAdminTrophyStats();
@@ -3102,7 +3120,7 @@ function refreshStaffTrophyViews() {
           vote_count: awards.reduce((sum, a) => sum + (a.vote_count || 0), 0)
         };
       })
-      .sort((a, b) => a.participant_id.localeCompare(b.participant_id))
+      .sort((a, b) => data.compareParticipantIds(a.participant_id, b.participant_id))
     : projection.profiles.filter(p => members.some(m => m.participant_id === p.participant_id));
 
   renderStaffTrophyStats();
@@ -6998,7 +7016,7 @@ function initAdminParticipantCombobox() {
 
 /** Everything here comes from listeners the admin already has open. */
 function buildParticipantDetail(participantId, phoneNumber) {
-  const person = state.participants.find(p => p.participant_id === participantId) || {};
+  const person = findParticipantById(participantId) || {};
   const submission = state.adminTrophy.submissions.find(s => s.participant_id === participantId);
   const result = state.adminTrophy.results.find(r => r.participant_id === participantId);
   const sent = state.monitorMessages.filter(m => m.sender_id === participantId);
@@ -7092,7 +7110,7 @@ function pruneRosterPendingMoves() {
       rosterPendingMoves.delete(pid);
       continue;
     }
-    const person = state.participants.find(p => p.participant_id === pid);
+    const person = findParticipantById(pid);
     if (!person) {
       rosterPendingMoves.delete(pid);
       continue;
@@ -7152,7 +7170,7 @@ function renderAdminRosterBoard() {
 
   DOM.adminRosterBoard.innerHTML = columns.map(groupId => {
     const members = (byGroup.get(groupId) || []).slice().sort((a, b) =>
-      a.participant_id.localeCompare(b.participant_id)
+      data.compareParticipantIds(a.participant_id, b.participant_id)
     );
     const cards = members.map(p => {
       const id = p.participant_id;
@@ -7182,7 +7200,7 @@ function renderAdminRosterBoard() {
 let rosterDragPid = '';
 
 function queueRosterDraftMove(pid, targetGroup) {
-  const person = state.participants.find(p => p.participant_id === pid);
+  const person = findParticipantById(pid);
   if (!person) return false;
   const liveGroup = normalizeRosterGroupId(person.group_id);
   if (liveGroup === targetGroup) {
@@ -7327,7 +7345,7 @@ function populateRosterGroupSelect(selectEl, selectedId) {
 
 async function openRosterEditModal(participantId) {
   const pid = normalizeId(participantId);
-  const person = state.participants.find(p => p.participant_id === pid);
+  const person = findParticipantById(pid);
   if (!person || !DOM.rosterEditModal) return;
 
   DOM.rosterEditModal.dataset.editingId = pid;
@@ -7400,7 +7418,7 @@ async function handleRosterEditSave() {
           password: password || undefined
         });
       } else {
-        const person = state.participants.find(p => p.participant_id === oldId);
+        const person = findParticipantById(oldId);
         const currentGroup = normalizeRosterGroupId(person?.group_id);
         if (groupId !== currentGroup) {
           const result = await data.assignParticipantToGroup(oldId, groupId, state.participants);
@@ -7542,7 +7560,7 @@ async function handleAdminSaveParticipant() {
   await runProgressButton(DOM.adminSaveParticipant, (async () => {
     try {
       await data.updateParticipantGroup(pid, groupId);
-      const person = state.participants.find(p => p.participant_id === pid);
+      const person = findParticipantById(pid);
       if (person) person.group_id = groupId;
 
       if (newPassword) {

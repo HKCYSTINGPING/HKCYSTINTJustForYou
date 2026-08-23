@@ -114,6 +114,21 @@ function seatNumberSortIndex(participantId) {
   return n > 0 ? n : 999;
 }
 
+/** A1, A2 … A9, A10, then named Staff — not lexicographic A1, A10, A2. */
+export function compareParticipantIds(a, b) {
+  const left = normalizeSeatId(a);
+  const right = normalizeSeatId(b);
+  const letterA = seatGroupLetter(left);
+  const letterB = seatGroupLetter(right);
+  if (letterA && letterB) {
+    if (letterA !== letterB) return letterA.localeCompare(letterB);
+    return seatNumberOf(left) - seatNumberOf(right);
+  }
+  if (letterA && !letterB) return -1;
+  if (!letterA && letterB) return 1;
+  return left.localeCompare(right);
+}
+
 // Firestore caps a batch at 500 operations.
 const BATCH_LIMIT = 450;
 
@@ -1061,7 +1076,7 @@ export function subscribeParticipants(onData, onError) {
       const canonical = SEAT_ID_RE.test(String(d.id || '').toUpperCase());
       if (!existing || canonical) byId.set(id, row);
     });
-    onData([...byId.values()].sort((a, b) => a.participant_id.localeCompare(b.participant_id)));
+    onData([...byId.values()].sort((a, b) => compareParticipantIds(a.participant_id, b.participant_id)));
   }, onError);
 }
 
